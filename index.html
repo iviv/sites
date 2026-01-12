@@ -66,6 +66,16 @@
             z-index: -1;
         }
 
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            overflow: hidden;
+        }
+
         .card {
             max-width: 520px;
             width: 100%;
@@ -94,10 +104,16 @@
             position: relative;
         }
 
-        .theme-toggle {
+        .controls {
             position: absolute;
             top: 24px;
             right: 24px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .theme-toggle,
+        .matrix-toggle {
             background: var(--card-secondary);
             border: 1px solid var(--border-color);
             width: 36px;
@@ -111,10 +127,16 @@
             transition: all 0.2s ease;
         }
 
-        .theme-toggle:hover {
+        .theme-toggle:hover,
+        .matrix-toggle:hover {
             background: var(--accent-primary);
             border-color: var(--accent-primary);
             transform: scale(1.05);
+        }
+
+        .matrix-toggle.active {
+            background: #ffb000;
+            border-color: #ffb000;
         }
 
         .terminal-prompt {
@@ -331,11 +353,17 @@
     </style>
 </head>
 <body>
+    <canvas class="matrix-bg" id="matrixCanvas"></canvas>
     <div class="card">
         <div class="card-header">
-            <button class="theme-toggle" id="themeToggle">
-                <span id="themeIcon">☀️</span>
-            </button>
+            <div class="controls">
+                <button class="matrix-toggle active" id="matrixToggle" title="Toggle Matrix effect">
+                    <span>⚡</span>
+                </button>
+                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                    <span id="themeIcon">☀️</span>
+                </button>
+            </div>
             
             <span class="terminal-prompt">whoami</span>
             <h1>Ivaliy Ivanov</h1>
@@ -356,13 +384,13 @@
 
             <div class="section-title">Tech Stack</div>
             <div class="tech-grid">
-                <div class="tech-item">Azure/AWS</div>
                 <div class="tech-item">Kubernetes/Docker</div>
                 <div class="tech-item">PostgreSQL/NoSQL</div>
                 <div class="tech-item">Redis</div>
+                <div class="tech-item">Azure/AWS</div>
                 <div class="tech-item">Kafka</div>
                 <div class="tech-item">C#/Java/Python</div>
-                <div class="tech-item">LLMs/FT</div>
+                <div class="tech-item">LLM/FT</div>
             </div>
 
             <a href="https://www.linkedin.com/in/ivaliy" class="connect-button" target="_blank">
@@ -372,6 +400,67 @@
     </div>
 
     <script>
+        // Matrix rain effect
+        const canvas = document.getElementById('matrixCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        const fontSize = 14;
+        const columns = canvas.width / fontSize;
+        const drops = Array(Math.floor(columns)).fill(1);
+
+        let matrixEnabled = true;
+        let animationId;
+
+        function drawMatrix() {
+            if (!matrixEnabled) return;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#ffb000';
+            ctx.font = fontSize + 'px monospace';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars[Math.floor(Math.random() * chars.length)];
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+
+            animationId = setTimeout(drawMatrix, 35);
+        }
+
+        drawMatrix();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Matrix toggle
+        const matrixToggle = document.getElementById('matrixToggle');
+        
+        matrixToggle.addEventListener('click', () => {
+            matrixEnabled = !matrixEnabled;
+            
+            if (matrixEnabled) {
+                matrixToggle.classList.add('active');
+                drawMatrix();
+            } else {
+                matrixToggle.classList.remove('active');
+                clearTimeout(animationId);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+
+        // Theme toggle
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
         const html = document.documentElement;
