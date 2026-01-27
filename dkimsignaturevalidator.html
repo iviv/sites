@@ -523,6 +523,110 @@
         }
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+        /* Help Modal */
+        .help-btn {
+            position: absolute;
+            top: 0;
+            right: 54px;
+            width: 44px;
+            height: 44px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.25rem;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .help-btn:hover { border-color: var(--accent); }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+        }
+        .modal-title { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: var(--text-primary); }
+        .modal-body { padding: 1.5rem; }
+        .help-section { margin-bottom: 1.5rem; }
+        .help-section:last-child { margin-bottom: 0; }
+        .help-section h3 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .help-section p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+        }
+        .help-section a {
+            color: var(--accent-secondary);
+            text-decoration: none;
+        }
+        .help-section a:hover { text-decoration: underline; }
+        .help-list {
+            list-style: none;
+            padding: 0;
+            margin: 0.5rem 0;
+        }
+        .help-list li {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            padding: 0.3rem 0;
+            padding-left: 1.2rem;
+            position: relative;
+        }
+        .help-list li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+        }
+
         @media (max-width: 640px) {
             .container { padding: 1rem; }
             h1 { font-size: 1.5rem; }
@@ -541,8 +645,73 @@
     
     <div class="toast" id="toast"><span>✓</span><span id="toastMsg">Copied!</span></div>
 
+    <!-- Help Modal -->
+    <div class="modal-overlay" id="helpModal" onclick="if(event.target===this)closeHelp()">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">📚 Email Authentication Guide</span>
+                <button class="modal-close" onclick="closeHelp()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-section">
+                    <h3>🔐 DKIM (DomainKeys Identified Mail)</h3>
+                    <p>DKIM allows senders to cryptographically sign emails, proving the message hasn't been altered in transit. The receiving server fetches the sender's public key from DNS and verifies the signature.</p>
+                    <ul class="help-list">
+                        <li>Protects against email tampering</li>
+                        <li>Verifies the sending domain's identity</li>
+                        <li>Uses RSA or Ed25519 cryptographic signatures</li>
+                    </ul>
+                    <p><a href="https://datatracker.ietf.org/doc/html/rfc6376" target="_blank">RFC 6376 - DKIM Signatures</a></p>
+                </div>
+
+                <div class="help-section">
+                    <h3>🛡️ SPF (Sender Policy Framework)</h3>
+                    <p>SPF allows domain owners to specify which mail servers are authorized to send email on their behalf. Receivers check if the sending IP is listed in the domain's SPF record.</p>
+                    <ul class="help-list">
+                        <li>Prevents unauthorized servers from sending as your domain</li>
+                        <li>Uses DNS TXT records to publish authorized IPs</li>
+                        <li>Results: pass, fail, softfail, neutral, none</li>
+                    </ul>
+                    <p><a href="https://datatracker.ietf.org/doc/html/rfc7208" target="_blank">RFC 7208 - SPF</a></p>
+                </div>
+
+                <div class="help-section">
+                    <h3>📋 DMARC (Domain-based Message Authentication)</h3>
+                    <p>DMARC builds on DKIM and SPF, telling receivers what to do when authentication fails. It also enables reporting so domain owners can monitor abuse.</p>
+                    <ul class="help-list">
+                        <li>Policies: none (monitor), quarantine (spam), reject</li>
+                        <li>Requires alignment between From domain and DKIM/SPF domains</li>
+                        <li>Enables aggregate and forensic reporting</li>
+                    </ul>
+                    <p><a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank">RFC 7489 - DMARC</a></p>
+                </div>
+
+                <div class="help-section">
+                    <h3>🔗 ARC (Authenticated Received Chain)</h3>
+                    <p>ARC preserves email authentication results when messages are forwarded through mailing lists or other intermediaries that may break DKIM signatures.</p>
+                    <ul class="help-list">
+                        <li>Each intermediary adds a signed ARC set</li>
+                        <li>Chain validation shows if previous hops verified</li>
+                        <li>Helps legitimate forwarded mail pass authentication</li>
+                    </ul>
+                    <p><a href="https://datatracker.ietf.org/doc/html/rfc8617" target="_blank">RFC 8617 - ARC</a></p>
+                </div>
+
+                <div class="help-section">
+                    <h3>⚠️ Security Considerations</h3>
+                    <ul class="help-list">
+                        <li><strong>l= tag:</strong> Limits signed body bytes - unsigned content can be appended</li>
+                        <li><strong>x= tag:</strong> Signature expiration - expired signatures should be treated with caution</li>
+                        <li><strong>Alignment:</strong> DMARC requires DKIM/SPF domains to match the From header</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <header>
+            <button class="help-btn" onclick="openHelp()" title="Help">❓</button>
             <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
             <div class="logo">
                 <div class="logo-icon">🔐</div>
@@ -716,6 +885,22 @@
             document.getElementById('themeBtn').textContent = saved === 'dark' ? '🌙' : '☀️';
         }
     })();
+
+    // Help modal
+    function openHelp() {
+        document.getElementById('helpModal').classList.add('visible');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeHelp() {
+        document.getElementById('helpModal').classList.remove('visible');
+        document.body.style.overflow = '';
+    }
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('helpModal').classList.contains('visible')) {
+            closeHelp();
+        }
+    });
 
     // Utils
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
