@@ -586,24 +586,34 @@
         let idx = raw.indexOf('\r\n\r\n');
         if (idx !== -1) { headerSection = raw.slice(0, idx); body = raw.slice(idx + 4); }
         else { idx = raw.indexOf('\n\n'); headerSection = raw.slice(0, idx); body = raw.slice(idx + 2); }
-        
-        headerSection = headerSection.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+        // Normalize to \r\n for consistent processing
+        headerSection = headerSection.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
         const headers = [];
         let cur = null;
-        for (const line of headerSection.split('\n')) {
-            if (/^[ \t]/.test(line) && cur) cur.value += '\r\n' + line;
-            else {
-                if (cur) headers.push([cur.name, cur.value]);
+        for (const line of headerSection.split('\r\n')) {
+            if (/^[ \t]/.test(line) && cur) {
+                cur.raw += '\r\n' + line;
+                cur.value += '\r\n' + line;
+            } else {
+                if (cur) headers.push({ name: cur.name, value: cur.value, raw: cur.raw });
                 const i = line.indexOf(':');
-                if (i > 0) cur = { name: line.slice(0, i), value: line.slice(i + 1) };
-                else cur = null;
+                if (i > 0) {
+                    cur = {
+                        name: line.slice(0, i),
+                        value: line.slice(i + 1),
+                        raw: line
+                    };
+                } else {
+                    cur = null;
+                }
             }
         }
-        if (cur) headers.push([cur.name, cur.value]);
+        if (cur) headers.push({ name: cur.name, value: cur.value, raw: cur.raw });
 
-        const dkimSigs = headers.filter(([n]) => n.toLowerCase() === 'dkim-signature').map(([n, v]) => ({
-            raw: n + ':' + v,
-            parsed: parseDkimTags(n + ':' + v)
+        const dkimSigs = headers.filter(h => h.name.toLowerCase() === 'dkim-signature').map(h => ({
+            raw: h.raw,
+            parsed: parseDkimTags(h.raw)
         }));
 
         return { headers, body, dkimSigs };
@@ -732,24 +742,35 @@
     function buildSigningInput(headers, tags, rawDkim, headerCanon) {
         const signed = tags.h.split(':').map(h => h.trim().toLowerCase());
         const headerMap = new Map();
-        for (const [n, v] of headers) {
-            const ln = n.toLowerCase();
+        for (const hdr of headers) {
+            const ln = hdr.name.toLowerCase();
             if (!headerMap.has(ln)) headerMap.set(ln, []);
-            headerMap.get(ln).push({ name: n, value: v });
+            headerMap.get(ln).push(hdr);
         }
         const lines = [];
         for (const h of signed) {
             const stack = headerMap.get(h);
             if (stack?.length) {
-                const { name, value } = stack.pop();
-                lines.push(headerCanon === 'relaxed' ? canonHeaderRelaxed(name, value) : name + ':' + value);
+                const hdr = stack.pop();
+                if (headerCanon === 'relaxed') {
+                    lines.push(canonHeaderRelaxed(hdr.name, hdr.value));
+                } else {
+                    // Simple canonicalization: use exact raw header
+                    lines.push(hdr.raw);
+                }
             }
         }
-        let dkimForSigning = rawDkim.replace(/\r?\n[ \t]+/g, ' ').replace(/(;\s*b\s*=\s*)[A-Za-z0-9+/=\s]+/i, '$1');
-        const dkimCanon = headerCanon === 'relaxed'
-            ? canonHeaderRelaxed('DKIM-Signature', dkimForSigning.replace(/^DKIM-Signature:\s*/i, ''))
-            : 'DKIM-Signature:' + dkimForSigning.replace(/^DKIM-Signature:\s*/i, '');
-        lines.push(dkimCanon);
+        // Handle DKIM-Signature header for signing (with b= emptied)
+        if (headerCanon === 'relaxed') {
+            let dkimUnfolded = rawDkim.replace(/\r?\n[ \t]+/g, ' ');
+            dkimUnfolded = dkimUnfolded.replace(/(;\s*b\s*=\s*)[A-Za-z0-9+/=\s]+/i, '$1');
+            lines.push(canonHeaderRelaxed('DKIM-Signature', dkimUnfolded.replace(/^DKIM-Signature:\s*/i, '')));
+        } else {
+            // Simple: keep folding, just empty the b= value
+            // The b= value can span multiple lines with folding, so match any base64 chars plus whitespace including \r\n
+            let dkimSimple = rawDkim.replace(/(;\s*b\s*=\s*)[A-Za-z0-9+/=\r\n\t ]+/i, '$1');
+            lines.push(dkimSimple);
+        }
         return lines.join('\r\n');
     }
 
@@ -814,9 +835,11 @@
     }
 
     function renderHeaders(headers, signed) {
-        const tags = headers.map(([n, v]) => {
-            const isSigned = signed.has(n.toLowerCase());
-            return renderTag(n, v.trim(), { name: n, desc: isSigned ? 'Included in DKIM signature' : 'Not signed' }, `header ${isSigned ? 'signed' : ''}`);
+        const tags = headers.map(hdr => {
+            const isSigned = signed.has(hdr.name.toLowerCase());
+            // Unfold value for display
+            const displayValue = hdr.value.replace(/\r?\n[ \t]+/g, ' ').trim();
+            return renderTag(hdr.name, displayValue, { name: hdr.name, desc: isSigned ? 'Included in DKIM signature' : 'Not signed' }, `header ${isSigned ? 'signed' : ''}`);
         }).join('');
         return `<div class="headers-section">
             <div class="section-header">📨 Email Headers</div>
