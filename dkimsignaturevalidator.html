@@ -188,6 +188,30 @@
         .tag.dns .dot { background: var(--accent-secondary); }
         .tag.dns .tag-name { color: var(--accent-secondary); }
 
+        /* SPF Tags */
+        .tag.spf-pass .dot { background: var(--success); }
+        .tag.spf-pass .tag-name { color: var(--success); }
+        .tag.spf-fail .dot { background: var(--error); }
+        .tag.spf-fail .tag-name { color: var(--error); }
+        .tag.spf-softfail .dot { background: var(--warning); }
+        .tag.spf-softfail .tag-name { color: var(--warning); }
+        .tag.spf-neutral .dot { background: var(--text-secondary); }
+        .tag.spf-neutral .tag-name { color: var(--text-secondary); }
+
+        /* SPF Card */
+        .spf-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .spf-card.found { border-color: var(--accent-secondary); }
+        .spf-card.notfound { border-color: var(--warning); }
+        .spf-card .sig-content { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+        .spf-card.expanded .sig-content { max-height: 2000px; }
+        .spf-card.expanded .expand-icon { transform: rotate(180deg); }
+
         /* Legend */
         .legend { display: flex; gap: 1rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
         .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--text-dim); }
@@ -271,6 +295,8 @@
         .detail-value { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; text-align: right; }
         .detail-value.success { color: var(--success); font-weight: 600; }
         .detail-value.error { color: var(--error); font-weight: 600; }
+        .detail-value.warning { color: var(--warning); font-weight: 600; }
+        .detail-value.neutral { color: var(--text-secondary); }
 
         /* Error */
         .error-msg {
@@ -372,6 +398,7 @@
         <div class="results" id="results">
             <div id="headersEl"></div>
             <div class="summary" id="summaryEl"></div>
+            <div id="spfEl"></div>
             <div id="sigsEl"></div>
             <div class="debug" id="debugEl">
                 <div class="debug-header" onclick="this.parentElement.classList.toggle('expanded')">
@@ -408,6 +435,35 @@
         p: { name: 'Public Key', desc: 'Base64-encoded public key data' },
         h: { name: 'Hash Algorithms', desc: 'Acceptable hash algorithms' },
         t: { name: 'Flags', desc: 'Flags (y=testing, s=strict)' }
+    };
+
+    const SPF_MECHANISMS = {
+        all: { name: 'All', desc: 'Matches all senders (catchall)' },
+        ip4: { name: 'IPv4', desc: 'Match if sender IP is in this IPv4 range' },
+        ip6: { name: 'IPv6', desc: 'Match if sender IP is in this IPv6 range' },
+        a: { name: 'A Record', desc: 'Match if sender IP matches domain A record' },
+        mx: { name: 'MX Record', desc: 'Match if sender IP matches domain MX hosts' },
+        include: { name: 'Include', desc: 'Include SPF policy from another domain' },
+        redirect: { name: 'Redirect', desc: 'Use SPF policy from another domain instead' },
+        exists: { name: 'Exists', desc: 'Match if domain exists (has any A record)' },
+        ptr: { name: 'PTR', desc: 'Match via reverse DNS (deprecated)' }
+    };
+
+    const SPF_QUALIFIERS = {
+        '+': { name: 'Pass', desc: 'IP is authorized', color: 'success' },
+        '-': { name: 'Fail', desc: 'IP is not authorized', color: 'error' },
+        '~': { name: 'SoftFail', desc: 'IP is probably not authorized', color: 'warning' },
+        '?': { name: 'Neutral', desc: 'No assertion about IP', color: 'neutral' }
+    };
+
+    const SPF_RESULTS = {
+        pass: { name: 'Pass', desc: 'Sender IP is authorized', color: 'success', icon: '✓' },
+        fail: { name: 'Fail', desc: 'Sender IP is NOT authorized', color: 'error', icon: '✗' },
+        softfail: { name: 'SoftFail', desc: 'Sender IP is probably not authorized', color: 'warning', icon: '~' },
+        neutral: { name: 'Neutral', desc: 'No assertion about sender IP', color: 'neutral', icon: '?' },
+        none: { name: 'None', desc: 'No SPF record found', color: 'neutral', icon: '−' },
+        permerror: { name: 'PermError', desc: 'Permanent error in SPF evaluation', color: 'error', icon: '!' },
+        temperror: { name: 'TempError', desc: 'Temporary error (DNS timeout)', color: 'warning', icon: '⚠' }
     };
 
     // State
@@ -630,6 +686,419 @@
         let c = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
         c = c.replace(/(\r\n)+$/, '') || '';
         return c + '\r\n';
+    }
+
+    // Extract domain from Return-Path or From header
+    function extractMailDomain(headers) {
+        // Try Return-Path first (envelope sender)
+        const returnPath = headers.find(h => h.name.toLowerCase() === 'return-path');
+        if (returnPath) {
+            const match = returnPath.value.match(/<([^>]+)>|([^\s<>]+@[^\s<>]+)/);
+            if (match) {
+                const email = match[1] || match[2];
+                const domain = email.split('@')[1];
+                if (domain) return domain.toLowerCase().trim();
+            }
+        }
+        // Fall back to From header
+        const from = headers.find(h => h.name.toLowerCase() === 'from');
+        if (from) {
+            const match = from.value.match(/<([^>]+)>|([^\s<>]+@[^\s<>]+)/);
+            if (match) {
+                const email = match[1] || match[2];
+                const domain = email.split('@')[1];
+                if (domain) return domain.toLowerCase().trim();
+            }
+        }
+        return null;
+    }
+
+    // Extract sender IP from Received headers
+    function extractSenderIP(headers) {
+        // Look for the first "Received:" header (bottom-most in chain = first hop)
+        // Parse patterns like "from mail.example.com ([192.168.1.1])" or "from [192.168.1.1]"
+        const receivedHeaders = headers.filter(h => h.name.toLowerCase() === 'received');
+
+        // The last Received header is typically the first hop (closest to sender)
+        for (let i = receivedHeaders.length - 1; i >= 0; i--) {
+            const val = receivedHeaders[i].value;
+
+            // Match IPv4 in brackets: [192.168.1.1]
+            let match = val.match(/\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/);
+            if (match && !isPrivateIP(match[1])) {
+                log('info', `Extracted sender IP: ${match[1]} from Received header`);
+                return { ip: match[1], version: 4 };
+            }
+
+            // Match IPv4 in parentheses: (192.168.1.1)
+            match = val.match(/\((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\)/);
+            if (match && !isPrivateIP(match[1])) {
+                log('info', `Extracted sender IP: ${match[1]} from Received header`);
+                return { ip: match[1], version: 4 };
+            }
+
+            // Match "from ... by" pattern with IP
+            match = val.match(/from\s+\S+\s+\((?:[^)]*\s)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/i);
+            if (match && !isPrivateIP(match[1])) {
+                log('info', `Extracted sender IP: ${match[1]} from Received header`);
+                return { ip: match[1], version: 4 };
+            }
+
+            // Match IPv6 in brackets: [2001:db8::1]
+            match = val.match(/\[([0-9a-fA-F:]+:[0-9a-fA-F:]+)\]/);
+            if (match && match[1].includes(':')) {
+                log('info', `Extracted sender IPv6: ${match[1]} from Received header`);
+                return { ip: match[1], version: 6 };
+            }
+        }
+
+        log('warn', 'Could not extract sender IP from Received headers');
+        return null;
+    }
+
+    function isPrivateIP(ip) {
+        const parts = ip.split('.').map(Number);
+        if (parts.length !== 4) return false;
+        // 10.0.0.0/8
+        if (parts[0] === 10) return true;
+        // 172.16.0.0/12
+        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+        // 192.168.0.0/16
+        if (parts[0] === 192 && parts[1] === 168) return true;
+        // 127.0.0.0/8
+        if (parts[0] === 127) return true;
+        return false;
+    }
+
+    // IPv4 CIDR matching
+    function ipv4ToInt(ip) {
+        const parts = ip.split('.').map(Number);
+        return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+    }
+
+    function ipv4MatchesCIDR(ip, cidr) {
+        let [network, prefixStr] = cidr.split('/');
+        const prefix = prefixStr ? parseInt(prefixStr, 10) : 32;
+
+        const ipInt = ipv4ToInt(ip);
+        const networkInt = ipv4ToInt(network);
+        const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+
+        return (ipInt & mask) === (networkInt & mask);
+    }
+
+    // IPv6 matching (simplified)
+    function expandIPv6(ip) {
+        // Handle :: expansion
+        let parts = ip.split(':');
+        const emptyIndex = parts.indexOf('');
+
+        if (emptyIndex !== -1) {
+            const before = parts.slice(0, emptyIndex).filter(p => p);
+            const after = parts.slice(emptyIndex + 1).filter(p => p);
+            const missing = 8 - before.length - after.length;
+            parts = [...before, ...Array(missing).fill('0'), ...after];
+        }
+
+        return parts.map(p => p.padStart(4, '0')).join(':');
+    }
+
+    function ipv6ToBigInt(ip) {
+        const expanded = expandIPv6(ip);
+        const hex = expanded.replace(/:/g, '');
+        return BigInt('0x' + hex);
+    }
+
+    function ipv6MatchesCIDR(ip, cidr) {
+        let [network, prefixStr] = cidr.split('/');
+        const prefix = prefixStr ? parseInt(prefixStr, 10) : 128;
+
+        const ipBig = ipv6ToBigInt(ip);
+        const networkBig = ipv6ToBigInt(network);
+        const mask = prefix === 0 ? 0n : (~0n << BigInt(128 - prefix));
+
+        return (ipBig & mask) === (networkBig & mask);
+    }
+
+    // DNS lookups for SPF
+    async function fetchARecords(domain) {
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`, {
+                headers: { Accept: 'application/dns-json' }
+            });
+            const data = await res.json();
+            const ips = [];
+            if (data.Answer) {
+                for (const a of data.Answer) {
+                    if (a.type === 1) ips.push(a.data);
+                }
+            }
+            return ips;
+        } catch (e) {
+            log('error', `A record lookup failed for ${domain}: ${e.message}`);
+            return [];
+        }
+    }
+
+    async function fetchAAAARecords(domain) {
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=AAAA`, {
+                headers: { Accept: 'application/dns-json' }
+            });
+            const data = await res.json();
+            const ips = [];
+            if (data.Answer) {
+                for (const a of data.Answer) {
+                    if (a.type === 28) ips.push(a.data);
+                }
+            }
+            return ips;
+        } catch (e) {
+            log('error', `AAAA record lookup failed for ${domain}: ${e.message}`);
+            return [];
+        }
+    }
+
+    async function fetchMXRecords(domain) {
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=MX`, {
+                headers: { Accept: 'application/dns-json' }
+            });
+            const data = await res.json();
+            const hosts = [];
+            if (data.Answer) {
+                for (const a of data.Answer) {
+                    if (a.type === 15) {
+                        // MX data format: "priority hostname."
+                        const parts = a.data.split(' ');
+                        if (parts.length >= 2) {
+                            hosts.push(parts[1].replace(/\.$/, ''));
+                        }
+                    }
+                }
+            }
+            return hosts;
+        } catch (e) {
+            log('error', `MX record lookup failed for ${domain}: ${e.message}`);
+            return [];
+        }
+    }
+
+    // Full SPF evaluation
+    async function evaluateSpf(senderIP, domain, depth = 0, lookupCount = { count: 0 }) {
+        const MAX_DEPTH = 10;
+        const MAX_LOOKUPS = 10;
+
+        if (depth > MAX_DEPTH) {
+            log('error', `SPF evaluation exceeded max depth (${MAX_DEPTH})`);
+            return { result: 'permerror', reason: 'Too many nested includes', lookups: lookupCount.count };
+        }
+
+        if (lookupCount.count >= MAX_LOOKUPS) {
+            log('error', `SPF evaluation exceeded max DNS lookups (${MAX_LOOKUPS})`);
+            return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+        }
+
+        log('info', `Evaluating SPF for ${domain} (depth=${depth}, lookups=${lookupCount.count})`);
+
+        // Fetch SPF record
+        const spfResult = await fetchSpfRecord(domain);
+        if (!spfResult.ok) {
+            return { result: 'none', reason: spfResult.error, lookups: lookupCount.count, record: null };
+        }
+
+        const mechanisms = parseSpfRecord(spfResult.record);
+        const ipVersion = senderIP.version;
+        const ip = senderIP.ip;
+
+        for (const mech of mechanisms) {
+            let matched = false;
+
+            switch (mech.mechanism) {
+                case 'all':
+                    matched = true;
+                    break;
+
+                case 'ip4':
+                    if (ipVersion === 4) {
+                        matched = ipv4MatchesCIDR(ip, mech.value);
+                    }
+                    break;
+
+                case 'ip6':
+                    if (ipVersion === 6) {
+                        matched = ipv6MatchesCIDR(ip, mech.value);
+                    }
+                    break;
+
+                case 'a':
+                    lookupCount.count++;
+                    if (lookupCount.count > MAX_LOOKUPS) {
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                    }
+                    const aDomain = mech.value || domain;
+                    const aRecords = ipVersion === 4 ? await fetchARecords(aDomain) : await fetchAAAARecords(aDomain);
+                    log('info', `SPF 'a' mechanism: ${aDomain} resolved to ${aRecords.join(', ') || 'none'}`);
+                    for (const aIP of aRecords) {
+                        if (ipVersion === 4 && ipv4MatchesCIDR(ip, aIP + '/32')) {
+                            matched = true;
+                            break;
+                        } else if (ipVersion === 6 && ipv6MatchesCIDR(ip, aIP + '/128')) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    break;
+
+                case 'mx':
+                    lookupCount.count++;
+                    if (lookupCount.count > MAX_LOOKUPS) {
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                    }
+                    const mxDomain = mech.value || domain;
+                    const mxHosts = await fetchMXRecords(mxDomain);
+                    log('info', `SPF 'mx' mechanism: ${mxDomain} MX hosts: ${mxHosts.join(', ') || 'none'}`);
+                    for (const mxHost of mxHosts) {
+                        lookupCount.count++;
+                        if (lookupCount.count > MAX_LOOKUPS) {
+                            return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                        }
+                        const mxIPs = ipVersion === 4 ? await fetchARecords(mxHost) : await fetchAAAARecords(mxHost);
+                        for (const mxIP of mxIPs) {
+                            if (ipVersion === 4 && ipv4MatchesCIDR(ip, mxIP + '/32')) {
+                                matched = true;
+                                break;
+                            } else if (ipVersion === 6 && ipv6MatchesCIDR(ip, mxIP + '/128')) {
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (matched) break;
+                    }
+                    break;
+
+                case 'include':
+                    lookupCount.count++;
+                    if (lookupCount.count > MAX_LOOKUPS) {
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                    }
+                    log('info', `SPF 'include' mechanism: checking ${mech.value}`);
+                    const includeResult = await evaluateSpf(senderIP, mech.value, depth + 1, lookupCount);
+                    if (includeResult.result === 'pass') {
+                        matched = true;
+                    } else if (includeResult.result === 'permerror' || includeResult.result === 'temperror') {
+                        return includeResult;
+                    }
+                    break;
+
+                case 'redirect':
+                    lookupCount.count++;
+                    if (lookupCount.count > MAX_LOOKUPS) {
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                    }
+                    log('info', `SPF 'redirect' mechanism: redirecting to ${mech.value}`);
+                    return await evaluateSpf(senderIP, mech.value, depth + 1, lookupCount);
+
+                case 'exists':
+                    lookupCount.count++;
+                    if (lookupCount.count > MAX_LOOKUPS) {
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                    }
+                    const existsIPs = await fetchARecords(mech.value);
+                    matched = existsIPs.length > 0;
+                    break;
+
+                case 'ptr':
+                    // PTR is deprecated and complex, skip for now
+                    log('warn', 'PTR mechanism is deprecated and not evaluated');
+                    break;
+            }
+
+            if (matched) {
+                const qualResult = {
+                    '+': 'pass',
+                    '-': 'fail',
+                    '~': 'softfail',
+                    '?': 'neutral'
+                }[mech.qualifier] || 'neutral';
+
+                log('success', `SPF matched: ${mech.raw} -> ${qualResult}`);
+                return {
+                    result: qualResult,
+                    mechanism: mech.raw,
+                    lookups: lookupCount.count,
+                    record: spfResult.record
+                };
+            }
+        }
+
+        // No match and no "all" mechanism means neutral
+        log('info', 'SPF: No mechanism matched, defaulting to neutral');
+        return { result: 'neutral', reason: 'No mechanism matched', lookups: lookupCount.count, record: spfResult.record };
+    }
+
+    // Fetch SPF record
+    async function fetchSpfRecord(domain) {
+        log('info', `SPF lookup: ${domain}`);
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=TXT`, {
+                headers: { Accept: 'application/dns-json' }
+            });
+            const data = await res.json();
+            if (data.Answer) {
+                for (const a of data.Answer) {
+                    if (a.type === 16) {
+                        const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                        if (record.startsWith('v=spf1')) {
+                            log('success', `SPF found: ${record.slice(0, 80)}...`);
+                            return { ok: true, record, domain };
+                        }
+                    }
+                }
+            }
+            log('warn', `No SPF record found for ${domain}`);
+            return { ok: false, error: 'No SPF record found', domain };
+        } catch (e) {
+            log('error', `SPF DNS error: ${e.message}`);
+            return { ok: false, error: e.message, domain };
+        }
+    }
+
+    // Parse SPF record into mechanisms
+    function parseSpfRecord(record) {
+        const mechanisms = [];
+        const parts = record.split(/\s+/).filter(p => p && p !== 'v=spf1');
+
+        for (const part of parts) {
+            let qualifier = '+'; // default is pass
+            let term = part;
+
+            if (['+', '-', '~', '?'].includes(part[0])) {
+                qualifier = part[0];
+                term = part.slice(1);
+            }
+
+            // Parse mechanism and value
+            const colonIdx = term.indexOf(':');
+            const eqIdx = term.indexOf('=');
+            let mechanism, value;
+
+            if (colonIdx !== -1) {
+                mechanism = term.slice(0, colonIdx).toLowerCase();
+                value = term.slice(colonIdx + 1);
+            } else if (eqIdx !== -1) {
+                // For redirect=domain or exp=domain
+                mechanism = term.slice(0, eqIdx).toLowerCase();
+                value = term.slice(eqIdx + 1);
+            } else {
+                mechanism = term.toLowerCase();
+                value = '';
+            }
+
+            mechanisms.push({ qualifier, mechanism, value, raw: part });
+        }
+
+        return mechanisms;
     }
 
     // DNS
@@ -866,6 +1335,87 @@
         return logs.map(l => `<div class="log-entry"><span class="log-time">${l.time}</span><span class="log-type ${l.type}">${l.type.toUpperCase()}</span><span class="log-msg">${esc(l.msg)}</span></div>`).join('');
     }
 
+    function renderSpfMechanism(mech) {
+        const qualInfo = SPF_QUALIFIERS[mech.qualifier] || { name: 'Unknown', desc: 'Unknown qualifier', color: 'neutral' };
+        const mechInfo = SPF_MECHANISMS[mech.mechanism] || { name: mech.mechanism.toUpperCase(), desc: 'SPF mechanism' };
+        const displayValue = mech.value || (mech.mechanism === 'all' ? '' : '(domain)');
+        const tagClass = `spf-${qualInfo.color === 'success' ? 'pass' : qualInfo.color === 'error' ? 'fail' : qualInfo.color === 'warning' ? 'softfail' : 'neutral'}`;
+
+        return `<div class="tag ${tagClass}" data-tag="${esc(mech.raw)}" data-tag-name="${esc(qualInfo.name + ' ' + mechInfo.name)}" data-tag-desc="${esc(mechInfo.desc + '. Qualifier: ' + qualInfo.desc)}" data-tag-value="${esc(mech.raw)}">
+            <span class="dot"></span>
+            <span class="tag-name">${esc(mech.qualifier)}${esc(mech.mechanism)}</span>
+            ${displayValue ? `<span class="tag-value">${esc(displayValue)}</span>` : ''}
+            <button class="copy-btn" onclick="event.stopPropagation();copy(this,\`${esc(mech.raw)}\`)">⧉</button>
+        </div>`;
+    }
+
+    function renderSpf(spfResult) {
+        if (!spfResult) return '';
+
+        const dnsCmd = `dig TXT ${spfResult.domain}`;
+        const statusClass = spfResult.ok ? 'found' : 'notfound';
+        const statusBadge = spfResult.ok ? '<span class="badge" style="background:rgba(0,212,255,0.15);color:var(--accent-secondary)">FOUND</span>' : '<span class="badge" style="background:rgba(255,179,71,0.15);color:var(--warning)">NOT FOUND</span>';
+
+        let content = '';
+        if (spfResult.ok) {
+            const mechanisms = parseSpfRecord(spfResult.record);
+            const mechTags = mechanisms.map(m => renderSpfMechanism(m)).join('');
+
+            content = `
+                <div class="sig-section">
+                    <div class="sig-section-title">🛡️ SPF Mechanisms</div>
+                    <div class="tags-grid">${mechTags}</div>
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">🌐 DNS Record</div>
+                    <div class="dns-cmd">
+                        <code>${esc(dnsCmd)}</code>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">⧉</button>
+                    </div>
+                    <div class="dns-raw">${esc(spfResult.record)}</div>
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">📋 Policy Summary</div>
+                    <div class="details">
+                        <div class="detail-row"><span class="detail-label">Domain</span><span class="detail-value">${esc(spfResult.domain)}</span></div>
+                        <div class="detail-row"><span class="detail-label">Mechanisms</span><span class="detail-value">${mechanisms.length}</span></div>
+                        <div class="detail-row"><span class="detail-label">Default Policy</span><span class="detail-value ${getDefaultPolicyClass(mechanisms)}">${getDefaultPolicy(mechanisms)}</span></div>
+                    </div>
+                </div>
+            `;
+        } else {
+            content = `<div class="error-msg">${esc(spfResult.error)} for ${esc(spfResult.domain)}</div>`;
+        }
+
+        return `<div class="spf-card ${statusClass} expanded">
+            <div class="sig-header" onclick="toggleCard(this)">
+                <div class="sig-title">
+                    <span class="sig-num">🛡️</span>
+                    <span class="sig-domain">${esc(spfResult.domain)}</span>
+                    ${statusBadge}
+                </div>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="sig-content"><div class="sig-body">
+                ${content}
+            </div></div>
+        </div>`;
+    }
+
+    function getDefaultPolicy(mechanisms) {
+        const allMech = mechanisms.find(m => m.mechanism === 'all');
+        if (!allMech) return 'None (default: neutral)';
+        const qual = SPF_QUALIFIERS[allMech.qualifier];
+        return qual ? qual.name : 'Unknown';
+    }
+
+    function getDefaultPolicyClass(mechanisms) {
+        const allMech = mechanisms.find(m => m.mechanism === 'all');
+        if (!allMech) return 'neutral';
+        const qual = SPF_QUALIFIERS[allMech.qualifier];
+        return qual ? qual.color : 'neutral';
+    }
+
     // Initialize tooltips on all tags in the results
     function initTooltips() {
         document.querySelectorAll('#results .tag').forEach(tag => {
@@ -881,14 +1431,27 @@
 
         log('info', 'Starting validation');
         const { headers, body, dkimSigs } = parseEmail(input);
-        
+
         const signed = new Set();
         dkimSigs.forEach(s => s.parsed?.h?.split(':').forEach(h => signed.add(h.trim().toLowerCase())));
-        
+
         document.getElementById('headersEl').innerHTML = renderHeaders(headers, signed);
 
+        // SPF check
+        const mailDomain = extractMailDomain(headers);
+        let spfResult = null;
+        if (mailDomain) {
+            spfResult = await fetchSpfRecord(mailDomain);
+        } else {
+            log('warn', 'Could not extract mail domain for SPF check');
+        }
+        document.getElementById('spfEl').innerHTML = spfResult ? renderSpf(spfResult) : '<div class="error-msg">Could not determine sender domain for SPF lookup</div>';
+
         if (!dkimSigs.length) {
-            document.getElementById('summaryEl').innerHTML = '';
+            document.getElementById('summaryEl').innerHTML = `
+                <div class="summary-item"><div class="summary-icon">🛡️</div><div><span class="summary-value ${spfResult?.ok ? 'success' : 'error'}">${spfResult?.ok ? '✓' : '✗'}</span><div class="summary-label">SPF Record</div></div></div>
+                <div class="summary-item"><div class="summary-icon">📧</div><div><span class="summary-value">0</span><div class="summary-label">DKIM Signatures</div></div></div>
+            `;
             document.getElementById('sigsEl').innerHTML = '<div class="error-msg">No DKIM-Signature headers found</div>';
             document.getElementById('debugLog').innerHTML = renderDebug();
             document.getElementById('results').classList.add('visible');
@@ -906,7 +1469,8 @@
         const invalid = results.length - valid;
 
         document.getElementById('summaryEl').innerHTML = `
-            <div class="summary-item"><div class="summary-icon">📧</div><div><span class="summary-value">${results.length}</span><div class="summary-label">Signatures</div></div></div>
+            <div class="summary-item"><div class="summary-icon">🛡️</div><div><span class="summary-value ${spfResult?.ok ? 'success' : 'error'}">${spfResult?.ok ? '✓' : '✗'}</span><div class="summary-label">SPF Record</div></div></div>
+            <div class="summary-item"><div class="summary-icon">📧</div><div><span class="summary-value">${results.length}</span><div class="summary-label">DKIM Signatures</div></div></div>
             <div class="summary-item"><div class="summary-icon">✓</div><div><span class="summary-value success">${valid}</span><div class="summary-label">Valid</div></div></div>
             <div class="summary-item"><div class="summary-icon">✗</div><div><span class="summary-value error">${invalid}</span><div class="summary-label">Invalid</div></div></div>
         `;
