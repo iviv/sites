@@ -1131,13 +1131,14 @@
         return arr.buffer;
     }
 
-    async function importKey(b64) {
+    async function importKey(b64, algorithm = 'rsa-sha256') {
         const keyData = b64ToBuffer(b64);
+        const hashAlg = algorithm === 'rsa-sha1' ? 'SHA-1' : 'SHA-256';
         try {
-            return await crypto.subtle.importKey('spki', keyData, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+            return await crypto.subtle.importKey('spki', keyData, { name: 'RSASSA-PKCS1-v1_5', hash: hashAlg }, false, ['verify']);
         } catch {
             const spki = convertPkcs1ToSpki(new Uint8Array(keyData));
-            return await crypto.subtle.importKey('spki', spki, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+            return await crypto.subtle.importKey('spki', spki, { name: 'RSASSA-PKCS1-v1_5', hash: hashAlg }, false, ['verify']);
         }
     }
 
@@ -1164,7 +1165,7 @@
         return new Uint8Array([tag, 0x82, (len >> 8) & 0xff, len & 0xff]);
     }
 
-    async function computeBodyHash(body, canon, limit) {
+    async function computeBodyHash(body, canon, limit, algorithm = 'rsa-sha256') {
         let c = canon === 'relaxed' ? canonBodyRelaxed(body) : canonBodySimple(body);
         if (limit !== undefined && limit !== '') {
             const n = parseInt(limit, 10);
@@ -1173,7 +1174,8 @@
                 if (bytes.length > n) c = new TextDecoder().decode(bytes.slice(0, n));
             }
         }
-        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(c));
+        const hashAlg = algorithm === 'rsa-sha1' ? 'SHA-1' : 'SHA-256';
+        const hash = await crypto.subtle.digest(hashAlg, new TextEncoder().encode(c));
         return btoa(String.fromCharCode(...new Uint8Array(hash)));
     }
 
@@ -1227,7 +1229,7 @@
         for (const t of required) if (!tags[t]) result.errors.push(`Missing tag: ${t}`);
         if (result.errors.length) return result;
         if (tags.v !== '1') { result.errors.push(`Unsupported version: ${tags.v}`); return result; }
-        if (tags.a !== 'rsa-sha256') { result.errors.push(`Unsupported algorithm: ${tags.a}`); return result; }
+        if (tags.a !== 'rsa-sha256' && tags.a !== 'rsa-sha1') { result.errors.push(`Unsupported algorithm: ${tags.a}`); return result; }
 
         const [hCanon, bCanon] = (tags.c || 'simple/simple').split('/');
         result.details.headerCanon = hCanon || 'simple';
@@ -1240,14 +1242,14 @@
         result.dnsTags = parseDnsTags(dns.record);
         if (!result.dnsTags.p) { result.errors.push('No public key in DNS'); return result; }
 
-        const computedBh = await computeBodyHash(body, result.details.bodyCanon, tags.l);
+        const computedBh = await computeBodyHash(body, result.details.bodyCanon, tags.l, tags.a);
         result.details.computedBh = computedBh;
         result.details.declaredBh = tags.bh;
         result.details.bhMatch = computedBh === tags.bh;
         if (!result.details.bhMatch) result.errors.push('Body hash mismatch');
 
         try {
-            const key = await importKey(result.dnsTags.p);
+            const key = await importKey(result.dnsTags.p, tags.a);
             const input = buildSigningInput(headers, tags, sig.raw, result.details.headerCanon);
             result.details.sigValid = await verifySig(input, tags.b, key);
             if (!result.details.sigValid) result.errors.push('Signature verification failed');
