@@ -1821,6 +1821,48 @@
             log('warn', `Security: DKIM signature uses l=${bodyLen} tag - body content after ${bodyLen} bytes is unsigned`);
         }
 
+        // Check for signature expiration (x= tag)
+        if (tags.x !== undefined && tags.x !== '') {
+            const expireTime = parseInt(tags.x, 10);
+            const now = Math.floor(Date.now() / 1000);
+            result.details.expireTime = expireTime;
+            result.details.expireDate = new Date(expireTime * 1000).toISOString();
+
+            if (expireTime < now) {
+                const expiredAgo = now - expireTime;
+                const expiredDays = Math.floor(expiredAgo / 86400);
+                const expiredHours = Math.floor((expiredAgo % 86400) / 3600);
+                let expiredStr = '';
+                if (expiredDays > 0) expiredStr = `${expiredDays} day${expiredDays > 1 ? 's' : ''}`;
+                else if (expiredHours > 0) expiredStr = `${expiredHours} hour${expiredHours > 1 ? 's' : ''}`;
+                else expiredStr = `${expiredAgo} second${expiredAgo > 1 ? 's' : ''}`;
+
+                result.warnings.push({
+                    type: 'signature_expired',
+                    message: `Signature expired ${expiredStr} ago`,
+                    detail: `This signature expired on ${new Date(expireTime * 1000).toLocaleString()}. Expired signatures may still technically verify but should be treated with caution.`
+                });
+                log('warn', `DKIM signature expired: ${new Date(expireTime * 1000).toISOString()}`);
+            } else {
+                // Signature is valid but show when it expires
+                const expiresIn = expireTime - now;
+                const expiresDays = Math.floor(expiresIn / 86400);
+                if (expiresDays < 7) {
+                    result.warnings.push({
+                        type: 'signature_expiring_soon',
+                        message: `Signature expires in ${expiresDays} day${expiresDays !== 1 ? 's' : ''}`,
+                        detail: `This signature will expire on ${new Date(expireTime * 1000).toLocaleString()}.`
+                    });
+                }
+            }
+        }
+
+        // Store signature timestamp for display
+        if (tags.t !== undefined && tags.t !== '') {
+            result.details.signTime = parseInt(tags.t, 10);
+            result.details.signDate = new Date(result.details.signTime * 1000).toISOString();
+        }
+
         const [hCanon, bCanon] = (tags.c || 'simple/simple').split('/');
         result.details.headerCanon = hCanon || 'simple';
         result.details.bodyCanon = bCanon || hCanon || 'simple';
@@ -1921,6 +1963,8 @@
                         <div class="detail-row"><span class="detail-label">Canonicalization</span><span class="detail-value">${r.details.headerCanon}/${r.details.bodyCanon}</span></div>
                         <div class="detail-row"><span class="detail-label">Body Hash</span><span class="detail-value ${r.details.bhMatch ? 'success' : 'error'}">${r.details.bhMatch ? '✓ Match' : '✗ Mismatch'}</span></div>
                         <div class="detail-row"><span class="detail-label">Signature</span><span class="detail-value ${r.details.sigValid ? 'success' : 'error'}">${r.details.sigValid ? '✓ Valid' : '✗ Invalid'}</span></div>
+                        ${r.details.signDate ? `<div class="detail-row"><span class="detail-label">Signed</span><span class="detail-value">${new Date(r.details.signTime * 1000).toLocaleString()}</span></div>` : ''}
+                        ${r.details.expireDate ? `<div class="detail-row"><span class="detail-label">Expires</span><span class="detail-value ${r.details.expireTime < Math.floor(Date.now() / 1000) ? 'error' : ''}">${new Date(r.details.expireTime * 1000).toLocaleString()}${r.details.expireTime < Math.floor(Date.now() / 1000) ? ' (EXPIRED)' : ''}</span></div>` : ''}
                     </div>
                 </div>
             </div></div>
