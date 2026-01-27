@@ -52,33 +52,6 @@
             transition: background 0.3s, color 0.3s;
         }
 
-        /* Background */
-        .bg-grid {
-            position: fixed;
-            inset: 0;
-            background-image: linear-gradient(var(--glass-border) 1px, transparent 1px),
-                              linear-gradient(90deg, var(--glass-border) 1px, transparent 1px);
-            background-size: 60px 60px;
-            opacity: 0.5;
-            pointer-events: none;
-            animation: gridMove 30s linear infinite;
-        }
-        @keyframes gridMove { to { transform: translate(60px, 60px); } }
-
-        .bg-orb {
-            position: fixed;
-            border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.4;
-            pointer-events: none;
-            animation: float 20s ease-in-out infinite;
-        }
-        .bg-orb:nth-child(2) { width: 400px; height: 400px; background: var(--accent); top: -100px; right: -100px; }
-        .bg-orb:nth-child(3) { width: 300px; height: 300px; background: var(--accent-secondary); bottom: -50px; left: -50px; animation-delay: -7s; }
-        @keyframes float {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(-20px, 20px) scale(0.95); }
-        }
 
         /* Layout */
         .container { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 2rem; }
@@ -366,10 +339,6 @@
     </style>
 </head>
 <body>
-    <div class="bg-grid"></div>
-    <div class="bg-orb"></div>
-    <div class="bg-orb"></div>
-    
     <div class="tooltip" id="tooltip">
         <div class="tooltip-title" id="tooltipTitle"></div>
         <div class="tooltip-desc" id="tooltipDesc"></div>
