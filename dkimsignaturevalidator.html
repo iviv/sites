@@ -1660,6 +1660,108 @@
         return qual ? qual.color : 'neutral';
     }
 
+    function renderSpfEvaluation(evalResult) {
+        if (!evalResult) return '';
+
+        const resultInfo = SPF_RESULTS[evalResult.result] || SPF_RESULTS.none;
+        const dnsCmd = `dig TXT ${evalResult.domain}`;
+
+        // Determine badge styling based on result
+        let badgeStyle, badgeText;
+        switch (evalResult.result) {
+            case 'pass':
+                badgeStyle = 'background:rgba(0,255,136,0.15);color:var(--success)';
+                badgeText = '✓ PASS';
+                break;
+            case 'fail':
+                badgeStyle = 'background:rgba(255,107,122,0.15);color:var(--error)';
+                badgeText = '✗ FAIL';
+                break;
+            case 'softfail':
+                badgeStyle = 'background:rgba(255,179,71,0.15);color:var(--warning)';
+                badgeText = '~ SOFTFAIL';
+                break;
+            case 'neutral':
+                badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
+                badgeText = '? NEUTRAL';
+                break;
+            case 'none':
+                badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
+                badgeText = '− NONE';
+                break;
+            case 'permerror':
+            case 'temperror':
+                badgeStyle = 'background:rgba(255,107,122,0.15);color:var(--error)';
+                badgeText = '! ERROR';
+                break;
+            default:
+                badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
+                badgeText = evalResult.result.toUpperCase();
+        }
+
+        let content = '';
+
+        // Evaluation result section
+        content += `
+            <div class="sig-section">
+                <div class="sig-section-title">📊 SPF Evaluation Result</div>
+                <div class="details">
+                    <div class="detail-row"><span class="detail-label">Result</span><span class="detail-value ${resultInfo.color}">${resultInfo.icon} ${resultInfo.name}</span></div>
+                    <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">${esc(resultInfo.desc)}</span></div>
+                    ${evalResult.senderIP ? `<div class="detail-row"><span class="detail-label">Sender IP</span><span class="detail-value">${esc(evalResult.senderIP.ip)} (IPv${evalResult.senderIP.version})</span></div>` : ''}
+                    ${evalResult.mechanism ? `<div class="detail-row"><span class="detail-label">Matched Mechanism</span><span class="detail-value" style="color:var(--accent)">${esc(evalResult.mechanism)}</span></div>` : ''}
+                    ${evalResult.reason ? `<div class="detail-row"><span class="detail-label">Reason</span><span class="detail-value">${esc(evalResult.reason)}</span></div>` : ''}
+                    ${evalResult.lookups !== undefined ? `<div class="detail-row"><span class="detail-label">DNS Lookups</span><span class="detail-value">${evalResult.lookups}/10</span></div>` : ''}
+                </div>
+            </div>
+        `;
+
+        // SPF mechanisms if record exists
+        if (evalResult.record) {
+            const mechanisms = parseSpfRecord(evalResult.record);
+            const mechTags = mechanisms.map(m => renderSpfMechanism(m)).join('');
+
+            content += `
+                <div class="sig-section">
+                    <div class="sig-section-title">🛡️ SPF Mechanisms</div>
+                    <div class="tags-grid">${mechTags}</div>
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">🌐 DNS Record</div>
+                    <div class="dns-cmd">
+                        <code>${esc(dnsCmd)}</code>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">⧉</button>
+                    </div>
+                    <div class="dns-raw">${esc(evalResult.record)}</div>
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">📋 Policy Summary</div>
+                    <div class="details">
+                        <div class="detail-row"><span class="detail-label">Domain</span><span class="detail-value">${esc(evalResult.domain)}</span></div>
+                        <div class="detail-row"><span class="detail-label">Mechanisms</span><span class="detail-value">${mechanisms.length}</span></div>
+                        <div class="detail-row"><span class="detail-label">Default Policy</span><span class="detail-value ${getDefaultPolicyClass(mechanisms)}">${getDefaultPolicy(mechanisms)}</span></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const cardClass = evalResult.result === 'pass' ? 'found' : (evalResult.result === 'fail' || evalResult.result === 'permerror' ? 'notfound' : '');
+
+        return `<div class="spf-card ${cardClass} expanded">
+            <div class="sig-header" onclick="toggleCard(this)">
+                <div class="sig-title">
+                    <span class="sig-num">🛡️</span>
+                    <span class="sig-domain">${esc(evalResult.domain)}</span>
+                    <span class="badge" style="${badgeStyle}">${badgeText}</span>
+                </div>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="sig-content"><div class="sig-body">
+                ${content}
+            </div></div>
+        </div>`;
+    }
+
     // Initialize tooltips on all tags in the results
     function initTooltips() {
         document.querySelectorAll('#results .tag').forEach(tag => {
@@ -1686,19 +1788,38 @@
         document.getElementById('relayEl').innerHTML = renderRelayChain(relayHops);
         log('info', `Found ${relayHops.length} relay hops`);
 
-        // SPF check
+        // SPF check with full evaluation
         const mailDomain = extractMailDomain(headers);
-        let spfResult = null;
-        if (mailDomain) {
-            spfResult = await fetchSpfRecord(mailDomain);
+        const senderIP = extractSenderIP(headers);
+        let spfEvalResult = null;
+        if (mailDomain && senderIP) {
+            spfEvalResult = await evaluateSpf(senderIP, mailDomain);
+            spfEvalResult.senderIP = senderIP;
+            spfEvalResult.domain = mailDomain;
+        } else if (mailDomain) {
+            // Fallback: just fetch SPF record without evaluation
+            const spfRecord = await fetchSpfRecord(mailDomain);
+            spfEvalResult = {
+                result: 'none',
+                reason: 'Could not extract sender IP from headers',
+                record: spfRecord.ok ? spfRecord.record : null,
+                domain: mailDomain,
+                senderIP: null
+            };
+            log('warn', 'Could not extract sender IP for SPF evaluation');
         } else {
             log('warn', 'Could not extract mail domain for SPF check');
         }
-        document.getElementById('spfEl').innerHTML = spfResult ? renderSpf(spfResult) : '<div class="error-msg">Could not determine sender domain for SPF lookup</div>';
+        document.getElementById('spfEl').innerHTML = spfEvalResult ? renderSpfEvaluation(spfEvalResult) : '<div class="error-msg">Could not determine sender domain for SPF lookup</div>';
+
+        // Determine SPF summary display
+        const spfSummaryClass = spfEvalResult?.result === 'pass' ? 'success' : (spfEvalResult?.result === 'fail' || spfEvalResult?.result === 'permerror' ? 'error' : 'warning');
+        const spfSummaryIcon = spfEvalResult?.result === 'pass' ? '✓' : (spfEvalResult?.result === 'fail' || spfEvalResult?.result === 'permerror' ? '✗' : '?');
+        const spfSummaryLabel = spfEvalResult ? (SPF_RESULTS[spfEvalResult.result]?.name || 'Unknown') : 'N/A';
 
         if (!dkimSigs.length) {
             document.getElementById('summaryEl').innerHTML = `
-                <div class="summary-item"><div class="summary-icon">🛡️</div><div><span class="summary-value ${spfResult?.ok ? 'success' : 'error'}">${spfResult?.ok ? '✓' : '✗'}</span><div class="summary-label">SPF Record</div></div></div>
+                <div class="summary-item"><div class="summary-icon">🛡️</div><div><span class="summary-value ${spfSummaryClass}">${spfSummaryIcon}</span><div class="summary-label">SPF ${spfSummaryLabel}</div></div></div>
                 <div class="summary-item"><div class="summary-icon">📧</div><div><span class="summary-value">0</span><div class="summary-label">DKIM Signatures</div></div></div>
             `;
             document.getElementById('sigsEl').innerHTML = '<div class="error-msg">No DKIM-Signature headers found</div>';
@@ -1718,7 +1839,7 @@
         const invalid = results.length - valid;
 
         document.getElementById('summaryEl').innerHTML = `
-            <div class="summary-item"><div class="summary-icon">🛡️</div><div><span class="summary-value ${spfResult?.ok ? 'success' : 'error'}">${spfResult?.ok ? '✓' : '✗'}</span><div class="summary-label">SPF Record</div></div></div>
+            <div class="summary-item"><div class="summary-icon">🛡️</div><div><span class="summary-value ${spfSummaryClass}">${spfSummaryIcon}</span><div class="summary-label">SPF ${spfSummaryLabel}</div></div></div>
             <div class="summary-item"><div class="summary-icon">📧</div><div><span class="summary-value">${results.length}</span><div class="summary-label">DKIM Signatures</div></div></div>
             <div class="summary-item"><div class="summary-icon">✓</div><div><span class="summary-value success">${valid}</span><div class="summary-label">Valid</div></div></div>
             <div class="summary-item"><div class="summary-icon">✗</div><div><span class="summary-value error">${invalid}</span><div class="summary-label">Invalid</div></div></div>
