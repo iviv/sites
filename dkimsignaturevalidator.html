@@ -754,40 +754,40 @@
     </div>
 
     <script>
-    // Tag descriptions
+    // Tag descriptions with RFC references
     const DKIM_TAGS = {
-        v: { name: 'Version', desc: 'DKIM signature version (must be "1")' },
-        a: { name: 'Algorithm', desc: 'Signing algorithm (e.g., rsa-sha256)' },
-        b: { name: 'Signature', desc: 'Base64-encoded cryptographic signature' },
-        bh: { name: 'Body Hash', desc: 'Hash of canonicalized message body' },
-        c: { name: 'Canonicalization', desc: 'Header/body normalization method' },
-        d: { name: 'Domain', desc: 'Signing domain identifier (SDID)' },
-        s: { name: 'Selector', desc: 'DNS selector for public key lookup' },
-        h: { name: 'Signed Headers', desc: 'Headers included in signature' },
-        t: { name: 'Timestamp', desc: 'Signature creation time (Unix)' },
-        x: { name: 'Expiration', desc: 'Signature expiration time (Unix)' },
-        l: { name: 'Body Length', desc: 'Number of body bytes signed' },
-        i: { name: 'Identity', desc: 'Agent/user identifier (AUID)' }
+        v: { name: 'Version', desc: 'DKIM signature version (must be "1") [RFC 6376 §3.5]' },
+        a: { name: 'Algorithm', desc: 'Signing algorithm: rsa-sha256 or rsa-sha1 [RFC 6376 §3.5]' },
+        b: { name: 'Signature', desc: 'Base64-encoded cryptographic signature [RFC 6376 §3.5]' },
+        bh: { name: 'Body Hash', desc: 'Hash of canonicalized message body [RFC 6376 §3.5]' },
+        c: { name: 'Canonicalization', desc: 'Header/body normalization: simple or relaxed [RFC 6376 §3.4]' },
+        d: { name: 'Domain', desc: 'Signing domain identifier (SDID) [RFC 6376 §3.5]' },
+        s: { name: 'Selector', desc: 'DNS selector for public key lookup [RFC 6376 §3.5]' },
+        h: { name: 'Signed Headers', desc: 'Headers included in signature [RFC 6376 §3.5]' },
+        t: { name: 'Timestamp', desc: 'Signature creation time (Unix epoch) [RFC 6376 §3.5]' },
+        x: { name: 'Expiration', desc: 'Signature expiration time (Unix epoch) [RFC 6376 §3.5]' },
+        l: { name: 'Body Length', desc: 'Number of body bytes signed (security risk!) [RFC 6376 §3.5]' },
+        i: { name: 'Identity', desc: 'Agent/user identifier (AUID) [RFC 6376 §3.5]' }
     };
 
     const DNS_TAGS = {
-        v: { name: 'Version', desc: 'DKIM key record version (must be "DKIM1")' },
-        k: { name: 'Key Type', desc: 'Type of key (default: rsa)' },
-        p: { name: 'Public Key', desc: 'Base64-encoded public key data' },
-        h: { name: 'Hash Algorithms', desc: 'Acceptable hash algorithms' },
-        t: { name: 'Flags', desc: 'Flags (y=testing, s=strict)' }
+        v: { name: 'Version', desc: 'DKIM key record version (must be "DKIM1") [RFC 6376 §3.6.1]' },
+        k: { name: 'Key Type', desc: 'Type of key: rsa (default) or ed25519 [RFC 6376 §3.6.1]' },
+        p: { name: 'Public Key', desc: 'Base64-encoded public key data [RFC 6376 §3.6.1]' },
+        h: { name: 'Hash Algorithms', desc: 'Acceptable hash algorithms [RFC 6376 §3.6.1]' },
+        t: { name: 'Flags', desc: 'Flags: y=testing mode, s=strict [RFC 6376 §3.6.1]' }
     };
 
     const SPF_MECHANISMS = {
-        all: { name: 'All', desc: 'Matches all senders (catchall)' },
-        ip4: { name: 'IPv4', desc: 'Match if sender IP is in this IPv4 range' },
-        ip6: { name: 'IPv6', desc: 'Match if sender IP is in this IPv6 range' },
-        a: { name: 'A Record', desc: 'Match if sender IP matches domain A record' },
-        mx: { name: 'MX Record', desc: 'Match if sender IP matches domain MX hosts' },
-        include: { name: 'Include', desc: 'Include SPF policy from another domain' },
-        redirect: { name: 'Redirect', desc: 'Use SPF policy from another domain instead' },
-        exists: { name: 'Exists', desc: 'Match if domain exists (has any A record)' },
-        ptr: { name: 'PTR', desc: 'Match via reverse DNS (deprecated)' }
+        all: { name: 'All', desc: 'Matches all senders (catchall) [RFC 7208 §5.1]' },
+        ip4: { name: 'IPv4', desc: 'Match if sender IP is in this IPv4 range [RFC 7208 §5.6]' },
+        ip6: { name: 'IPv6', desc: 'Match if sender IP is in this IPv6 range [RFC 7208 §5.6]' },
+        a: { name: 'A Record', desc: 'Match if sender IP matches domain A record [RFC 7208 §5.3]' },
+        mx: { name: 'MX Record', desc: 'Match if sender IP matches domain MX hosts [RFC 7208 §5.4]' },
+        include: { name: 'Include', desc: 'Include SPF policy from another domain [RFC 7208 §5.2]' },
+        redirect: { name: 'Redirect', desc: 'Use SPF policy from another domain instead [RFC 7208 §6.1]' },
+        exists: { name: 'Exists', desc: 'Match if domain exists (has any A record) [RFC 7208 §5.7]' },
+        ptr: { name: 'PTR', desc: 'Match via reverse DNS (deprecated) [RFC 7208 §5.5]' }
     };
 
     const SPF_QUALIFIERS = {
@@ -808,60 +808,60 @@
     };
 
     const DMARC_TAGS = {
-        v: { name: 'Version', desc: 'DMARC version (must be "DMARC1")' },
-        p: { name: 'Policy', desc: 'Policy for the domain (none, quarantine, reject)' },
-        sp: { name: 'Subdomain Policy', desc: 'Policy for subdomains (defaults to p= value)' },
-        pct: { name: 'Percentage', desc: 'Percentage of messages to apply policy (default: 100)' },
-        rua: { name: 'Aggregate Reports', desc: 'URI(s) for aggregate reports' },
-        ruf: { name: 'Forensic Reports', desc: 'URI(s) for forensic/failure reports' },
-        adkim: { name: 'DKIM Alignment', desc: 'DKIM alignment mode (r=relaxed, s=strict)' },
-        aspf: { name: 'SPF Alignment', desc: 'SPF alignment mode (r=relaxed, s=strict)' },
-        fo: { name: 'Failure Options', desc: 'When to generate failure reports (0, 1, d, s)' },
-        rf: { name: 'Report Format', desc: 'Format for failure reports (afrf)' },
-        ri: { name: 'Report Interval', desc: 'Interval between aggregate reports in seconds' }
+        v: { name: 'Version', desc: 'DMARC version (must be "DMARC1") [RFC 7489 §6.3]' },
+        p: { name: 'Policy', desc: 'Policy for the domain: none, quarantine, reject [RFC 7489 §6.3]' },
+        sp: { name: 'Subdomain Policy', desc: 'Policy for subdomains (defaults to p=) [RFC 7489 §6.3]' },
+        pct: { name: 'Percentage', desc: 'Percentage of messages to apply policy (default: 100) [RFC 7489 §6.3]' },
+        rua: { name: 'Aggregate Reports', desc: 'URI(s) for aggregate reports [RFC 7489 §6.3]' },
+        ruf: { name: 'Forensic Reports', desc: 'URI(s) for forensic/failure reports [RFC 7489 §6.3]' },
+        adkim: { name: 'DKIM Alignment', desc: 'DKIM alignment mode: r=relaxed, s=strict [RFC 7489 §6.3]' },
+        aspf: { name: 'SPF Alignment', desc: 'SPF alignment mode: r=relaxed, s=strict [RFC 7489 §6.3]' },
+        fo: { name: 'Failure Options', desc: 'When to generate failure reports: 0, 1, d, s [RFC 7489 §6.3]' },
+        rf: { name: 'Report Format', desc: 'Format for failure reports (afrf) [RFC 7489 §6.3]' },
+        ri: { name: 'Report Interval', desc: 'Interval between aggregate reports in seconds [RFC 7489 §6.3]' }
     };
 
     const DMARC_POLICIES = {
-        none: { name: 'None', desc: 'No action taken, monitor only', color: 'warning', icon: '?' },
-        quarantine: { name: 'Quarantine', desc: 'Treat as suspicious (spam folder)', color: 'warning', icon: '⚠' },
-        reject: { name: 'Reject', desc: 'Reject the message outright', color: 'success', icon: '✓' }
+        none: { name: 'None', desc: 'No action taken, monitor only [RFC 7489 §6.3]', color: 'warning', icon: '?' },
+        quarantine: { name: 'Quarantine', desc: 'Treat as suspicious (spam folder) [RFC 7489 §6.3]', color: 'warning', icon: '⚠' },
+        reject: { name: 'Reject', desc: 'Reject the message outright [RFC 7489 §6.3]', color: 'success', icon: '✓' }
     };
 
     // ARC (Authenticated Received Chain) tags - RFC 8617
     const ARC_SEAL_TAGS = {
-        i: { name: 'Instance', desc: 'ARC chain instance number (1, 2, 3...)' },
-        a: { name: 'Algorithm', desc: 'Signing algorithm (rsa-sha256)' },
-        b: { name: 'Signature', desc: 'Base64-encoded signature of ARC headers' },
-        cv: { name: 'Chain Validation', desc: 'Validation status of previous ARC sets (none, fail, pass)' },
-        d: { name: 'Domain', desc: 'Signing domain' },
-        s: { name: 'Selector', desc: 'DNS selector for public key' },
-        t: { name: 'Timestamp', desc: 'Signature creation time (Unix)' }
+        i: { name: 'Instance', desc: 'ARC chain instance number (1, 2, 3...) [RFC 8617 §4.1]' },
+        a: { name: 'Algorithm', desc: 'Signing algorithm (rsa-sha256) [RFC 8617 §4.1]' },
+        b: { name: 'Signature', desc: 'Base64-encoded signature of ARC headers [RFC 8617 §4.1]' },
+        cv: { name: 'Chain Validation', desc: 'Validation status: none, fail, pass [RFC 8617 §4.1]' },
+        d: { name: 'Domain', desc: 'Signing domain [RFC 8617 §4.1]' },
+        s: { name: 'Selector', desc: 'DNS selector for public key [RFC 8617 §4.1]' },
+        t: { name: 'Timestamp', desc: 'Signature creation time (Unix epoch) [RFC 8617 §4.1]' }
     };
 
     const ARC_MESSAGE_TAGS = {
-        i: { name: 'Instance', desc: 'ARC chain instance number' },
-        a: { name: 'Algorithm', desc: 'Signing algorithm' },
-        b: { name: 'Signature', desc: 'Base64-encoded signature' },
-        bh: { name: 'Body Hash', desc: 'Hash of canonicalized body' },
-        c: { name: 'Canonicalization', desc: 'Header/body normalization method' },
-        d: { name: 'Domain', desc: 'Signing domain' },
-        h: { name: 'Signed Headers', desc: 'Headers included in signature' },
-        s: { name: 'Selector', desc: 'DNS selector for public key' },
-        t: { name: 'Timestamp', desc: 'Signature creation time' }
+        i: { name: 'Instance', desc: 'ARC chain instance number [RFC 8617 §4.1]' },
+        a: { name: 'Algorithm', desc: 'Signing algorithm [RFC 8617 §4.1]' },
+        b: { name: 'Signature', desc: 'Base64-encoded signature [RFC 8617 §4.1]' },
+        bh: { name: 'Body Hash', desc: 'Hash of canonicalized body [RFC 8617 §4.1]' },
+        c: { name: 'Canonicalization', desc: 'Header/body normalization method [RFC 8617 §4.1]' },
+        d: { name: 'Domain', desc: 'Signing domain [RFC 8617 §4.1]' },
+        h: { name: 'Signed Headers', desc: 'Headers included in signature [RFC 8617 §4.1]' },
+        s: { name: 'Selector', desc: 'DNS selector for public key [RFC 8617 §4.1]' },
+        t: { name: 'Timestamp', desc: 'Signature creation time [RFC 8617 §4.1]' }
     };
 
     const ARC_AUTH_TAGS = {
-        i: { name: 'Instance', desc: 'ARC chain instance number' },
-        dkim: { name: 'DKIM Result', desc: 'DKIM authentication result' },
-        spf: { name: 'SPF Result', desc: 'SPF authentication result' },
-        dmarc: { name: 'DMARC Result', desc: 'DMARC authentication result' },
-        arc: { name: 'ARC Result', desc: 'Previous ARC validation result' }
+        i: { name: 'Instance', desc: 'ARC chain instance number [RFC 8617 §4.1]' },
+        dkim: { name: 'DKIM Result', desc: 'DKIM authentication result [RFC 8617 §4.1]' },
+        spf: { name: 'SPF Result', desc: 'SPF authentication result [RFC 8617 §4.1]' },
+        dmarc: { name: 'DMARC Result', desc: 'DMARC authentication result [RFC 8617 §4.1]' },
+        arc: { name: 'ARC Result', desc: 'Previous ARC validation result [RFC 8617 §4.1]' }
     };
 
     const ARC_CV_STATUS = {
-        none: { name: 'None', desc: 'No previous ARC sets in chain', color: 'neutral', icon: '−' },
-        pass: { name: 'Pass', desc: 'Previous ARC sets validated successfully', color: 'success', icon: '✓' },
-        fail: { name: 'Fail', desc: 'Previous ARC set validation failed', color: 'error', icon: '✗' }
+        none: { name: 'None', desc: 'No previous ARC sets in chain [RFC 8617 §4.1]', color: 'neutral', icon: '−' },
+        pass: { name: 'Pass', desc: 'Previous ARC sets validated successfully [RFC 8617 §4.1]', color: 'success', icon: '✓' },
+        fail: { name: 'Fail', desc: 'Previous ARC set validation failed [RFC 8617 §4.1]', color: 'error', icon: '✗' }
     };
 
     // State
