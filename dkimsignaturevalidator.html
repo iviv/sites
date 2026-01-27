@@ -212,6 +212,84 @@
         .spf-card.expanded .sig-content { max-height: 2000px; }
         .spf-card.expanded .expand-icon { transform: rotate(180deg); }
 
+        /* Relay Card */
+        .relay-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .relay-card .sig-content { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+        .relay-card.expanded .sig-content { max-height: 2000px; }
+        .relay-card.expanded .expand-icon { transform: rotate(180deg); }
+
+        /* Relay Timeline */
+        .relay-timeline { position: relative; padding-left: 24px; }
+        .relay-hop {
+            position: relative;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .relay-hop::before {
+            content: '';
+            position: absolute;
+            left: -20px;
+            top: 50%;
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border-radius: 50%;
+            transform: translateY(-50%);
+            box-shadow: 0 0 8px var(--accent-glow);
+        }
+        .relay-hop::after {
+            content: '';
+            position: absolute;
+            left: -14px;
+            top: calc(50% + 6px);
+            width: 2px;
+            height: calc(100% + 0.5rem);
+            background: var(--border);
+        }
+        .relay-hop:last-child::after { display: none; }
+        .relay-hop.origin::before { background: var(--success); }
+        .relay-hop-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+        .relay-hop-server { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-primary); font-weight: 500; }
+        .relay-hop-time { font-size: 0.7rem; color: var(--text-dim); }
+        .relay-hop-details { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .relay-hop-detail { font-size: 0.72rem; color: var(--text-secondary); }
+        .relay-hop-detail span { color: var(--text-dim); }
+        .relay-latency {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.5rem;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+        }
+        .relay-latency.fast { color: var(--success); border-color: var(--success); }
+        .relay-latency.medium { color: var(--warning); border-color: var(--warning); }
+        .relay-latency.slow { color: var(--error); border-color: var(--error); }
+        .relay-summary-row { display: flex; gap: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .relay-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.75rem;
+        }
+        .relay-stat-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent); }
+
         /* Legend */
         .legend { display: flex; gap: 1rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
         .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--text-dim); }
@@ -398,6 +476,7 @@
         <div class="results" id="results">
             <div id="headersEl"></div>
             <div class="summary" id="summaryEl"></div>
+            <div id="relayEl"></div>
             <div id="spfEl"></div>
             <div id="sigsEl"></div>
             <div class="debug" id="debugEl">
@@ -768,6 +847,169 @@
         // 127.0.0.0/8
         if (parts[0] === 127) return true;
         return false;
+    }
+
+    // Parse email relay chain from Received headers
+    function parseRelayChain(headers) {
+        const receivedHeaders = headers.filter(h => h.name.toLowerCase() === 'received');
+        const hops = [];
+
+        for (const hdr of receivedHeaders) {
+            const val = hdr.value.replace(/\r?\n[ \t]+/g, ' ');
+            const hop = { raw: val };
+
+            // Parse "from <server>" pattern
+            const fromMatch = val.match(/from\s+([^\s(]+)/i);
+            if (fromMatch) hop.from = fromMatch[1];
+
+            // Parse "by <server>" pattern
+            const byMatch = val.match(/by\s+([^\s(]+)/i);
+            if (byMatch) hop.by = byMatch[1];
+
+            // Parse IP addresses
+            const ipMatch = val.match(/\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/);
+            if (ipMatch) hop.ip = ipMatch[1];
+
+            // Parse IPv6
+            const ipv6Match = val.match(/\[([0-9a-fA-F:]+:[0-9a-fA-F:]+)\]/);
+            if (ipv6Match && ipv6Match[1].includes(':')) hop.ip = ipv6Match[1];
+
+            // Parse timestamp - look for various date patterns
+            // Common format: ; Mon, 27 Jan 2025 10:30:45 +0000
+            const dateMatch = val.match(/;\s*([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s*[+-]?\d{0,4})/);
+            if (dateMatch) {
+                try {
+                    hop.timestamp = new Date(dateMatch[1]);
+                    if (isNaN(hop.timestamp.getTime())) hop.timestamp = null;
+                } catch { hop.timestamp = null; }
+            }
+
+            // Alternative timestamp format
+            if (!hop.timestamp) {
+                const altDateMatch = val.match(/(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/);
+                if (altDateMatch) {
+                    try {
+                        hop.timestamp = new Date(altDateMatch[1]);
+                        if (isNaN(hop.timestamp.getTime())) hop.timestamp = null;
+                    } catch { hop.timestamp = null; }
+                }
+            }
+
+            // Parse protocol (SMTP, ESMTP, ESMTPS, etc.)
+            const protoMatch = val.match(/with\s+(E?SMTPS?A?)/i);
+            if (protoMatch) hop.protocol = protoMatch[1].toUpperCase();
+
+            // Parse TLS info
+            if (val.match(/\(.*TLS.*\)/i) || val.match(/ESMTPS/i)) hop.tls = true;
+
+            hops.push(hop);
+        }
+
+        // Received headers are in reverse order (newest first), reverse for chronological
+        hops.reverse();
+
+        // Calculate latencies between hops
+        for (let i = 1; i < hops.length; i++) {
+            if (hops[i].timestamp && hops[i-1].timestamp) {
+                hops[i].latency = hops[i].timestamp.getTime() - hops[i-1].timestamp.getTime();
+            }
+        }
+
+        return hops;
+    }
+
+    function formatLatency(ms) {
+        if (ms === undefined || ms === null) return null;
+        if (ms < 0) ms = 0; // Negative latencies due to clock skew
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;
+        return `${(ms / 3600000).toFixed(1)}h`;
+    }
+
+    function getLatencyClass(ms) {
+        if (ms === undefined || ms === null) return '';
+        if (ms < 1000) return 'fast';
+        if (ms < 10000) return 'medium';
+        return 'slow';
+    }
+
+    function renderRelayChain(hops) {
+        if (!hops || hops.length === 0) {
+            return '<div class="error-msg">No Received headers found to trace email path</div>';
+        }
+
+        // Calculate total transit time
+        let totalLatency = 0;
+        let validLatencies = 0;
+        for (const hop of hops) {
+            if (hop.latency && hop.latency > 0) {
+                totalLatency += hop.latency;
+                validLatencies++;
+            }
+        }
+
+        const summaryHtml = `
+            <div class="relay-summary-row">
+                <div class="relay-stat">
+                    <span>Hops:</span>
+                    <span class="relay-stat-value">${hops.length}</span>
+                </div>
+                ${totalLatency > 0 ? `<div class="relay-stat">
+                    <span>Total Transit:</span>
+                    <span class="relay-stat-value">${formatLatency(totalLatency)}</span>
+                </div>` : ''}
+                ${validLatencies > 0 ? `<div class="relay-stat">
+                    <span>Avg per Hop:</span>
+                    <span class="relay-stat-value">${formatLatency(Math.round(totalLatency / validLatencies))}</span>
+                </div>` : ''}
+            </div>
+        `;
+
+        const hopsHtml = hops.map((hop, i) => {
+            const isOrigin = i === 0;
+            const server = hop.by || hop.from || 'Unknown server';
+            const timeStr = hop.timestamp ? hop.timestamp.toLocaleString() : '';
+            const latencyHtml = hop.latency !== undefined ?
+                `<span class="relay-latency ${getLatencyClass(hop.latency)}">+${formatLatency(hop.latency)}</span>` : '';
+
+            return `
+                <div class="relay-hop ${isOrigin ? 'origin' : ''}">
+                    <div class="relay-hop-header">
+                        <span class="relay-hop-server">${esc(server)}</span>
+                        <span class="relay-hop-time">${esc(timeStr)} ${latencyHtml}</span>
+                    </div>
+                    <div class="relay-hop-details">
+                        ${hop.from ? `<span class="relay-hop-detail">from <span>${esc(hop.from)}</span></span>` : ''}
+                        ${hop.ip ? `<span class="relay-hop-detail">IP <span>${esc(hop.ip)}</span></span>` : ''}
+                        ${hop.protocol ? `<span class="relay-hop-detail">via <span>${esc(hop.protocol)}</span></span>` : ''}
+                        ${hop.tls ? `<span class="relay-hop-detail" style="color:var(--success)">TLS</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="relay-card expanded">
+                <div class="sig-header" onclick="toggleCard(this)">
+                    <div class="sig-title">
+                        <span class="sig-num">📬</span>
+                        <span class="sig-domain">Email Relay Path</span>
+                        <span class="badge" style="background:rgba(0,212,255,0.15);color:var(--accent-secondary)">${hops.length} HOPS</span>
+                    </div>
+                    <span class="expand-icon">▼</span>
+                </div>
+                <div class="sig-content">
+                    <div class="sig-body">
+                        ${summaryHtml}
+                        <div class="sig-section">
+                            <div class="sig-section-title">📡 Relay Timeline</div>
+                            <div class="relay-timeline">${hopsHtml}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     // IPv4 CIDR matching
@@ -1438,6 +1680,11 @@
         dkimSigs.forEach(s => s.parsed?.h?.split(':').forEach(h => signed.add(h.trim().toLowerCase())));
 
         document.getElementById('headersEl').innerHTML = renderHeaders(headers, signed);
+
+        // Parse and render email relay chain
+        const relayHops = parseRelayChain(headers);
+        document.getElementById('relayEl').innerHTML = renderRelayChain(relayHops);
+        log('info', `Found ${relayHops.length} relay hops`);
 
         // SPF check
         const mailDomain = extractMailDomain(headers);
