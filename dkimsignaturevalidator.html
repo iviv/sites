@@ -1802,13 +1802,24 @@
     // Verify signature
     async function verifyDkim(sig, headers, body) {
         const tags = sig.parsed;
-        const result = { domain: tags.d || '?', selector: tags.s || '?', tags, raw: sig.raw, status: 'invalid', errors: [], details: {} };
-        
+        const result = { domain: tags.d || '?', selector: tags.s || '?', tags, raw: sig.raw, status: 'invalid', errors: [], warnings: [], details: {} };
+
         const required = ['v', 'a', 'b', 'bh', 'd', 'h', 's'];
         for (const t of required) if (!tags[t]) result.errors.push(`Missing tag: ${t}`);
         if (result.errors.length) return result;
         if (tags.v !== '1') { result.errors.push(`Unsupported version: ${tags.v}`); return result; }
         if (tags.a !== 'rsa-sha256' && tags.a !== 'rsa-sha1') { result.errors.push(`Unsupported algorithm: ${tags.a}`); return result; }
+
+        // Security warning for l= tag (body length limit)
+        if (tags.l !== undefined && tags.l !== '') {
+            const bodyLen = parseInt(tags.l, 10);
+            result.warnings.push({
+                type: 'body_length_limit',
+                message: `Body length limit (l=${bodyLen}) is set`,
+                detail: 'Only the first ' + bodyLen + ' bytes of the body are signed. Content after this limit is NOT authenticated and could be malicious.'
+            });
+            log('warn', `Security: DKIM signature uses l=${bodyLen} tag - body content after ${bodyLen} bytes is unsigned`);
+        }
 
         const [hCanon, bCanon] = (tags.c || 'simple/simple').split('/');
         result.details.headerCanon = hCanon || 'simple';
@@ -1872,9 +1883,11 @@
 
     function renderSig(r, i) {
         const errHtml = r.errors.map(e => `<div class="error-msg">${esc(e)}</div>`).join('');
+        const warnHtml = (r.warnings || []).map(w => `<div class="warning-msg">⚠️ <strong>Security Warning:</strong> ${esc(w.message)}<span class="suggestion">${esc(w.detail)}</span></div>`).join('');
         const dkimTags = Object.entries(r.tags).map(([k, v]) => renderTag(k, v, DKIM_TAGS[k] || { name: k.toUpperCase(), desc: 'DKIM tag' }, 'signed')).join('');
         const dnsTags = r.dnsTags ? Object.entries(r.dnsTags).map(([k, v]) => renderTag(k, v, DNS_TAGS[k] || { name: k.toUpperCase(), desc: 'DNS tag' }, 'dns')).join('') : '';
         const dnsCmd = `dig TXT ${r.dns?.name || r.selector + '._domainkey.' + r.domain}`;
+        const hasWarnings = r.warnings && r.warnings.length > 0;
 
         return `<div class="sig-card ${r.status} expanded">
             <div class="sig-header" onclick="toggleCard(this)">
@@ -1882,11 +1895,13 @@
                     <span class="sig-num">${i}</span>
                     <span class="sig-domain">${esc(r.domain)}</span>
                     <span class="badge ${r.status}">${r.status === 'valid' ? '✓ PASS' : '✗ FAIL'}</span>
+                    ${hasWarnings ? '<span class="badge" style="background:rgba(255,179,71,0.15);color:var(--warning);margin-left:0.5rem">⚠️ WARNING</span>' : ''}
                 </div>
                 <span class="expand-icon">▼</span>
             </div>
             <div class="sig-content"><div class="sig-body">
                 ${errHtml}
+                ${warnHtml}
                 <div class="sig-section">
                     <div class="sig-section-title">🏷️ DKIM Tags</div>
                     <div class="tags-grid">${dkimTags}</div>
