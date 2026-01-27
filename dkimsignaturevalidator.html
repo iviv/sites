@@ -248,6 +248,123 @@
         .tag.dmarc-none .dot { background: var(--text-secondary); }
         .tag.dmarc-none .tag-name { color: var(--text-secondary); }
 
+        /* SPF Trace */
+        .spf-trace {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .spf-trace-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .spf-domain-trace {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .spf-domain-trace:last-child { margin-bottom: 0; }
+        .spf-domain-trace.depth-0 { border-left: 3px solid var(--accent); }
+        .spf-domain-trace.depth-1 { margin-left: 1rem; border-left: 3px solid var(--info); }
+        .spf-domain-trace.depth-2 { margin-left: 2rem; border-left: 3px solid var(--warning); }
+        .spf-domain-trace.depth-3 { margin-left: 3rem; border-left: 3px solid var(--text-secondary); }
+        .spf-domain-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .spf-domain-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .spf-domain-depth {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            background: var(--bg-tertiary);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+        .spf-record-preview {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            word-break: break-all;
+            max-height: 60px;
+            overflow: hidden;
+        }
+        .spf-mechanisms-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .spf-mech {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+        }
+        .spf-mech.matched {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid var(--success);
+        }
+        .spf-mech.not-matched { opacity: 0.6; }
+        .spf-mech-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .spf-mech.matched .spf-mech-indicator { background: var(--success); }
+        .spf-mech.not-matched .spf-mech-indicator { background: var(--text-dim); }
+        .spf-mech-text { color: var(--text-primary); flex-grow: 1; }
+        .spf-mech-details { color: var(--text-dim); font-size: 0.65rem; }
+        .spf-match-path {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid var(--success);
+            border-radius: 8px;
+        }
+        .spf-match-path-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--success);
+            margin-bottom: 0.5rem;
+        }
+        .spf-match-path-chain {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+        }
+        .spf-match-path-item {
+            background: var(--bg-secondary);
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+            color: var(--text-primary);
+        }
+        .spf-match-path-arrow { color: var(--success); font-weight: bold; }
+
         /* ARC Card */
         .arc-card {
             background: var(--glass);
@@ -1518,18 +1635,33 @@
     }
 
     // Full SPF evaluation
-    async function evaluateSpf(senderIP, domain, depth = 0, lookupCount = { count: 0 }) {
+    async function evaluateSpf(senderIP, domain, depth = 0, lookupCount = { count: 0 }, trace = null) {
         const MAX_DEPTH = 10;
         const MAX_LOOKUPS = 10;
 
+        // Initialize trace at top level
+        if (trace === null) {
+            trace = { domains: [], matchPath: [] };
+        }
+
+        // Track this domain in the trace
+        const domainTrace = {
+            domain,
+            depth,
+            record: null,
+            mechanisms: [],
+            matched: null
+        };
+        trace.domains.push(domainTrace);
+
         if (depth > MAX_DEPTH) {
             log('error', `SPF evaluation exceeded max depth (${MAX_DEPTH})`);
-            return { result: 'permerror', reason: 'Too many nested includes', lookups: lookupCount.count };
+            return { result: 'permerror', reason: 'Too many nested includes', lookups: lookupCount.count, trace };
         }
 
         if (lookupCount.count >= MAX_LOOKUPS) {
             log('error', `SPF evaluation exceeded max DNS lookups (${MAX_LOOKUPS})`);
-            return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+            return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
         }
 
         log('info', `Evaluating SPF for ${domain} (depth=${depth}, lookups=${lookupCount.count})`);
@@ -1537,40 +1669,52 @@
         // Fetch SPF record
         const spfResult = await fetchSpfRecord(domain);
         if (!spfResult.ok) {
-            return { result: 'none', reason: spfResult.error, lookups: lookupCount.count, record: null };
+            domainTrace.error = spfResult.error;
+            return { result: 'none', reason: spfResult.error, lookups: lookupCount.count, record: null, trace };
         }
 
+        domainTrace.record = spfResult.record;
         const mechanisms = parseSpfRecord(spfResult.record);
         const ipVersion = senderIP.version;
         const ip = senderIP.ip;
 
         for (const mech of mechanisms) {
             let matched = false;
+            let mechTrace = { mechanism: mech.raw, type: mech.mechanism, qualifier: mech.qualifier, matched: false, details: null };
+            domainTrace.mechanisms.push(mechTrace);
 
             switch (mech.mechanism) {
                 case 'all':
                     matched = true;
+                    mechTrace.details = 'Matches all';
                     break;
 
                 case 'ip4':
                     if (ipVersion === 4) {
                         matched = ipv4MatchesCIDR(ip, mech.value);
+                        mechTrace.details = `Checking ${ip} against ${mech.value}`;
+                    } else {
+                        mechTrace.details = 'Skipped (sender is IPv6)';
                     }
                     break;
 
                 case 'ip6':
                     if (ipVersion === 6) {
                         matched = ipv6MatchesCIDR(ip, mech.value);
+                        mechTrace.details = `Checking ${ip} against ${mech.value}`;
+                    } else {
+                        mechTrace.details = 'Skipped (sender is IPv4)';
                     }
                     break;
 
                 case 'a':
                     lookupCount.count++;
                     if (lookupCount.count > MAX_LOOKUPS) {
-                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
                     }
                     const aDomain = mech.value || domain;
                     const aRecords = ipVersion === 4 ? await fetchARecords(aDomain) : await fetchAAAARecords(aDomain);
+                    mechTrace.details = `${aDomain} → ${aRecords.join(', ') || 'none'}`;
                     log('info', `SPF 'a' mechanism: ${aDomain} resolved to ${aRecords.join(', ') || 'none'}`);
                     for (const aIP of aRecords) {
                         if (ipVersion === 4 && ipv4MatchesCIDR(ip, aIP + '/32')) {
@@ -1586,15 +1730,16 @@
                 case 'mx':
                     lookupCount.count++;
                     if (lookupCount.count > MAX_LOOKUPS) {
-                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
                     }
                     const mxDomain = mech.value || domain;
                     const mxHosts = await fetchMXRecords(mxDomain);
+                    mechTrace.details = `MX: ${mxHosts.join(', ') || 'none'}`;
                     log('info', `SPF 'mx' mechanism: ${mxDomain} MX hosts: ${mxHosts.join(', ') || 'none'}`);
                     for (const mxHost of mxHosts) {
                         lookupCount.count++;
                         if (lookupCount.count > MAX_LOOKUPS) {
-                            return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                            return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
                         }
                         const mxIPs = ipVersion === 4 ? await fetchARecords(mxHost) : await fetchAAAARecords(mxHost);
                         for (const mxIP of mxIPs) {
@@ -1613,39 +1758,51 @@
                 case 'include':
                     lookupCount.count++;
                     if (lookupCount.count > MAX_LOOKUPS) {
-                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
                     }
                     log('info', `SPF 'include' mechanism: checking ${mech.value}`);
-                    const includeResult = await evaluateSpf(senderIP, mech.value, depth + 1, lookupCount);
+                    mechTrace.details = `→ ${mech.value}`;
+                    const includeResult = await evaluateSpf(senderIP, mech.value, depth + 1, lookupCount, trace);
                     if (includeResult.result === 'pass') {
                         matched = true;
+                        mechTrace.includeResult = 'pass';
                     } else if (includeResult.result === 'permerror' || includeResult.result === 'temperror') {
+                        mechTrace.includeResult = includeResult.result;
                         return includeResult;
+                    } else {
+                        mechTrace.includeResult = includeResult.result;
                     }
                     break;
 
                 case 'redirect':
                     lookupCount.count++;
                     if (lookupCount.count > MAX_LOOKUPS) {
-                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
                     }
                     log('info', `SPF 'redirect' mechanism: redirecting to ${mech.value}`);
-                    return await evaluateSpf(senderIP, mech.value, depth + 1, lookupCount);
+                    mechTrace.details = `→ ${mech.value}`;
+                    const redirectResult = await evaluateSpf(senderIP, mech.value, depth + 1, lookupCount, trace);
+                    redirectResult.trace = trace;
+                    return redirectResult;
 
                 case 'exists':
                     lookupCount.count++;
                     if (lookupCount.count > MAX_LOOKUPS) {
-                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count };
+                        return { result: 'permerror', reason: 'Too many DNS lookups', lookups: lookupCount.count, trace };
                     }
                     const existsIPs = await fetchARecords(mech.value);
                     matched = existsIPs.length > 0;
+                    mechTrace.details = `${mech.value} ${matched ? 'exists' : 'not found'}`;
                     break;
 
                 case 'ptr':
                     // PTR is deprecated and complex, skip for now
                     log('warn', 'PTR mechanism is deprecated and not evaluated');
+                    mechTrace.details = 'Deprecated, not evaluated';
                     break;
             }
+
+            mechTrace.matched = matched;
 
             if (matched) {
                 const qualResult = {
@@ -1655,19 +1812,23 @@
                     '?': 'neutral'
                 }[mech.qualifier] || 'neutral';
 
+                domainTrace.matched = mech.raw;
+                trace.matchPath.push({ domain, mechanism: mech.raw, result: qualResult });
+
                 log('success', `SPF matched: ${mech.raw} -> ${qualResult}`);
                 return {
                     result: qualResult,
                     mechanism: mech.raw,
                     lookups: lookupCount.count,
-                    record: spfResult.record
+                    record: spfResult.record,
+                    trace
                 };
             }
         }
 
         // No match and no "all" mechanism means neutral
         log('info', 'SPF: No mechanism matched, defaulting to neutral');
-        return { result: 'neutral', reason: 'No mechanism matched', lookups: lookupCount.count, record: spfResult.record };
+        return { result: 'neutral', reason: 'No mechanism matched', lookups: lookupCount.count, record: spfResult.record, trace };
     }
 
     // Fetch SPF record
@@ -2324,6 +2485,72 @@
                     </div>
                 </div>
             `;
+        }
+
+        // Render recursive trace if available
+        if (evalResult.trace && evalResult.trace.domains && evalResult.trace.domains.length > 0) {
+            content += `
+                <div class="spf-trace">
+                    <div class="spf-trace-title">🔍 Recursive SPF Trace (${evalResult.trace.domains.length} domain${evalResult.trace.domains.length > 1 ? 's' : ''} evaluated)</div>
+            `;
+
+            // Render each domain trace
+            for (const domainTrace of evalResult.trace.domains) {
+                const depthClass = `depth-${Math.min(domainTrace.depth, 3)}`;
+                content += `
+                    <div class="spf-domain-trace ${depthClass}">
+                        <div class="spf-domain-header">
+                            <span class="spf-domain-name">${esc(domainTrace.domain)}</span>
+                            <span class="spf-domain-depth">Depth ${domainTrace.depth}</span>
+                        </div>
+                `;
+
+                if (domainTrace.record) {
+                    const truncRecord = domainTrace.record.length > 100
+                        ? domainTrace.record.substring(0, 100) + '...'
+                        : domainTrace.record;
+                    content += `<div class="spf-record-preview">${esc(truncRecord)}</div>`;
+                }
+
+                if (domainTrace.mechanisms && domainTrace.mechanisms.length > 0) {
+                    content += `<div class="spf-mechanisms-list">`;
+                    for (const mech of domainTrace.mechanisms) {
+                        const matchClass = mech.matched ? 'matched' : 'not-matched';
+                        const detailsStr = mech.details ? ` → ${mech.details}` : '';
+                        content += `
+                            <div class="spf-mech ${matchClass}">
+                                <span class="spf-mech-indicator"></span>
+                                <span class="spf-mech-text">${esc(mech.mechanism)}</span>
+                                ${detailsStr ? `<span class="spf-mech-details">${esc(detailsStr)}</span>` : ''}
+                            </div>
+                        `;
+                    }
+                    content += `</div>`;
+                }
+
+                content += `</div>`;
+            }
+
+            // Render match path if there was a match
+            if (evalResult.trace.matchPath && evalResult.trace.matchPath.length > 0) {
+                content += `
+                    <div class="spf-match-path">
+                        <div class="spf-match-path-title">✓ Match Path</div>
+                        <div class="spf-match-path-chain">
+                `;
+                evalResult.trace.matchPath.forEach((item, idx) => {
+                    if (idx > 0) {
+                        content += `<span class="spf-match-path-arrow">→</span>`;
+                    }
+                    content += `<span class="spf-match-path-item">${esc(item.domain)}: ${esc(item.mechanism)}</span>`;
+                });
+                content += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            content += `</div>`;
         }
 
         const cardClass = evalResult.result === 'pass' ? 'found' : (evalResult.result === 'fail' || evalResult.result === 'permerror' ? 'notfound' : '');
