@@ -449,6 +449,34 @@
             margin-bottom: 1rem;
         }
 
+        /* Warning */
+        .warning-msg {
+            background: rgba(255, 179, 71, 0.1);
+            border: 1px solid var(--warning);
+            border-radius: 10px;
+            padding: 1rem;
+            color: var(--warning);
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+        .warning-msg .suggestion, .error-msg .suggestion {
+            display: block;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Parsing Issues Section */
+        .parsing-issues {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .parsing-issues.has-errors { border-color: var(--error); }
+        .parsing-issues.has-warnings { border-color: var(--warning); }
+
         /* Debug */
         .debug { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; margin-top: 1.5rem; }
         .debug-header { padding: 1rem; background: var(--bg-tertiary); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-secondary); }
@@ -536,6 +564,7 @@
         </div>
 
         <div class="results" id="results">
+            <div id="parsingIssuesEl"></div>
             <div id="headersEl"></div>
             <div class="summary" id="summaryEl"></div>
             <div id="relayEl"></div>
@@ -807,15 +836,45 @@
 
     // Parse email
     function parseEmail(raw) {
+        const errors = [];
+        const warnings = [];
+
+        // Check for common issues
+        if (!raw || raw.trim().length === 0) {
+            errors.push({ type: 'empty', message: 'No email content provided', suggestion: 'Paste the raw email source including headers and body' });
+            return { headers: [], body: '', dkimSigs: [], errors, warnings };
+        }
+
+        // Check if it looks like just a body (no headers)
+        if (!raw.includes(':') || raw.indexOf(':') > 100) {
+            errors.push({ type: 'no_headers', message: 'No email headers detected', suggestion: 'Make sure to include the full raw email source, not just the body. In most email clients, look for "Show Original" or "View Source"' });
+        }
+
+        // Try to find header/body separator
         let headerSection, body;
         let idx = raw.indexOf('\r\n\r\n');
-        if (idx !== -1) { headerSection = raw.slice(0, idx); body = raw.slice(idx + 4); }
-        else { idx = raw.indexOf('\n\n'); headerSection = raw.slice(0, idx); body = raw.slice(idx + 2); }
+        if (idx !== -1) {
+            headerSection = raw.slice(0, idx);
+            body = raw.slice(idx + 4);
+        } else {
+            idx = raw.indexOf('\n\n');
+            if (idx !== -1) {
+                headerSection = raw.slice(0, idx);
+                body = raw.slice(idx + 2);
+            } else {
+                // No clear separator found - treat entire content as headers
+                headerSection = raw;
+                body = '';
+                warnings.push({ type: 'no_body', message: 'No message body found', suggestion: 'The email appears to have no body section. This may be normal for some emails, or the header/body separator (blank line) may be missing' });
+            }
+        }
 
         // Normalize to \r\n for consistent processing
         headerSection = headerSection.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
         const headers = [];
         let cur = null;
+        let invalidLines = 0;
+
         for (const line of headerSection.split('\r\n')) {
             if (/^[ \t]/.test(line) && cur) {
                 cur.raw += '\r\n' + line;
@@ -829,6 +888,9 @@
                         value: line.slice(i + 1),
                         raw: line
                     };
+                } else if (line.trim().length > 0) {
+                    invalidLines++;
+                    cur = null;
                 } else {
                     cur = null;
                 }
@@ -836,12 +898,35 @@
         }
         if (cur) headers.push({ name: cur.name, value: cur.value, raw: cur.raw });
 
+        if (invalidLines > 3) {
+            warnings.push({ type: 'malformed_headers', message: `Found ${invalidLines} lines that don't look like headers`, suggestion: 'Some header lines may be malformed. Ensure you\'re pasting the raw email source without modifications' });
+        }
+
+        // Check for essential headers
+        const headerNames = headers.map(h => h.name.toLowerCase());
+        if (!headerNames.includes('from')) {
+            warnings.push({ type: 'missing_from', message: 'No "From" header found', suggestion: 'The From header is required in valid emails. The email may be truncated or malformed' });
+        }
+        if (!headerNames.includes('date')) {
+            warnings.push({ type: 'missing_date', message: 'No "Date" header found', suggestion: 'Most emails have a Date header. The email may be incomplete' });
+        }
+
+        // Check if input looks like it might be HTML encoded
+        if (raw.includes('&lt;') || raw.includes('&gt;') || raw.includes('&amp;')) {
+            warnings.push({ type: 'html_encoded', message: 'Content appears to be HTML-encoded', suggestion: 'The email may have been copied from an HTML view. Try using "View Source" or "Show Original" in your email client' });
+        }
+
+        // Check for base64-encoded content that might be the whole email
+        if (/^[A-Za-z0-9+/=\s]+$/.test(raw.trim()) && raw.length > 200) {
+            warnings.push({ type: 'possibly_base64', message: 'Content looks like base64-encoded data', suggestion: 'This might be an encoded attachment rather than the email source. Look for "Show Original" to get the raw headers' });
+        }
+
         const dkimSigs = headers.filter(h => h.name.toLowerCase() === 'dkim-signature').map(h => ({
             raw: h.raw,
             parsed: parseDkimTags(h.raw)
         }));
 
-        return { headers, body, dkimSigs };
+        return { headers, body, dkimSigs, errors, warnings };
     }
 
     function parseDkimTags(raw) {
@@ -2245,7 +2330,45 @@
         if (!input) return;
 
         log('info', 'Starting validation');
-        const { headers, body, dkimSigs } = parseEmail(input);
+        const { headers, body, dkimSigs, errors, warnings } = parseEmail(input);
+
+        // Display parsing issues if any
+        let parsingIssuesHtml = '';
+        if (errors && errors.length > 0) {
+            const errorsHtml = errors.map(e => `<div class="error-msg">${esc(e.message)}${e.suggestion ? `<span class="suggestion">💡 ${esc(e.suggestion)}</span>` : ''}</div>`).join('');
+            parsingIssuesHtml += errorsHtml;
+            errors.forEach(e => log('error', e.message));
+        }
+        if (warnings && warnings.length > 0) {
+            const warningsHtml = warnings.map(w => `<div class="warning-msg">${esc(w.message)}${w.suggestion ? `<span class="suggestion">💡 ${esc(w.suggestion)}</span>` : ''}</div>`).join('');
+            parsingIssuesHtml += warningsHtml;
+            warnings.forEach(w => log('warn', w.message));
+        }
+
+        if (parsingIssuesHtml) {
+            const issueClass = errors?.length > 0 ? 'has-errors' : 'has-warnings';
+            document.getElementById('parsingIssuesEl').innerHTML = `<div class="parsing-issues ${issueClass}">
+                <div class="section-header">⚠️ Parsing Issues</div>
+                ${parsingIssuesHtml}
+            </div>`;
+        } else {
+            document.getElementById('parsingIssuesEl').innerHTML = '';
+        }
+
+        // If critical errors, still show what we can but continue
+        if (errors && errors.length > 0 && headers.length === 0) {
+            document.getElementById('headersEl').innerHTML = '';
+            document.getElementById('summaryEl').innerHTML = '';
+            document.getElementById('relayEl').innerHTML = '';
+            document.getElementById('spfEl').innerHTML = '';
+            document.getElementById('dmarcEl').innerHTML = '';
+            document.getElementById('arcEl').innerHTML = '';
+            document.getElementById('sigsEl').innerHTML = '';
+            document.getElementById('debugLog').innerHTML = renderDebug();
+            document.getElementById('results').classList.add('visible');
+            document.getElementById('status').innerHTML = '';
+            return;
+        }
 
         const signed = new Set();
         dkimSigs.forEach(s => s.parsed?.h?.split(':').forEach(h => signed.add(h.trim().toLowerCase())));
