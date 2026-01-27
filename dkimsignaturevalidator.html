@@ -2043,10 +2043,25 @@
             });
             const data = await res.json();
             if (data.Answer) {
-                let record = '';
-                for (const a of data.Answer) if (a.type === 16) record += a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
-                log('success', `DNS found: ${record.slice(0, 80)}...`);
-                return { ok: true, record, name };
+                // Find the DKIM record (starts with v=DKIM1)
+                for (const a of data.Answer) {
+                    if (a.type === 16) {
+                        const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                        // Only accept records that look like DKIM keys
+                        if (record.match(/^v\s*=\s*DKIM1/i) || record.match(/[;]?\s*p\s*=/)) {
+                            log('success', `DNS found: ${record.slice(0, 80)}...`);
+                            return { ok: true, record, name };
+                        }
+                    }
+                }
+                // Fallback: if no DKIM record found, return first TXT record (might be legacy format)
+                for (const a of data.Answer) {
+                    if (a.type === 16) {
+                        const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                        log('warn', `DNS found non-DKIM TXT: ${record.slice(0, 80)}...`);
+                        return { ok: true, record, name };
+                    }
+                }
             }
             return { ok: false, error: 'No TXT record', name };
         } catch (e) {
