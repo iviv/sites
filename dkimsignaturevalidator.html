@@ -4,22 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DKIM Signature Validator</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
             --bg-primary: #0a0e14;
             --bg-secondary: #0d1117;
             --bg-tertiary: #161b22;
-            --bg-card: #1a1f26;
             --accent: #00ff88;
             --accent-secondary: #00d4ff;
-            --accent-dim: #00cc6a;
             --accent-glow: rgba(0, 255, 136, 0.3);
             --text-primary: #e6edf3;
             --text-secondary: #8b949e;
@@ -33,703 +27,307 @@
         }
 
         [data-theme="light"] {
-            --bg-primary: #fafaf9;
+            --bg-primary: #fafafa;
             --bg-secondary: #ffffff;
-            --bg-tertiary: #f5f5f4;
-            --bg-card: #ffffff;
-            --accent: #059669;
-            --accent-secondary: #0891b2;
-            --accent-dim: #047857;
-            --accent-glow: rgba(5, 150, 105, 0.15);
-            --text-primary: #1c1917;
-            --text-secondary: #57534e;
-            --text-dim: #a8a29e;
-            --border: #e7e5e4;
-            --error: #dc2626;
-            --warning: #d97706;
-            --success: #059669;
-            --glass: rgba(0, 0, 0, 0.02);
-            --glass-border: rgba(0, 0, 0, 0.06);
+            --bg-tertiary: #f0f0f0;
+            --accent: #50a14f;
+            --accent-secondary: #4078f2;
+            --accent-glow: rgba(80, 161, 79, 0.15);
+            --text-primary: #383a42;
+            --text-secondary: #696c77;
+            --text-dim: #a0a1a7;
+            --border: #e5e5e6;
+            --error: #e45649;
+            --warning: #c18401;
+            --success: #50a14f;
+            --glass: rgba(56, 58, 66, 0.03);
+            --glass-border: rgba(56, 58, 66, 0.08);
         }
 
         body {
-            font-family: 'Inter', 'JetBrains Mono', monospace;
+            font-family: 'Inter', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
-            overflow-x: hidden;
-            position: relative;
-            transition: background 0.4s ease, color 0.4s ease;
+            transition: background 0.3s, color 0.3s;
         }
 
-        .background-container {
+        /* Background */
+        .bg-grid {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
-            overflow: hidden;
-        }
-
-        .grid-background {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: 
-                linear-gradient(var(--glass-border) 1px, transparent 1px),
-                linear-gradient(90deg, var(--glass-border) 1px, transparent 1px);
+            inset: 0;
+            background-image: linear-gradient(var(--glass-border) 1px, transparent 1px),
+                              linear-gradient(90deg, var(--glass-border) 1px, transparent 1px);
             background-size: 60px 60px;
-            animation: gridMove 30s linear infinite;
             opacity: 0.5;
+            pointer-events: none;
+            animation: gridMove 30s linear infinite;
         }
+        @keyframes gridMove { to { transform: translate(60px, 60px); } }
 
-        @keyframes gridMove {
-            0% { transform: translate(0, 0); }
-            100% { transform: translate(60px, 60px); }
-        }
-
-        .floating-orb {
-            position: absolute;
+        .bg-orb {
+            position: fixed;
             border-radius: 50%;
             filter: blur(80px);
             opacity: 0.4;
+            pointer-events: none;
             animation: float 20s ease-in-out infinite;
         }
-
-        .orb-1 {
-            width: 400px;
-            height: 400px;
-            background: var(--accent);
-            top: -100px;
-            right: -100px;
-            animation-delay: 0s;
-        }
-
-        .orb-2 {
-            width: 300px;
-            height: 300px;
-            background: var(--accent-secondary);
-            bottom: -50px;
-            left: -50px;
-            animation-delay: -7s;
-        }
-
-        .orb-3 {
-            width: 200px;
-            height: 200px;
-            background: var(--accent);
-            top: 50%;
-            left: 50%;
-            animation-delay: -14s;
-        }
-
+        .bg-orb:nth-child(2) { width: 400px; height: 400px; background: var(--accent); top: -100px; right: -100px; }
+        .bg-orb:nth-child(3) { width: 300px; height: 300px; background: var(--accent-secondary); bottom: -50px; left: -50px; animation-delay: -7s; }
         @keyframes float {
             0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(30px, -30px) scale(1.05); }
             50% { transform: translate(-20px, 20px) scale(0.95); }
-            75% { transform: translate(-30px, -20px) scale(1.02); }
         }
 
-        .particles {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-        }
+        /* Layout */
+        .container { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 2rem; }
 
-        .particle {
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background: var(--accent);
-            border-radius: 50%;
-            opacity: 0;
-            animation: particleFloat 8s ease-in-out infinite;
-        }
-
-        @keyframes particleFloat {
-            0% { opacity: 0; transform: translateY(100vh) scale(0); }
-            10% { opacity: 0.6; }
-            90% { opacity: 0.6; }
-            100% { opacity: 0; transform: translateY(-100vh) scale(1); }
-        }
-
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 3rem;
-            position: relative;
-        }
-
-        .header-controls {
+        /* Header */
+        header { text-align: center; margin-bottom: 2rem; position: relative; }
+        .theme-toggle {
             position: absolute;
             top: 0;
             right: 0;
-            display: flex;
-            gap: 0.75rem;
-        }
-
-        .theme-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
             width: 44px;
             height: 44px;
             background: var(--glass);
             border: 1px solid var(--glass-border);
             border-radius: 50%;
             cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-
-        .theme-toggle:hover {
-            border-color: var(--accent);
-            box-shadow: 0 0 20px var(--accent-glow);
-            transform: rotate(20deg);
-        }
-
-        .theme-toggle .icon {
             font-size: 1.25rem;
-            transition: transform 0.3s ease;
+            transition: all 0.3s;
         }
-
-        .logo-container {
-            display: inline-flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
+        .theme-toggle:hover { border-color: var(--accent); transform: rotate(20deg); }
+        
+        .logo { display: inline-flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
         .logo-icon {
-            width: 56px;
-            height: 56px;
+            width: 56px; height: 56px;
             background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
             border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 1.75rem;
             box-shadow: 0 8px 32px var(--accent-glow);
-            animation: logoPulse 3s ease-in-out infinite;
         }
-
-        @keyframes logoPulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 8px 32px var(--accent-glow); }
-            50% { transform: scale(1.02); box-shadow: 0 12px 48px var(--accent-glow); }
-        }
-
         h1 {
-            font-family: 'Space Mono', monospace;
-            font-size: 2.25rem;
-            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
             background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: 1px;
         }
+        .subtitle { color: var(--text-secondary); font-size: 0.85rem; }
+        .privacy { color: var(--text-dim); font-size: 0.75rem; margin-top: 0.75rem; }
 
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            letter-spacing: 0.5px;
-            margin-top: 0.5rem;
-        }
-
-        .badge-row {
-            display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-            margin-top: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .feature-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            padding: 0.35rem 0.75rem;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 50px;
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            backdrop-filter: blur(10px);
-        }
-
-        .feature-badge .dot {
-            width: 6px;
-            height: 6px;
-            background: var(--accent);
-            border-radius: 50%;
-        }
-
-        .privacy-notice {
-            color: var(--text-dim);
-            font-size: 0.75rem;
-            margin-top: 1rem;
-            margin-bottom: 0.5rem;
-            letter-spacing: 0.3px;
-        }
-
+        /* Input */
         .input-section {
             background: var(--glass);
             border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            padding: 1.75rem;
-            margin-bottom: 2rem;
-            transition: all 0.4s ease;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
             backdrop-filter: blur(20px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
-
-        .input-section:focus-within {
-            border-color: var(--accent);
-            box-shadow: 0 8px 48px var(--accent-glow);
-        }
-
-        .input-label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--text-primary);
-            font-size: 0.85rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-
-        .input-label .icon {
-            font-size: 1.1rem;
-        }
-
+        .input-section:focus-within { border-color: var(--accent); box-shadow: 0 0 30px var(--accent-glow); }
+        .input-label { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; margin-bottom: 0.75rem; }
         textarea {
             width: 100%;
-            height: 280px;
+            height: 250px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 10px;
             padding: 1rem;
             color: var(--text-primary);
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.8rem;
             resize: vertical;
-            transition: all 0.3s ease;
-            line-height: 1.6;
         }
-
-        textarea:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: inset 0 0 0 1px var(--accent);
-        }
-
-        textarea::placeholder {
-            color: var(--text-dim);
-        }
-
-        .btn-group {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-top: 1.25rem;
-            flex-wrap: wrap;
-        }
-
-        .auto-validate-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-        }
-
-        .auto-validate-status .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
+        textarea:focus { outline: none; border-color: var(--accent); }
+        textarea::placeholder { color: var(--text-dim); }
+        
+        .input-footer { display: flex; align-items: center; gap: 1rem; margin-top: 1rem; flex-wrap: wrap; }
         .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.6rem;
-            padding: 0.875rem 1.75rem;
-            background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-            border: none;
-            color: #000;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.85rem;
-            font-weight: 600;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 16px var(--accent-glow);
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 32px var(--accent-glow);
-        }
-
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .btn.loading {
-            position: relative;
-            color: transparent;
-        }
-
-        .btn.loading::after {
-            content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 2px solid transparent;
-            border-top-color: #000;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        .btn-secondary {
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            color: var(--text-primary);
-            box-shadow: none;
-            backdrop-filter: blur(10px);
-        }
-
-        .btn-secondary:hover {
-            border-color: var(--accent);
-            box-shadow: 0 4px 20px var(--accent-glow);
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .results-section {
-            display: none;
-        }
-
-        .results-section.visible {
-            display: block;
-            animation: fadeInUp 0.6s ease;
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .signature-card {
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            margin-bottom: 1.5rem;
-            overflow: hidden;
-            transition: all 0.4s ease;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-        }
-
-        .signature-card.valid {
-            border-color: var(--success);
-            box-shadow: 0 4px 32px rgba(0, 255, 136, 0.12);
-        }
-
-        .signature-card.invalid {
-            border-color: var(--error);
-            box-shadow: 0 4px 32px rgba(255, 107, 122, 0.12);
-        }
-
-        .signature-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1.25rem 1.5rem;
-            background: var(--bg-tertiary);
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.3s ease;
-        }
-
-        .signature-header:hover {
-            background: var(--border);
-        }
-
-        .signature-title {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .signature-number {
-            width: 32px;
-            height: 32px;
+            padding: 0.75rem 1.5rem;
             background: var(--glass);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'Space Mono', monospace;
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .signature-title h3 {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.95rem;
-            font-weight: 600;
             color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.85rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .status { color: var(--text-dim); font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem; }
+        .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .status-badge {
-            display: inline-flex;
+        /* Results */
+        .results { display: none; }
+        .results.visible { display: block; animation: fadeIn 0.4s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } }
+
+        /* Headers Section */
+        .headers-section {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .section-header { font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .tags-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        
+        /* Tag Base */
+        .tag {
+            display: flex;
             align-items: center;
             gap: 0.4rem;
-            padding: 0.4rem 0.9rem;
-            border-radius: 50px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .status-badge.valid {
-            background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.1));
-            color: var(--success);
-            border: 1px solid rgba(0, 255, 136, 0.3);
-        }
-
-        .status-badge.invalid {
-            background: linear-gradient(135deg, rgba(255, 107, 122, 0.2), rgba(255, 107, 122, 0.1));
-            color: var(--error);
-            border: 1px solid rgba(255, 107, 122, 0.3);
-        }
-
-        .status-badge.pending {
-            background: linear-gradient(135deg, rgba(255, 179, 71, 0.2), rgba(255, 179, 71, 0.1));
-            color: var(--warning);
-            border: 1px solid rgba(255, 179, 71, 0.3);
-        }
-
-        .expand-icon {
-            color: var(--text-secondary);
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            font-size: 0.8rem;
-        }
-
-        .signature-card.expanded .expand-icon {
-            transform: rotate(180deg);
-        }
-
-        .signature-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .signature-card.expanded .signature-content {
-            max-height: 3000px;
-        }
-
-        .content-inner {
-            padding: 1.5rem;
-            overflow: visible;
-        }
-
-        .section-title {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--accent);
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 1rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 1px solid var(--border);
-            position: relative;
-            z-index: 1;
-        }
-
-        .section-title .icon {
-            font-size: 1rem;
-        }
-
-        .tags-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.6rem;
-            margin-bottom: 1.75rem;
-        }
-
-        .tag-card {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 0.6rem 0.85rem;
-            font-size: 0.78rem;
-            transition: all 0.3s ease;
+            border-radius: 8px;
+            padding: 0.5rem 0.7rem;
+            font-size: 0.72rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.2s;
         }
+        .tag:hover { border-color: var(--accent); }
+        .tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+        .tag-name { color: var(--text-secondary); font-weight: 500; }
+        .tag-value { color: var(--text-dim); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .copy-btn {
+            background: none; border: none; color: var(--text-dim); cursor: pointer;
+            opacity: 0; transition: opacity 0.2s; margin-left: auto; padding: 0 0.2rem;
+        }
+        .tag:hover .copy-btn { opacity: 1; }
+        .copy-btn:hover { color: var(--accent); }
+        .copy-btn.copied { color: var(--success); opacity: 1; }
 
-        .tag-card:hover {
+        /* Signed Tag */
+        .tag.signed {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.08), rgba(0, 212, 255, 0.05));
             border-color: var(--accent);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px var(--accent-glow);
         }
+        .tag.signed .dot { background: linear-gradient(135deg, var(--success), var(--accent)); box-shadow: 0 0 6px var(--accent-glow); }
+        .tag.signed .tag-name { color: var(--accent); font-weight: 600; }
 
-        .tag-card .signed-indicator {
-            width: 8px;
-            height: 8px;
-            background: linear-gradient(135deg, var(--success), var(--accent));
-            border-radius: 50%;
-            flex-shrink: 0;
-            box-shadow: 0 0 8px var(--accent-glow);
-            animation: pulse-glow 2s ease-in-out infinite;
+        /* DNS Tag */
+        .tag.dns .dot { background: var(--accent-secondary); }
+        .tag.dns .tag-name { color: var(--accent-secondary); }
+
+        /* Legend */
+        .legend { display: flex; gap: 1rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+        .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--text-dim); }
+
+        /* Summary */
+        .summary { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .summary-item {
+            display: flex; align-items: center; gap: 0.75rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
         }
+        .summary-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; background: var(--glass); border: 1px solid var(--border); }
+        .summary-value { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 700; }
+        .summary-value.success { color: var(--success); }
+        .summary-value.error { color: var(--error); }
+        .summary-label { font-size: 0.75rem; color: var(--text-secondary); }
 
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--accent-glow); }
-            50% { opacity: 0.7; box-shadow: 0 0 12px var(--accent-glow); }
-        }
-
-        .tag-name {
-            color: var(--accent);
-            font-weight: 600;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .tag-value {
-            color: var(--text-secondary);
-            max-width: 150px;
+        /* Signature Card */
+        .sig-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            margin-bottom: 1rem;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-family: 'JetBrains Mono', monospace;
         }
-
-        .copy-btn-inline {
-            background: none;
-            border: none;
+        .sig-card.valid { border-color: var(--success); }
+        .sig-card.invalid { border-color: var(--error); }
+        .sig-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1rem 1.25rem;
+            background: var(--bg-tertiary);
             cursor: pointer;
-            opacity: 0;
-            transition: all 0.2s ease;
-            color: var(--text-dim);
-            font-size: 0.75rem;
-            padding: 0.2rem;
-            margin-left: auto;
-            flex-shrink: 0;
         }
+        .sig-header:hover { background: var(--border); }
+        .sig-title { display: flex; align-items: center; gap: 0.75rem; }
+        .sig-num { width: 28px; height: 28px; background: var(--glass); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent); }
+        .sig-domain { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
+        .badge { padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+        .badge.valid { background: rgba(0, 255, 136, 0.15); color: var(--success); }
+        .badge.invalid { background: rgba(255, 107, 122, 0.15); color: var(--error); }
+        .expand-icon { color: var(--text-secondary); transition: transform 0.3s; }
+        .sig-card.expanded .expand-icon { transform: rotate(180deg); }
+        .sig-content { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+        .sig-card.expanded .sig-content { max-height: 2000px; }
+        .sig-body { padding: 1.25rem; }
+        .sig-section { margin-bottom: 1.25rem; }
+        .sig-section:last-child { margin-bottom: 0; }
+        .sig-section-title { font-size: 0.75rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.5rem; }
 
-        .tag-card:hover .copy-btn-inline,
-        .dns-tag:hover .copy-btn-inline {
-            opacity: 1;
-        }
-
-        .copy-btn-inline:hover {
-            color: var(--accent);
-        }
-
-        .copy-btn-inline.copied {
-            color: var(--success);
-            opacity: 1;
-        }
-
-        /* DNS Tags */
-        .dns-tags-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .dns-tag {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+        /* DNS Section */
+        .dns-cmd {
+            display: flex; align-items: center; gap: 0.5rem;
             background: var(--bg-primary);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 0.5rem 0.75rem;
-            font-size: 0.75rem;
-            transition: all 0.3s ease;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.75rem;
         }
-
-        .dns-tag:hover {
-            border-color: var(--accent-secondary);
-            box-shadow: 0 2px 12px var(--accent-glow);
-        }
-
-        .dns-tag .dns-indicator {
-            width: 6px;
-            height: 6px;
-            background: var(--accent-secondary);
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .dns-tag-name {
-            color: var(--accent-secondary);
-            font-weight: 600;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .dns-tag-value {
-            color: var(--text-secondary);
-            max-width: 120px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .dns-raw-response {
-            margin-top: 0.75rem;
+        .dns-cmd code { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--accent); }
+        .dns-raw {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
             padding: 0.75rem;
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 0.68rem;
             font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
             color: var(--text-dim);
             word-break: break-all;
-            line-height: 1.5;
             max-height: 80px;
             overflow-y: auto;
+            margin-top: 0.75rem;
         }
 
+        /* Verification Details */
+        .details { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 0.7rem 1rem; }
+        .detail-row:hover { background: var(--glass); }
+        .detail-label { color: var(--text-secondary); font-size: 0.78rem; }
+        .detail-value { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; text-align: right; }
+        .detail-value.success { color: var(--success); font-weight: 600; }
+        .detail-value.error { color: var(--error); font-weight: 600; }
+
+        /* Error */
+        .error-msg {
+            background: rgba(255, 107, 122, 0.1);
+            border: 1px solid var(--error);
+            border-radius: 10px;
+            padding: 1rem;
+            color: var(--error);
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Debug */
+        .debug { background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; margin-top: 1.5rem; }
+        .debug-header { padding: 1rem; background: var(--bg-tertiary); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-secondary); }
+        .debug-body { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+        .debug.expanded .debug-body { max-height: 500px; }
+        .debug.expanded .expand-icon { transform: rotate(180deg); }
+        .debug-log { padding: 1rem; background: var(--bg-secondary); max-height: 300px; overflow-y: auto; }
+        .log-entry { font-size: 0.72rem; padding: 0.3rem 0; display: flex; gap: 0.75rem; font-family: 'JetBrains Mono', monospace; }
+        .log-time { color: var(--text-dim); }
+        .log-type { width: 50px; font-weight: 600; }
+        .log-type.info { color: var(--accent); }
+        .log-type.error { color: var(--error); }
+        .log-type.success { color: var(--success); }
+        .log-type.warn { color: var(--warning); }
+        .log-msg { color: var(--text-secondary); word-break: break-all; }
+
         /* Tooltip */
-        .tag-tooltip {
+        .tooltip {
             position: fixed;
             background: var(--bg-primary);
             border: 1px solid var(--border);
@@ -739,537 +337,79 @@
             max-width: 300px;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.2s ease, visibility 0.2s ease;
-            z-index: 99999;
+            transition: opacity 0.15s ease-out, visibility 0.15s ease-out;
+            z-index: 9999;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-            pointer-events: none;
+            pointer-events: auto;
         }
+        .tooltip.visible { opacity: 1; visibility: visible; }
+        .tooltip-title { font-weight: 600; color: var(--accent); font-size: 0.8rem; margin-bottom: 0.25rem; font-family: 'JetBrains Mono', monospace; }
+        .tooltip-desc { color: var(--text-secondary); font-size: 0.72rem; line-height: 1.4; }
+        .tooltip-value { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); color: var(--text-primary); font-size: 0.68rem; font-family: 'JetBrains Mono', monospace; word-break: break-all; max-height: 60px; overflow-y: auto; }
 
-        .tag-tooltip.visible {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .tag-tooltip-title {
-            font-weight: 700;
-            color: var(--accent);
-            font-size: 0.8rem;
-            margin-bottom: 0.3rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .tag-tooltip-desc {
-            color: var(--text-secondary);
-            font-size: 0.72rem;
-            line-height: 1.4;
-        }
-
-        .tag-tooltip-value {
-            margin-top: 0.5rem;
-            padding-top: 0.5rem;
-            border-top: 1px solid var(--border);
-            color: var(--text-primary);
-            font-size: 0.68rem;
-            font-family: 'JetBrains Mono', monospace;
-            word-break: break-all;
-            max-height: 60px;
-            overflow-y: auto;
-        }
-
-        .dns-section {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 1.25rem;
-            margin-bottom: 1.75rem;
-        }
-
-        .dns-command-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .dns-command {
-            flex: 1;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.78rem;
-            color: var(--accent);
-            background: var(--bg-primary);
-            padding: 0.85rem 1rem;
-            border-radius: 10px;
-            overflow-x: auto;
-            white-space: pre;
-            border: 1px solid var(--border);
-        }
-
-        .dns-result {
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .dns-result-label {
-            color: var(--text-secondary);
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-
-        .dns-result-value {
-            font-size: 0.78rem;
-            color: var(--text-primary);
-            word-break: break-all;
-            font-family: 'JetBrains Mono', monospace;
-            line-height: 1.6;
-            background: var(--bg-primary);
-            padding: 0.75rem;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-
-        .verification-details {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 0.5rem;
-            overflow: hidden;
-        }
-
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding: 0.85rem 1rem;
-            border-radius: 10px;
-            transition: background 0.2s ease;
-        }
-
-        .detail-row:hover {
-            background: var(--glass);
-        }
-
-        .detail-label {
-            color: var(--text-secondary);
-            font-size: 0.78rem;
-            flex-shrink: 0;
-            font-weight: 500;
-        }
-
-        .detail-value {
-            color: var(--text-primary);
-            font-size: 0.78rem;
-            text-align: right;
-            word-break: break-all;
-            margin-left: 1rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .detail-value.success {
-            color: var(--success);
-            font-weight: 600;
-        }
-
-        .detail-value.error {
-            color: var(--error);
-            font-weight: 600;
-        }
-
-        .collapsible-section {
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 16px;
-            margin-bottom: 1.5rem;
-            overflow: hidden;
-            backdrop-filter: blur(20px);
-        }
-
-        .collapsible-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 1rem 1.25rem;
-            background: var(--bg-tertiary);
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.3s ease;
-        }
-
-        .collapsible-header:hover {
-            background: var(--border);
-        }
-
-        .collapsible-header h4 {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-
-        .collapsible-body {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .collapsible-section.expanded .collapsible-body {
-            max-height: 5000px;
-        }
-
-        .collapsible-section.expanded .expand-icon {
-            transform: rotate(180deg);
-        }
-
-        .debug-log {
-            padding: 1rem;
-            background: var(--bg-secondary);
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .log-entry {
-            font-size: 0.72rem;
-            padding: 0.4rem 0.5rem;
-            border-radius: 6px;
-            margin-bottom: 0.25rem;
-            display: flex;
-            gap: 0.75rem;
-            transition: background 0.2s ease;
-        }
-
-        .log-entry:hover {
-            background: var(--glass);
-        }
-
-        .log-time {
-            color: var(--text-dim);
-            flex-shrink: 0;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .log-type {
-            flex-shrink: 0;
-            font-weight: 700;
-            width: 55px;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .log-type.info { color: var(--accent); }
-        .log-type.warn { color: var(--warning); }
-        .log-type.error { color: var(--error); }
-        .log-type.success { color: var(--success); }
-
-        .log-message {
-            color: var(--text-secondary);
-            word-break: break-all;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .error-message {
-            background: linear-gradient(135deg, rgba(255, 107, 122, 0.1), rgba(255, 107, 122, 0.05));
-            border: 1px solid var(--error);
-            border-radius: 12px;
-            padding: 1rem 1.25rem;
-            margin-bottom: 1rem;
-            color: var(--error);
-            font-size: 0.85rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .error-message::before {
-            content: '⚠️';
-            font-size: 1.1rem;
-        }
-
-        .summary-bar {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.75rem;
-            flex-wrap: wrap;
-        }
-
-        .summary-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            background: var(--glass);
-            border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 1rem 1.25rem;
-            backdrop-filter: blur(20px);
-            transition: all 0.3s ease;
-        }
-
-        .summary-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-        }
-
-        .summary-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            background: var(--glass);
-            border: 1px solid var(--border);
-        }
-
-        .summary-content {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .summary-count {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.5rem;
-            font-weight: 700;
-            line-height: 1;
-        }
-
-        .summary-count.success { color: var(--success); }
-        .summary-count.error { color: var(--error); }
-        .summary-count.neutral { color: var(--accent); }
-
-        .summary-label {
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            margin-top: 0.25rem;
-            font-weight: 500;
-        }
-
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: var(--bg-secondary);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
-            transition: background 0.3s ease;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent-dim);
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            h1 {
-                font-size: 1.5rem;
-            }
-
-            .header-controls {
-                position: static;
-                justify-content: center;
-                margin-bottom: 1.5rem;
-            }
-
-            .tag-value {
-                max-width: 80px;
-            }
-
-            .summary-bar {
-                flex-direction: column;
-            }
-
-            .tooltip {
-                display: none;
-            }
-
-            .badge-row {
-                display: none;
-            }
-        }
-
-        /* Toast notification */
+        /* Toast */
         .toast {
-            position: fixed;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: var(--bg-card);
-            border: 1px solid var(--accent);
-            color: var(--text-primary);
-            padding: 0.85rem 1.5rem;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            z-index: 1000;
-            opacity: 0;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 8px 32px var(--accent-glow);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: var(--bg-secondary); border: 1px solid var(--accent); color: var(--text-primary);
+            padding: 0.75rem 1.5rem; border-radius: 10px; font-size: 0.85rem; z-index: 9999;
+            opacity: 0; transition: all 0.3s; display: flex; align-items: center; gap: 0.5rem;
         }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        /* Input helper text styling */
-        .input-helper {
-            margin-top: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .input-helper label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--text-secondary);
-            font-size: 0.78rem;
-            cursor: pointer;
-            padding: 0.4rem 0.75rem;
-            background: var(--glass);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .input-helper label:hover {
-            border-color: var(--accent);
-        }
-
-        .input-helper input[type="checkbox"] {
-            accent-color: var(--accent);
-        }
-
-        #inputStats {
-            color: var(--text-dim);
-            font-size: 0.72rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        #rawPreview {
-            margin-top: 1rem;
-            background: var(--bg-secondary);
-            padding: 1rem;
-            border-radius: 10px;
-            font-size: 0.68rem;
-            color: var(--text-secondary);
-            max-height: 150px;
-            overflow: auto;
-            border: 1px solid var(--border);
-            font-family: 'JetBrains Mono', monospace;
+        @media (max-width: 640px) {
+            .container { padding: 1rem; }
+            h1 { font-size: 1.5rem; }
+            .summary { flex-direction: column; }
+            .theme-toggle { position: static; margin-bottom: 1rem; }
+            header { text-align: left; }
         }
     </style>
 </head>
 <body>
-    <div class="background-container">
-        <div class="grid-background"></div>
-        <div class="floating-orb orb-1"></div>
-        <div class="floating-orb orb-2"></div>
-        <div class="floating-orb orb-3"></div>
-        <div class="particles" id="particles"></div>
+    <div class="bg-grid"></div>
+    <div class="bg-orb"></div>
+    <div class="bg-orb"></div>
+    
+    <div class="tooltip" id="tooltip">
+        <div class="tooltip-title" id="tooltipTitle"></div>
+        <div class="tooltip-desc" id="tooltipDesc"></div>
+        <div class="tooltip-value" id="tooltipValue"></div>
     </div>
     
-    <div class="toast" id="toast">
-        <span>✓</span>
-        <span id="toastMessage">Copied to clipboard!</span>
-    </div>
-    
-    <div class="tag-tooltip" id="tagTooltip">
-        <div class="tag-tooltip-title" id="tooltipTitle"></div>
-        <div class="tag-tooltip-desc" id="tooltipDesc"></div>
-        <div class="tag-tooltip-value" id="tooltipValue"></div>
-    </div>
-    
+    <div class="toast" id="toast"><span>✓</span><span id="toastMsg">Copied!</span></div>
+
     <div class="container">
         <header>
-            <div class="header-controls">
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
-                    <span class="icon" id="themeIcon">🌙</span>
-                </button>
-            </div>
-            
-            <div class="logo-container">
+            <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+            <div class="logo">
                 <div class="logo-icon">🔐</div>
                 <div>
                     <h1>DKIM Validator</h1>
                     <p class="subtitle">RFC 6376 Cryptographic Signature Verification</p>
                 </div>
             </div>
-            
-            <p class="privacy-notice">100% client-side · No data sent to servers · DNS queries only for public key retrieval</p>
-            
-            <div class="badge-row">
-                <span class="feature-badge"><span class="dot"></span>RSA-SHA256</span>
-                <span class="feature-badge"><span class="dot"></span>DNS-over-HTTPS</span>
-                <span class="feature-badge"><span class="dot"></span>Web Crypto API</span>
-                <span class="feature-badge"><span class="dot"></span>RFC Compliant</span>
-                <span class="feature-badge"><span class="dot"></span>100% vibe coded</span>
-            </div>
+            <p class="privacy">100% client-side · No data sent to servers · DNS queries only for public key retrieval</p>
         </header>
 
         <div class="input-section">
-            <label class="input-label">
-                <span class="icon">📧</span>
-                Raw Email Headers & Body
-            </label>
-            <textarea id="emailInput" placeholder="Paste your raw email content here including all headers and body...
-
-Example:
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com;
-    s=selector; h=from:to:subject:date;
-    bh=base64bodyhash; b=base64signature
-From: sender@example.com
-To: recipient@example.com
-Subject: Test Email
-Date: Mon, 1 Jan 2024 12:00:00 +0000
-
-Email body content here..."></textarea>
-            <div class="btn-group">
-                <button class="btn btn-secondary" onclick="clearInput()">
-                    <span>🗑️</span>
-                    <span>Clear</span>
-                </button>
-                <span id="autoValidateStatus" class="auto-validate-status"></span>
+            <label class="input-label">📧 Raw Email Headers & Body</label>
+            <textarea id="input" placeholder="Paste raw email content here..."></textarea>
+            <div class="input-footer">
+                <button class="btn" onclick="clearAll()">🗑️ Clear</button>
+                <span class="status" id="status"></span>
             </div>
-            <div class="input-helper">
-                <label>
-                    <input type="checkbox" id="showRawBytes" onchange="toggleRawPreview()">
-                    <span>Show raw bytes</span>
-                </label>
-                <span id="inputStats"></span>
-            </div>
-            <pre id="rawPreview" style="display: none;"></pre>
         </div>
 
-        <div class="results-section" id="resultsSection">
-            <div class="summary-bar" id="summaryBar"></div>
-            <div id="signaturesContainer"></div>
-            
-            <div class="collapsible-section" id="debugSection">
-                <div class="collapsible-header" onclick="toggleSection(this.parentElement)">
-                    <h4>
-                        <span>🔍</span>
-                        Debug Log
-                    </h4>
+        <div class="results" id="results">
+            <div id="headersEl"></div>
+            <div class="summary" id="summaryEl"></div>
+            <div id="sigsEl"></div>
+            <div class="debug" id="debugEl">
+                <div class="debug-header" onclick="this.parentElement.classList.toggle('expanded')">
+                    <span>🔍 Debug Log</span>
                     <span class="expand-icon">▼</span>
                 </div>
-                <div class="collapsible-body">
+                <div class="debug-body">
                     <div class="debug-log" id="debugLog"></div>
                 </div>
             </div>
@@ -1277,1272 +417,514 @@ Email body content here..."></textarea>
     </div>
 
     <script>
-        // DKIM tag descriptions
-        const tagDescriptions = {
-            'v': { name: 'Version', desc: 'DKIM signature version. Must be "1".' },
-            'a': { name: 'Algorithm', desc: 'Signing algorithm used (e.g., rsa-sha256).' },
-            'b': { name: 'Signature', desc: 'The actual cryptographic signature (base64 encoded).' },
-            'bh': { name: 'Body Hash', desc: 'Hash of the canonicalized message body (base64).' },
-            'c': { name: 'Canonicalization', desc: 'Algorithm for header/body normalization (e.g., relaxed/simple).' },
-            'd': { name: 'Domain', desc: 'The signing domain (SDID). Used to query DNS.' },
-            's': { name: 'Selector', desc: 'DNS selector to locate the public key record.' },
-            'h': { name: 'Signed Headers', desc: 'List of headers included in the signature.' },
-            't': { name: 'Timestamp', desc: 'Unix timestamp when the signature was created.' },
-            'x': { name: 'Expiration', desc: 'Unix timestamp when the signature expires.' },
-            'l': { name: 'Body Length', desc: 'Number of body bytes that were signed.' },
-            'i': { name: 'Identity', desc: 'Agent or user identifier (AUID).' },
-            'q': { name: 'Query Method', desc: 'Method to retrieve public key (default: dns/txt).' },
-            'z': { name: 'Copied Headers', desc: 'Copy of selected header fields for diagnostics.' }
-        };
+    // Tag descriptions
+    const DKIM_TAGS = {
+        v: { name: 'Version', desc: 'DKIM signature version (must be "1")' },
+        a: { name: 'Algorithm', desc: 'Signing algorithm (e.g., rsa-sha256)' },
+        b: { name: 'Signature', desc: 'Base64-encoded cryptographic signature' },
+        bh: { name: 'Body Hash', desc: 'Hash of canonicalized message body' },
+        c: { name: 'Canonicalization', desc: 'Header/body normalization method' },
+        d: { name: 'Domain', desc: 'Signing domain identifier (SDID)' },
+        s: { name: 'Selector', desc: 'DNS selector for public key lookup' },
+        h: { name: 'Signed Headers', desc: 'Headers included in signature' },
+        t: { name: 'Timestamp', desc: 'Signature creation time (Unix)' },
+        x: { name: 'Expiration', desc: 'Signature expiration time (Unix)' },
+        l: { name: 'Body Length', desc: 'Number of body bytes signed' },
+        i: { name: 'Identity', desc: 'Agent/user identifier (AUID)' }
+    };
 
-        // DNS record tag descriptions
-        const dnsTagDescriptions = {
-            'v': { name: 'Version', desc: 'DKIM key record version. Must be "DKIM1".' },
-            'k': { name: 'Key Type', desc: 'Type of key (default: rsa).' },
-            'p': { name: 'Public Key', desc: 'Base64 encoded public key data.' },
-            'h': { name: 'Hash Algorithms', desc: 'Acceptable hash algorithms (e.g., sha256).' },
-            'n': { name: 'Notes', desc: 'Human-readable notes for administrators.' },
-            's': { name: 'Service Type', desc: 'Service types that may use this key (default: *).' },
-            't': { name: 'Flags', desc: 'Flags (y=testing mode, s=strict domain match).' },
-            'g': { name: 'Granularity', desc: 'Local-part granularity (deprecated).' }
-        };
+    const DNS_TAGS = {
+        v: { name: 'Version', desc: 'DKIM key record version (must be "DKIM1")' },
+        k: { name: 'Key Type', desc: 'Type of key (default: rsa)' },
+        p: { name: 'Public Key', desc: 'Base64-encoded public key data' },
+        h: { name: 'Hash Algorithms', desc: 'Acceptable hash algorithms' },
+        t: { name: 'Flags', desc: 'Flags (y=testing, s=strict)' }
+    };
 
-        // Theme management
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('dkim-theme', newTheme);
-            updateThemeUI(newTheme);
+    // State
+    const logs = [];
+    let validateTimeout;
+
+    // Theme
+    function toggleTheme() {
+        const html = document.documentElement;
+        const btn = document.getElementById('themeBtn');
+        const isDark = html.dataset.theme === 'dark';
+        html.dataset.theme = isDark ? 'light' : 'dark';
+        btn.textContent = isDark ? '☀️' : '🌙';
+        localStorage.setItem('theme', html.dataset.theme);
+    }
+    
+    (function initTheme() {
+        const saved = localStorage.getItem('theme');
+        if (saved) {
+            document.documentElement.dataset.theme = saved;
+            document.getElementById('themeBtn').textContent = saved === 'dark' ? '🌙' : '☀️';
         }
+    })();
 
-        function updateThemeUI(theme) {
-            const icon = document.getElementById('themeIcon');
-            if (theme === 'dark') {
-                icon.textContent = '🌙';
-            } else {
-                icon.textContent = '☀️';
+    // Utils
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function log(type, msg) { logs.push({ time: new Date().toISOString().split('T')[1].split('.')[0], type, msg }); }
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        document.getElementById('toastMsg').textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2000);
+    }
+    function copy(btn, val) {
+        navigator.clipboard.writeText(val);
+        btn.classList.add('copied');
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        setTimeout(() => { btn.classList.remove('copied'); btn.textContent = orig; }, 1500);
+        showToast('Copied!');
+    }
+
+    // Clear
+    function clearAll() {
+        document.getElementById('input').value = '';
+        document.getElementById('results').classList.remove('visible');
+        document.getElementById('status').innerHTML = '';
+    }
+
+    // Auto-validate
+    document.getElementById('input').addEventListener('input', () => {
+        clearTimeout(validateTimeout);
+        const val = document.getElementById('input').value.trim();
+        if (!val || val.length < 50) {
+            document.getElementById('results').classList.remove('visible');
+            document.getElementById('status').innerHTML = '';
+            return;
+        }
+        document.getElementById('status').innerHTML = '<div class="spinner"></div> Validating...';
+        validateTimeout = setTimeout(validate, 400);
+    });
+
+    // Tooltip Manager
+    const Tooltip = {
+        el: null,
+        hideTimer: null,
+        activeTag: null,
+
+        init() {
+            this.el = document.getElementById('tooltip');
+            // Keep tooltip open when hovering over it
+            this.el.addEventListener('mouseenter', () => this.cancelHide());
+            this.el.addEventListener('mouseleave', () => this.scheduleHide());
+        },
+
+        show(tag) {
+            this.cancelHide();
+            this.activeTag = tag;
+
+            const { tag: name, tagName, tagDesc, tagValue } = tag.dataset;
+            document.getElementById('tooltipTitle').textContent =
+                tag.classList.contains('header') ? tagName : `${tagName} (${name}=)`;
+            document.getElementById('tooltipDesc').textContent = tagDesc;
+            document.getElementById('tooltipValue').textContent = tagValue;
+
+            // Position tooltip
+            const r = tag.getBoundingClientRect();
+            let left = r.left;
+            let top = r.bottom + 10;
+
+            // Adjust if overflowing right
+            if (left + 300 > window.innerWidth) {
+                left = window.innerWidth - 320;
             }
-        }
+            if (left < 10) left = 10;
 
-        // Initialize theme
-        (function() {
-            const savedTheme = localStorage.getItem('dkim-theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            updateThemeUI(savedTheme);
-        })();
-
-        // Create floating particles
-        function createParticles() {
-            const container = document.getElementById('particles');
-            const particleCount = 20;
-            
-            for (let i = 0; i < particleCount; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.animationDelay = Math.random() * 8 + 's';
-                particle.style.animationDuration = (6 + Math.random() * 4) + 's';
-                container.appendChild(particle);
+            // Adjust if overflowing bottom
+            if (top + 150 > window.innerHeight) {
+                top = r.top - 160;
             }
-        }
-        createParticles();
 
-        // Toast notification
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toastMessage').textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2500);
-        }
+            this.el.style.left = left + 'px';
+            this.el.style.top = top + 'px';
+            this.el.classList.add('visible');
+        },
 
-        // Copy to clipboard
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('Copied to clipboard!');
-            }).catch(err => {
-                console.error('Copy failed:', err);
-                showToast('Failed to copy');
-            });
-        }
+        hide() {
+            this.el.classList.remove('visible');
+            this.activeTag = null;
+        },
 
-        // Clear input
-        function clearInput() {
-            document.getElementById('emailInput').value = '';
-            document.getElementById('resultsSection').classList.remove('visible');
-            document.getElementById('inputStats').textContent = '';
-            document.getElementById('rawPreview').textContent = '';
-            document.getElementById('autoValidateStatus').innerHTML = '';
-        }
-
-        // Debounce function
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
-        // Auto-validate handler
-        const autoValidate = debounce(async () => {
-            const input = document.getElementById('emailInput').value.trim();
-            const statusEl = document.getElementById('autoValidateStatus');
-            
-            if (!input) {
-                document.getElementById('resultsSection').classList.remove('visible');
-                statusEl.innerHTML = '';
-                return;
+        cancelHide() {
+            if (this.hideTimer) {
+                clearTimeout(this.hideTimer);
+                this.hideTimer = null;
             }
-            
-            // Check if it looks like an email (has DKIM-Signature or basic headers)
-            if (!input.includes(':') || input.length < 50) {
-                statusEl.innerHTML = '';
-                return;
-            }
-            
-            statusEl.innerHTML = '<div class="spinner"></div><span>Validating...</span>';
-            
-            // Small delay to show the spinner
-            await new Promise(r => setTimeout(r, 100));
-            
-            await validateDKIM();
-            statusEl.innerHTML = '';
-        }, 500);
+        },
 
-        // Setup auto-validation on input
-        document.addEventListener('DOMContentLoaded', () => {
-            const emailInput = document.getElementById('emailInput');
-            
-            emailInput.addEventListener('input', () => {
-                // Update stats
-                const input = emailInput.value;
-                const stats = document.getElementById('inputStats');
-                if (input) {
-                    const crlfCount = (input.match(/\r\n/g) || []).length;
-                    const lfCount = (input.match(/(?<!\r)\n/g) || []).length;
-                    stats.textContent = `Length: ${input.length} | CRLF: ${crlfCount} | LF: ${lfCount}`;
-                } else {
-                    stats.textContent = '';
+        scheduleHide() {
+            this.cancelHide();
+            this.hideTimer = setTimeout(() => this.hide(), 250);
+        },
+
+        // Attach events to a tag element
+        attachToTag(tag) {
+            tag.addEventListener('mouseenter', (e) => {
+                if (!e.target.closest('.copy-btn')) {
+                    this.show(tag);
                 }
-                
-                // Update raw preview if enabled
-                if (document.getElementById('showRawBytes').checked) {
-                    updateRawPreview();
-                }
-                
-                // Trigger auto-validation
-                autoValidate();
             });
-            
-            // Also validate on paste
-            emailInput.addEventListener('paste', () => {
-                setTimeout(autoValidate, 100);
+            tag.addEventListener('mouseleave', () => {
+                this.scheduleHide();
             });
+        }
+    };
+
+    Tooltip.init();
+
+    // Toggle card
+    function toggleCard(el) { el.closest('.sig-card').classList.toggle('expanded'); }
+
+    // Parse email
+    function parseEmail(raw) {
+        let headerSection, body;
+        let idx = raw.indexOf('\r\n\r\n');
+        if (idx !== -1) { headerSection = raw.slice(0, idx); body = raw.slice(idx + 4); }
+        else { idx = raw.indexOf('\n\n'); headerSection = raw.slice(0, idx); body = raw.slice(idx + 2); }
+        
+        headerSection = headerSection.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const headers = [];
+        let cur = null;
+        for (const line of headerSection.split('\n')) {
+            if (/^[ \t]/.test(line) && cur) cur.value += '\r\n' + line;
+            else {
+                if (cur) headers.push([cur.name, cur.value]);
+                const i = line.indexOf(':');
+                if (i > 0) cur = { name: line.slice(0, i), value: line.slice(i + 1) };
+                else cur = null;
+            }
+        }
+        if (cur) headers.push([cur.name, cur.value]);
+
+        const dkimSigs = headers.filter(([n]) => n.toLowerCase() === 'dkim-signature').map(([n, v]) => ({
+            raw: n + ':' + v,
+            parsed: parseDkimTags(n + ':' + v)
+        }));
+
+        return { headers, body, dkimSigs };
+    }
+
+    function parseDkimTags(raw) {
+        const unfolded = raw.replace(/\r?\n[ \t]+/g, ' ');
+        const match = unfolded.match(/DKIM-Signature:\s*(.+)/i);
+        if (!match) return null;
+        const tags = {};
+        const re = /([a-z]+)\s*=\s*([^;]+)/gi;
+        let m;
+        while ((m = re.exec(match[1]))) {
+            let val = m[2].trim();
+            if (m[1] === 'b' || m[1] === 'bh') val = val.replace(/\s+/g, '');
+            tags[m[1].toLowerCase()] = val;
+        }
+        return tags;
+    }
+
+    function parseDnsTags(record) {
+        const tags = {};
+        const re = /([a-z]+)\s*=\s*([^;]+)/gi;
+        let m;
+        while ((m = re.exec(record))) tags[m[1].toLowerCase()] = m[2].trim();
+        return tags;
+    }
+
+    // Canonicalization
+    function canonHeaderRelaxed(name, value) {
+        let v = value.replace(/\r?\n[ \t]+/g, ' ').replace(/[ \t]+/g, ' ').trim();
+        return name.toLowerCase() + ':' + v;
+    }
+
+    function canonBodyRelaxed(body) {
+        if (!body) return '\r\n';
+        let c = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+        c = c.split('\r\n').map(l => l.replace(/[ \t]+/g, ' ').replace(/ +$/, '')).join('\r\n');
+        c = c.replace(/(\r\n)+$/, '') || '';
+        return c + '\r\n';
+    }
+
+    function canonBodySimple(body) {
+        if (!body) return '\r\n';
+        let c = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+        c = c.replace(/(\r\n)+$/, '') || '';
+        return c + '\r\n';
+    }
+
+    // DNS
+    async function fetchDns(domain, selector) {
+        const name = `${selector}._domainkey.${domain}`;
+        log('info', `DNS lookup: ${name}`);
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=TXT`, {
+                headers: { Accept: 'application/dns-json' }
+            });
+            const data = await res.json();
+            if (data.Answer) {
+                let record = '';
+                for (const a of data.Answer) if (a.type === 16) record += a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                log('success', `DNS found: ${record.slice(0, 80)}...`);
+                return { ok: true, record, name };
+            }
+            return { ok: false, error: 'No TXT record', name };
+        } catch (e) {
+            log('error', `DNS error: ${e.message}`);
+            return { ok: false, error: e.message, name };
+        }
+    }
+
+    // Crypto
+    function b64ToBuffer(b64) {
+        const bin = atob(b64.replace(/\s+/g, ''));
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr.buffer;
+    }
+
+    async function importKey(b64) {
+        const keyData = b64ToBuffer(b64);
+        try {
+            return await crypto.subtle.importKey('spki', keyData, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+        } catch {
+            const spki = convertPkcs1ToSpki(new Uint8Array(keyData));
+            return await crypto.subtle.importKey('spki', spki, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+        }
+    }
+
+    function convertPkcs1ToSpki(pkcs1) {
+        const oid = new Uint8Array([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
+        const bitStr = new Uint8Array(pkcs1.length + 1);
+        bitStr[0] = 0x00;
+        bitStr.set(pkcs1, 1);
+        const bsHeader = asn1Len(0x03, bitStr.length);
+        const innerLen = oid.length + bsHeader.length + bitStr.length;
+        const seqHeader = asn1Len(0x30, innerLen);
+        const spki = new Uint8Array(seqHeader.length + oid.length + bsHeader.length + bitStr.length);
+        let o = 0;
+        spki.set(seqHeader, o); o += seqHeader.length;
+        spki.set(oid, o); o += oid.length;
+        spki.set(bsHeader, o); o += bsHeader.length;
+        spki.set(bitStr, o);
+        return spki.buffer;
+    }
+
+    function asn1Len(tag, len) {
+        if (len < 128) return new Uint8Array([tag, len]);
+        if (len < 256) return new Uint8Array([tag, 0x81, len]);
+        return new Uint8Array([tag, 0x82, (len >> 8) & 0xff, len & 0xff]);
+    }
+
+    async function computeBodyHash(body, canon, limit) {
+        let c = canon === 'relaxed' ? canonBodyRelaxed(body) : canonBodySimple(body);
+        if (limit !== undefined && limit !== '') {
+            const n = parseInt(limit, 10);
+            if (!isNaN(n) && n >= 0) {
+                const bytes = new TextEncoder().encode(c);
+                if (bytes.length > n) c = new TextDecoder().decode(bytes.slice(0, n));
+            }
+        }
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(c));
+        return btoa(String.fromCharCode(...new Uint8Array(hash)));
+    }
+
+    function buildSigningInput(headers, tags, rawDkim, headerCanon) {
+        const signed = tags.h.split(':').map(h => h.trim().toLowerCase());
+        const headerMap = new Map();
+        for (const [n, v] of headers) {
+            const ln = n.toLowerCase();
+            if (!headerMap.has(ln)) headerMap.set(ln, []);
+            headerMap.get(ln).push({ name: n, value: v });
+        }
+        const lines = [];
+        for (const h of signed) {
+            const stack = headerMap.get(h);
+            if (stack?.length) {
+                const { name, value } = stack.pop();
+                lines.push(headerCanon === 'relaxed' ? canonHeaderRelaxed(name, value) : name + ':' + value);
+            }
+        }
+        let dkimForSigning = rawDkim.replace(/\r?\n[ \t]+/g, ' ').replace(/(;\s*b\s*=\s*)[A-Za-z0-9+/=\s]+/i, '$1');
+        const dkimCanon = headerCanon === 'relaxed'
+            ? canonHeaderRelaxed('DKIM-Signature', dkimForSigning.replace(/^DKIM-Signature:\s*/i, ''))
+            : 'DKIM-Signature:' + dkimForSigning.replace(/^DKIM-Signature:\s*/i, '');
+        lines.push(dkimCanon);
+        return lines.join('\r\n');
+    }
+
+    async function verifySig(input, sig, key) {
+        try {
+            return await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64ToBuffer(sig), new TextEncoder().encode(input));
+        } catch { return false; }
+    }
+
+    // Verify signature
+    async function verifyDkim(sig, headers, body) {
+        const tags = sig.parsed;
+        const result = { domain: tags.d || '?', selector: tags.s || '?', tags, raw: sig.raw, status: 'invalid', errors: [], details: {} };
+        
+        const required = ['v', 'a', 'b', 'bh', 'd', 'h', 's'];
+        for (const t of required) if (!tags[t]) result.errors.push(`Missing tag: ${t}`);
+        if (result.errors.length) return result;
+        if (tags.v !== '1') { result.errors.push(`Unsupported version: ${tags.v}`); return result; }
+        if (tags.a !== 'rsa-sha256') { result.errors.push(`Unsupported algorithm: ${tags.a}`); return result; }
+
+        const [hCanon, bCanon] = (tags.c || 'simple/simple').split('/');
+        result.details.headerCanon = hCanon || 'simple';
+        result.details.bodyCanon = bCanon || hCanon || 'simple';
+
+        const dns = await fetchDns(tags.d, tags.s);
+        result.dns = dns;
+        if (!dns.ok) { result.errors.push(`DNS failed: ${dns.error}`); return result; }
+        
+        result.dnsTags = parseDnsTags(dns.record);
+        if (!result.dnsTags.p) { result.errors.push('No public key in DNS'); return result; }
+
+        const computedBh = await computeBodyHash(body, result.details.bodyCanon, tags.l);
+        result.details.computedBh = computedBh;
+        result.details.declaredBh = tags.bh;
+        result.details.bhMatch = computedBh === tags.bh;
+        if (!result.details.bhMatch) result.errors.push('Body hash mismatch');
+
+        try {
+            const key = await importKey(result.dnsTags.p);
+            const input = buildSigningInput(headers, tags, sig.raw, result.details.headerCanon);
+            result.details.sigValid = await verifySig(input, tags.b, key);
+            if (!result.details.sigValid) result.errors.push('Signature verification failed');
+        } catch (e) {
+            result.errors.push(`Crypto error: ${e.message}`);
+            result.details.sigValid = false;
+        }
+
+        result.status = result.details.bhMatch && result.details.sigValid ? 'valid' : 'invalid';
+        log(result.status === 'valid' ? 'success' : 'error', `${tags.d}: ${result.status.toUpperCase()}`);
+        return result;
+    }
+
+    // Render
+    function renderTag(name, value, info, classes = '') {
+        const short = value.length > 25 ? value.slice(0, 25) + '…' : value;
+        return `<div class="tag ${classes}" data-tag="${esc(name)}" data-tag-name="${esc(info.name)}" data-tag-desc="${esc(info.desc)}" data-tag-value="${esc(value)}">
+            <span class="dot"></span>
+            <span class="tag-name">${esc(name)}</span>
+            <span class="tag-value">${esc(short)}</span>
+            <button class="copy-btn" onclick="event.stopPropagation();copy(this,\`${esc(value.replace(/`/g, ''))}\`)">⧉</button>
+        </div>`;
+    }
+
+    function renderHeaders(headers, signed) {
+        const tags = headers.map(([n, v]) => {
+            const isSigned = signed.has(n.toLowerCase());
+            return renderTag(n, v.trim(), { name: n, desc: isSigned ? 'Included in DKIM signature' : 'Not signed' }, `header ${isSigned ? 'signed' : ''}`);
+        }).join('');
+        return `<div class="headers-section">
+            <div class="section-header">📨 Email Headers</div>
+            <div class="tags-grid">${tags}</div>
+            <div class="legend">
+                <div class="legend-item"><span class="dot" style="background:linear-gradient(135deg,var(--success),var(--accent));width:6px;height:6px;border-radius:50%"></span> Signed</div>
+                <div class="legend-item"><span class="dot" style="background:var(--text-dim);width:6px;height:6px;border-radius:50%"></span> Not signed</div>
+            </div>
+        </div>`;
+    }
+
+    function renderSig(r, i) {
+        const errHtml = r.errors.map(e => `<div class="error-msg">${esc(e)}</div>`).join('');
+        const dkimTags = Object.entries(r.tags).map(([k, v]) => renderTag(k, v, DKIM_TAGS[k] || { name: k.toUpperCase(), desc: 'DKIM tag' }, 'signed')).join('');
+        const dnsTags = r.dnsTags ? Object.entries(r.dnsTags).map(([k, v]) => renderTag(k, v, DNS_TAGS[k] || { name: k.toUpperCase(), desc: 'DNS tag' }, 'dns')).join('') : '';
+        const dnsCmd = `dig TXT ${r.dns?.name || r.selector + '._domainkey.' + r.domain}`;
+
+        return `<div class="sig-card ${r.status} expanded">
+            <div class="sig-header" onclick="toggleCard(this)">
+                <div class="sig-title">
+                    <span class="sig-num">${i}</span>
+                    <span class="sig-domain">${esc(r.domain)}</span>
+                    <span class="badge ${r.status}">${r.status === 'valid' ? '✓ PASS' : '✗ FAIL'}</span>
+                </div>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="sig-content"><div class="sig-body">
+                ${errHtml}
+                <div class="sig-section">
+                    <div class="sig-section-title">🏷️ DKIM Tags</div>
+                    <div class="tags-grid">${dkimTags}</div>
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">🌐 DNS Record</div>
+                    <div class="dns-cmd">
+                        <code>${esc(dnsCmd)}</code>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">⧉</button>
+                    </div>
+                    ${r.dns?.ok ? `<div class="tags-grid">${dnsTags}</div><div class="dns-raw">${esc(r.dns.record)}</div>` : `<div class="error-msg">${esc(r.dns?.error || 'DNS lookup failed')}</div>`}
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">🔐 Verification</div>
+                    <div class="details">
+                        <div class="detail-row"><span class="detail-label">Algorithm</span><span class="detail-value">${esc(r.tags.a || 'N/A')}</span></div>
+                        <div class="detail-row"><span class="detail-label">Canonicalization</span><span class="detail-value">${r.details.headerCanon}/${r.details.bodyCanon}</span></div>
+                        <div class="detail-row"><span class="detail-label">Body Hash</span><span class="detail-value ${r.details.bhMatch ? 'success' : 'error'}">${r.details.bhMatch ? '✓ Match' : '✗ Mismatch'}</span></div>
+                        <div class="detail-row"><span class="detail-label">Signature</span><span class="detail-value ${r.details.sigValid ? 'success' : 'error'}">${r.details.sigValid ? '✓ Valid' : '✗ Invalid'}</span></div>
+                    </div>
+                </div>
+            </div></div>
+        </div>`;
+    }
+
+    function renderDebug() {
+        return logs.map(l => `<div class="log-entry"><span class="log-time">${l.time}</span><span class="log-type ${l.type}">${l.type.toUpperCase()}</span><span class="log-msg">${esc(l.msg)}</span></div>`).join('');
+    }
+
+    // Initialize tooltips on all tags in the results
+    function initTooltips() {
+        document.querySelectorAll('#results .tag').forEach(tag => {
+            Tooltip.attachToTag(tag);
         });
+    }
 
-        const debugLogs = [];
+    // Main validate
+    async function validate() {
+        logs.length = 0;
+        const input = document.getElementById('input').value.trim();
+        if (!input) return;
+
+        log('info', 'Starting validation');
+        const { headers, body, dkimSigs } = parseEmail(input);
         
-        function toggleRawPreview() {
-            const preview = document.getElementById('rawPreview');
-            const checkbox = document.getElementById('showRawBytes');
-            preview.style.display = checkbox.checked ? 'block' : 'none';
-            if (checkbox.checked) {
-                updateRawPreview();
-            }
-        }
+        const signed = new Set();
+        dkimSigs.forEach(s => s.parsed?.h?.split(':').forEach(h => signed.add(h.trim().toLowerCase())));
         
-        function updateRawPreview() {
-            const input = document.getElementById('emailInput').value;
-            const preview = document.getElementById('rawPreview');
-            
-            if (!input) {
-                preview.textContent = '(empty)';
-                return;
-            }
-            
-            // Show hex of first 500 chars
-            const bytes = new TextEncoder().encode(input.substring(0, 500));
-            let hex = '';
-            let ascii = '';
-            for (let i = 0; i < bytes.length; i++) {
-                hex += bytes[i].toString(16).padStart(2, '0') + ' ';
-                ascii += (bytes[i] >= 32 && bytes[i] < 127) ? String.fromCharCode(bytes[i]) : '.';
-                if ((i + 1) % 16 === 0) {
-                    hex += ' | ' + ascii + '\n';
-                    ascii = '';
-                }
-            }
-            if (ascii) {
-                hex += ' '.repeat((16 - (bytes.length % 16)) * 3) + ' | ' + ascii;
-            }
-            preview.textContent = hex;
-        }
-        
-        function log(type, message) {
-            const time = new Date().toISOString().split('T')[1].split('.')[0];
-            debugLogs.push({ time, type, message });
-            console.log(`[${type.toUpperCase()}] ${message}`);
+        document.getElementById('headersEl').innerHTML = renderHeaders(headers, signed);
+
+        if (!dkimSigs.length) {
+            document.getElementById('summaryEl').innerHTML = '';
+            document.getElementById('sigsEl').innerHTML = '<div class="error-msg">No DKIM-Signature headers found</div>';
+            document.getElementById('debugLog').innerHTML = renderDebug();
+            document.getElementById('results').classList.add('visible');
+            document.getElementById('status').innerHTML = '';
+            initTooltips();
+            return;
         }
 
-        function renderDebugLog() {
-            const container = document.getElementById('debugLog');
-            container.innerHTML = debugLogs.map(entry => `
-                <div class="log-entry">
-                    <span class="log-time">${entry.time}</span>
-                    <span class="log-type ${entry.type}">${entry.type.toUpperCase()}</span>
-                    <span class="log-message">${escapeHtml(entry.message)}</span>
-                </div>
-            `).join('');
+        const results = [];
+        for (const sig of dkimSigs) {
+            results.push(await verifyDkim(sig, headers, body));
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        const valid = results.filter(r => r.status === 'valid').length;
+        const invalid = results.length - valid;
 
-        function toggleSection(element) {
-            element.classList.toggle('expanded');
-        }
+        document.getElementById('summaryEl').innerHTML = `
+            <div class="summary-item"><div class="summary-icon">📧</div><div><span class="summary-value">${results.length}</span><div class="summary-label">Signatures</div></div></div>
+            <div class="summary-item"><div class="summary-icon">✓</div><div><span class="summary-value success">${valid}</span><div class="summary-label">Valid</div></div></div>
+            <div class="summary-item"><div class="summary-icon">✗</div><div><span class="summary-value error">${invalid}</span><div class="summary-label">Invalid</div></div></div>
+        `;
 
-        function parseDKIMSignature(rawHeader) {
-            log('info', 'Parsing DKIM-Signature header');
-            
-            // Unfold multi-line header (RFC 5322)
-            const unfolded = rawHeader.replace(/\r?\n[ \t]+/g, ' ');
-            log('info', `Unfolded header: ${unfolded.substring(0, 100)}...`);
-            
-            // Extract just the value part after "DKIM-Signature:"
-            const match = unfolded.match(/DKIM-Signature:\s*(.+)/i);
-            if (!match) {
-                log('error', 'Could not extract DKIM-Signature value');
-                return null;
-            }
-            
-            const value = match[1];
-            const tags = {};
-            
-            // Parse tags (tag=value; format)
-            const tagRegex = /([a-z]+)\s*=\s*([^;]+)/gi;
-            let tagMatch;
-            
-            while ((tagMatch = tagRegex.exec(value)) !== null) {
-                const tagName = tagMatch[1].toLowerCase();
-                let tagValue = tagMatch[2].trim();
-                
-                // Remove whitespace from base64 values
-                if (tagName === 'b' || tagName === 'bh') {
-                    tagValue = tagValue.replace(/\s+/g, '');
-                }
-                
-                tags[tagName] = tagValue;
-                log('info', `Parsed tag: ${tagName}=${tagValue.substring(0, 50)}${tagValue.length > 50 ? '...' : ''}`);
-            }
-            
-            return tags;
-        }
-
-        function canonicalizeHeaderRelaxed(name, value) {
-            // RFC 6376 Section 3.4.2
-            // Convert header name to lowercase
-            let canonical = name.toLowerCase();
-            
-            // Unfold header value
-            let canonValue = value.replace(/\r?\n[ \t]+/g, ' ');
-            
-            // Replace runs of whitespace with single space
-            canonValue = canonValue.replace(/[ \t]+/g, ' ');
-            
-            // Remove leading and trailing whitespace
-            canonValue = canonValue.trim();
-            
-            return canonical + ':' + canonValue;
-        }
-
-        function canonicalizeHeaderSimple(name, value) {
-            // RFC 6376 Section 3.4.1 - No changes except ensure CRLF
-            return name + ':' + value;
-        }
-
-        function canonicalizeBodyRelaxed(body) {
-            // RFC 6376 Section 3.4.4
-            if (!body || body.length === 0) {
-                log('info', 'Empty body, returning CRLF');
-                return '\r\n';
-            }
-            
-            // First normalize all line endings to CRLF
-            let canonical = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-            
-            let lines = canonical.split('\r\n');
-            
-            // Process each line
-            lines = lines.map(line => {
-                // Replace runs of WSP with single SP
-                line = line.replace(/[ \t]+/g, ' ');
-                // Remove trailing WSP
-                line = line.replace(/ +$/, '');
-                return line;
-            });
-            
-            // Join with CRLF
-            canonical = lines.join('\r\n');
-            
-            // Ignore all empty lines at the end of the message body
-            // Then add single CRLF
-            canonical = canonical.replace(/(\r\n)+$/, '');
-            
-            // If body is completely empty after processing, return just CRLF
-            if (canonical === '') {
-                return '\r\n';
-            }
-            
-            canonical += '\r\n';
-            
-            log('info', `Relaxed body canon result length: ${canonical.length}`);
-            return canonical;
-        }
-
-        function canonicalizeBodySimple(body) {
-            // RFC 6376 Section 3.4.3
-            // Simple canonicalization: no change to body except:
-            // - Normalize line endings to CRLF
-            // - Remove empty lines at end, keep one final CRLF
-            
-            if (!body || body.length === 0) {
-                log('info', 'Empty body, returning CRLF');
-                return '\r\n';
-            }
-            
-            // Normalize line endings to CRLF
-            let canonical = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-            
-            // Remove trailing empty lines (sequences of CRLF at end)
-            canonical = canonical.replace(/(\r\n)+$/, '');
-            
-            // If body is completely empty after processing, return just CRLF
-            if (canonical === '') {
-                return '\r\n';
-            }
-            
-            // Add single final CRLF
-            canonical += '\r\n';
-            
-            log('info', `Simple body canon result length: ${canonical.length}`);
-            return canonical;
-        }
-
-        async function fetchDNSRecord(domain, selector) {
-            const dnsName = `${selector}._domainkey.${domain}`;
-            log('info', `Fetching DNS TXT record: ${dnsName}`);
-            
-            const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(dnsName)}&type=TXT`;
-            
-            try {
-                const response = await fetch(url, {
-                    headers: {
-                        'Accept': 'application/dns-json'
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`DNS query failed: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                log('info', `DNS response: ${JSON.stringify(data).substring(0, 200)}`);
-                
-                if (data.Answer && data.Answer.length > 0) {
-                    // Concatenate all TXT record parts
-                    let fullRecord = '';
-                    for (const answer of data.Answer) {
-                        if (answer.type === 16) { // TXT record
-                            // Remove surrounding quotes and concatenate
-                            let txt = answer.data;
-                            txt = txt.replace(/^"(.+)"$/, '$1');
-                            txt = txt.replace(/" "/g, '');
-                            fullRecord += txt;
-                        }
-                    }
-                    log('success', `DNS record found: ${fullRecord.substring(0, 100)}...`);
-                    return { success: true, record: fullRecord, dnsName };
-                }
-                
-                log('error', 'No DNS TXT record found');
-                return { success: false, error: 'No TXT record found', dnsName };
-            } catch (error) {
-                log('error', `DNS fetch error: ${error.message}`);
-                return { success: false, error: error.message, dnsName };
-            }
-        }
-
-        function parseDNSRecord(record) {
-            const tags = {};
-            const tagRegex = /([a-z]+)\s*=\s*([^;]+)/gi;
-            let match;
-            
-            while ((match = tagRegex.exec(record)) !== null) {
-                tags[match[1].toLowerCase()] = match[2].trim();
-            }
-            
-            return tags;
-        }
-
-        function base64ToArrayBuffer(base64) {
-            // Remove all whitespace
-            const cleaned = base64.replace(/\s+/g, '');
-            const binary = atob(cleaned);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
-        async function importPublicKey(publicKeyBase64) {
-            log('info', 'Importing public key');
-            
-            const keyData = base64ToArrayBuffer(publicKeyBase64);
-            
-            try {
-                // Try SPKI format first (most common for DKIM)
-                const key = await crypto.subtle.importKey(
-                    'spki',
-                    keyData,
-                    {
-                        name: 'RSASSA-PKCS1-v1_5',
-                        hash: 'SHA-256'
-                    },
-                    false,
-                    ['verify']
-                );
-                log('success', 'Public key imported successfully (SPKI format)');
-                return key;
-            } catch (e) {
-                log('warn', `SPKI import failed: ${e.message}, trying PKCS#1 conversion`);
-                
-                // Try converting from PKCS#1 to SPKI
-                try {
-                    const spkiKey = convertPKCS1ToSPKI(keyData);
-                    const key = await crypto.subtle.importKey(
-                        'spki',
-                        spkiKey,
-                        {
-                            name: 'RSASSA-PKCS1-v1_5',
-                            hash: 'SHA-256'
-                        },
-                        false,
-                        ['verify']
-                    );
-                    log('success', 'Public key imported successfully (PKCS#1 converted to SPKI)');
-                    return key;
-                } catch (e2) {
-                    log('error', `Key import failed: ${e2.message}`);
-                    throw new Error(`Failed to import public key: ${e2.message}`);
-                }
-            }
-        }
-
-        function convertPKCS1ToSPKI(pkcs1Buffer) {
-            // RSA OID: 1.2.840.113549.1.1.1
-            const rsaOID = new Uint8Array([
-                0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-                0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00
-            ]);
-            
-            const pkcs1Bytes = new Uint8Array(pkcs1Buffer);
-            
-            // Create BIT STRING wrapper (add 0x00 prefix for padding bits = 0)
-            const bitString = new Uint8Array(pkcs1Bytes.length + 1);
-            bitString[0] = 0x00;
-            bitString.set(pkcs1Bytes, 1);
-            
-            // Calculate lengths
-            const bitStringLen = bitString.length;
-            const bitStringHeader = createASN1Length(0x03, bitStringLen);
-            
-            const innerLen = rsaOID.length + bitStringHeader.length + bitString.length;
-            const sequenceHeader = createASN1Length(0x30, innerLen);
-            
-            // Assemble SPKI
-            const spki = new Uint8Array(sequenceHeader.length + rsaOID.length + bitStringHeader.length + bitString.length);
-            let offset = 0;
-            spki.set(sequenceHeader, offset); offset += sequenceHeader.length;
-            spki.set(rsaOID, offset); offset += rsaOID.length;
-            spki.set(bitStringHeader, offset); offset += bitStringHeader.length;
-            spki.set(bitString, offset);
-            
-            return spki.buffer;
-        }
-
-        function createASN1Length(tag, length) {
-            if (length < 128) {
-                return new Uint8Array([tag, length]);
-            } else if (length < 256) {
-                return new Uint8Array([tag, 0x81, length]);
-            } else if (length < 65536) {
-                return new Uint8Array([tag, 0x82, (length >> 8) & 0xff, length & 0xff]);
-            } else {
-                return new Uint8Array([tag, 0x83, (length >> 16) & 0xff, (length >> 8) & 0xff, length & 0xff]);
-            }
-        }
-
-        async function computeBodyHash(body, canonicalization, length) {
-            log('info', `Computing body hash with ${canonicalization} canonicalization`);
-            log('info', `Original body length: ${body.length} chars`);
-            
-            let canonBody;
-            if (canonicalization === 'relaxed') {
-                canonBody = canonicalizeBodyRelaxed(body);
-            } else {
-                canonBody = canonicalizeBodySimple(body);
-            }
-            
-            log('info', `Canonicalized body length: ${canonBody.length} chars`);
-            
-            // Apply length limit if specified (l= tag)
-            if (length !== undefined && length !== null && length !== '') {
-                const lengthNum = parseInt(length, 10);
-                if (!isNaN(lengthNum) && lengthNum >= 0) {
-                    const encoder = new TextEncoder();
-                    const bytes = encoder.encode(canonBody);
-                    if (bytes.length > lengthNum) {
-                        const truncatedBytes = bytes.slice(0, lengthNum);
-                        canonBody = new TextDecoder().decode(truncatedBytes);
-                        log('info', `Body truncated to ${lengthNum} bytes (l= tag)`);
-                    }
-                }
-            }
-            
-            // Log hex dump of first 200 bytes for debugging
-            const encoder = new TextEncoder();
-            const bodyBytes = encoder.encode(canonBody);
-            const hexDump = Array.from(bodyBytes.slice(0, 200)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-            log('info', `Body hex (first 200 bytes): ${hexDump}`);
-            
-            const hashBuffer = await crypto.subtle.digest('SHA-256', bodyBytes);
-            const hashBase64 = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
-            
-            log('info', `Computed body hash: ${hashBase64}`);
-            return hashBase64;
-        }
-
-        // Try multiple body hash variants to diagnose issues
-        async function tryBodyHashVariants(body, declaredHash, length) {
-            const variants = [];
-            const encoder = new TextEncoder();
-            
-            async function hashBody(b, name) {
-                let finalBody = b;
-                if (length !== undefined && length !== null && length !== '') {
-                    const lengthNum = parseInt(length, 10);
-                    if (!isNaN(lengthNum) && lengthNum >= 0) {
-                        const bytes = encoder.encode(finalBody);
-                        if (bytes.length > lengthNum) {
-                            finalBody = new TextDecoder().decode(bytes.slice(0, lengthNum));
-                        }
-                    }
-                }
-                const bytes = encoder.encode(finalBody);
-                const hash = await crypto.subtle.digest('SHA-256', bytes);
-                const b64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
-                const match = b64 === declaredHash;
-                if (match) {
-                    log('success', `MATCH FOUND with variant: ${name}`);
-                }
-                return { name, hash: b64, match, length: bytes.length };
-            }
-            
-            // Variant 1: LF only + trailing LF
-            let v1 = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            v1 = v1.replace(/\n+$/, '') + '\n';
-            variants.push(await hashBody(v1, 'LF endings + trailing LF'));
-            
-            // Variant 2: CRLF + trailing CRLF
-            let v2 = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-            v2 = v2.replace(/(\r\n)+$/, '') + '\r\n';
-            variants.push(await hashBody(v2, 'CRLF endings + trailing CRLF'));
-            
-            // Variant 3: As-is with just trailing normalization
-            let v3 = body.replace(/[\r\n]+$/, '') + '\r\n';
-            variants.push(await hashBody(v3, 'As-is + trailing CRLF'));
-            
-            // Variant 4: No trailing newline at all
-            let v4 = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-            v4 = v4.replace(/(\r\n)+$/, '');
-            variants.push(await hashBody(v4, 'CRLF endings, no trailing'));
-            
-            // Variant 5: Empty body
-            variants.push(await hashBody('\r\n', 'Empty body (CRLF only)'));
-            variants.push(await hashBody('', 'Completely empty'));
-            
-            // Variant 6: Original body exactly as provided
-            variants.push(await hashBody(body, 'Exact original (no changes)'));
-            
-            // Variant 7: Relaxed canonicalization applied
-            let v7 = canonicalizeBodyRelaxed(body);
-            variants.push(await hashBody(v7, 'Relaxed canon applied'));
-            
-            // Variant 8: Simple canon applied  
-            let v8 = canonicalizeBodySimple(body);
-            variants.push(await hashBody(v8, 'Simple canon applied'));
-            
-            // Variant 9: Double CRLF at end (common issue)
-            let v9 = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-            v9 = v9.replace(/(\r\n)+$/, '') + '\r\n\r\n';
-            variants.push(await hashBody(v9, 'CRLF + double trailing CRLF'));
-            
-            // Variant 10: With BOM removed if present
-            let v10 = body.replace(/^\uFEFF/, '');
-            v10 = v10.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
-            v10 = v10.replace(/(\r\n)+$/, '') + '\r\n';
-            variants.push(await hashBody(v10, 'BOM removed + CRLF'));
-            
-            return variants;
-        }
-
-        function buildSigningInput(headers, dkimTags, dkimRawHeader, headerCanonicalization) {
-            log('info', 'Building signing input');
-            
-            const signedHeaders = dkimTags.h.split(':').map(h => h.trim().toLowerCase());
-            log('info', `Signed headers: ${signedHeaders.join(', ')}`);
-            
-            const headerLines = [];
-            const headerMap = new Map();
-            
-            // Build a map of headers (handle multiple same-name headers)
-            for (const [name, value] of headers) {
-                const lowerName = name.toLowerCase();
-                if (!headerMap.has(lowerName)) {
-                    headerMap.set(lowerName, []);
-                }
-                headerMap.get(lowerName).push({ name, value });
-            }
-            
-            // Process signed headers in order, taking from bottom of stack for duplicates
-            for (const headerName of signedHeaders) {
-                const headerStack = headerMap.get(headerName);
-                if (headerStack && headerStack.length > 0) {
-                    const header = headerStack.pop(); // Take from bottom (LIFO as per RFC 6376)
-                    let canonHeader;
-                    if (headerCanonicalization === 'relaxed') {
-                        canonHeader = canonicalizeHeaderRelaxed(header.name, header.value);
-                    } else {
-                        canonHeader = canonicalizeHeaderSimple(header.name, header.value);
-                    }
-                    headerLines.push(canonHeader);
-                    log('info', `Added header: ${canonHeader.substring(0, 80)}...`);
-                } else {
-                    log('warn', `Header not found: ${headerName}`);
-                }
-            }
-            
-            // Add DKIM-Signature header with empty b= value
-            let dkimHeaderForSigning = dkimRawHeader;
-            
-            // Remove the signature value (b=...) but keep b=
-            // We need to be careful to handle multi-line values
-            const unfoldedDkim = dkimRawHeader.replace(/\r?\n[ \t]+/g, ' ');
-            const bMatch = unfoldedDkim.match(/;\s*b\s*=\s*[A-Za-z0-9+/=\s]+\s*$/i) || 
-                           unfoldedDkim.match(/;\s*b\s*=\s*[A-Za-z0-9+/=\s]+\s*;/i);
-            
-            if (bMatch) {
-                // Replace the b= value with empty
-                dkimHeaderForSigning = unfoldedDkim.replace(/(;\s*b\s*=\s*)[A-Za-z0-9+/=\s]+/i, '$1');
-            }
-            
-            let canonDkimHeader;
-            if (headerCanonicalization === 'relaxed') {
-                canonDkimHeader = canonicalizeHeaderRelaxed('DKIM-Signature', dkimHeaderForSigning.replace(/^DKIM-Signature:\s*/i, ''));
-            } else {
-                canonDkimHeader = canonicalizeHeaderSimple('DKIM-Signature', dkimHeaderForSigning.replace(/^DKIM-Signature:\s*/i, ''));
-            }
-            
-            // RFC 6376: No CRLF after the DKIM-Signature header in signing input
-            headerLines.push(canonDkimHeader);
-            
-            // Join with CRLF, but NO trailing CRLF
-            const signingInput = headerLines.join('\r\n');
-            
-            log('info', `Signing input (${signingInput.length} chars):\n${signingInput.replace(/\r/g, '\\r').replace(/\n/g, '\\n\n')}`);
-            
-            return signingInput;
-        }
-
-        async function verifySignature(signingInput, signature, publicKey) {
-            log('info', 'Verifying RSA-SHA256 signature');
-            
-            const encoder = new TextEncoder();
-            const data = encoder.encode(signingInput);
-            const signatureBuffer = base64ToArrayBuffer(signature);
-            
-            try {
-                const isValid = await crypto.subtle.verify(
-                    'RSASSA-PKCS1-v1_5',
-                    publicKey,
-                    signatureBuffer,
-                    data
-                );
-                
-                log(isValid ? 'success' : 'error', `Signature verification: ${isValid ? 'PASS' : 'FAIL'}`);
-                return isValid;
-            } catch (error) {
-                log('error', `Signature verification error: ${error.message}`);
-                return false;
-            }
-        }
-
-        function parseEmail(rawEmail) {
-            log('info', 'Parsing email');
-            
-            // Keep original line endings initially to find the correct header/body split
-            // The header/body separator is a blank line (CRLF CRLF or LF LF)
-            
-            let headerSection, body;
-            
-            // Try CRLF first (proper email format)
-            let splitIndex = rawEmail.indexOf('\r\n\r\n');
-            if (splitIndex !== -1) {
-                headerSection = rawEmail.substring(0, splitIndex);
-                body = rawEmail.substring(splitIndex + 4); // Skip the \r\n\r\n
-                log('info', 'Split on CRLF CRLF');
-            } else {
-                // Try LF only (common in copy/paste)
-                splitIndex = rawEmail.indexOf('\n\n');
-                if (splitIndex !== -1) {
-                    headerSection = rawEmail.substring(0, splitIndex);
-                    body = rawEmail.substring(splitIndex + 2); // Skip the \n\n
-                    log('info', 'Split on LF LF');
-                } else {
-                    // No body found
-                    headerSection = rawEmail;
-                    body = '';
-                    log('warn', 'No header/body separator found');
-                }
-            }
-            
-            log('info', `Header section: ${headerSection.length} chars, Body: ${body.length} chars`);
-            log('info', `Body first 100 chars: ${body.substring(0, 100).replace(/\r/g, '\\r').replace(/\n/g, '\\n')}`);
-            
-            // Normalize header section line endings for parsing
-            headerSection = headerSection.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            
-            // Parse headers (handle folded headers)
-            const headers = [];
-            const headerLines = headerSection.split('\n');
-            let currentHeader = null;
-            
-            for (const line of headerLines) {
-                if (line.match(/^[ \t]/)) {
-                    // Continuation of previous header (folded)
-                    if (currentHeader) {
-                        currentHeader.value += '\r\n' + line; // Use CRLF for folded headers
-                    }
-                } else {
-                    // New header
-                    if (currentHeader) {
-                        headers.push([currentHeader.name, currentHeader.value]);
-                    }
-                    const colonIndex = line.indexOf(':');
-                    if (colonIndex > 0) {
-                        currentHeader = {
-                            name: line.substring(0, colonIndex),
-                            value: line.substring(colonIndex + 1)
-                        };
-                        // Don't trim the value - preserve leading space if any
-                        // RFC 5322 says the value starts after the colon
-                    } else {
-                        currentHeader = null;
-                    }
-                }
-            }
-            if (currentHeader) {
-                headers.push([currentHeader.name, currentHeader.value]);
-            }
-            
-            log('info', `Parsed ${headers.length} headers`);
-            
-            // Find all DKIM-Signature headers
-            const dkimSignatures = [];
-            for (let i = 0; i < headers.length; i++) {
-                if (headers[i][0].toLowerCase() === 'dkim-signature') {
-                    const rawHeader = headers[i][0] + ':' + headers[i][1];
-                    dkimSignatures.push({
-                        index: i,
-                        raw: rawHeader,
-                        parsed: parseDKIMSignature(rawHeader)
-                    });
-                    log('info', `Found DKIM-Signature: ${rawHeader.substring(0, 100)}...`);
-                }
-            }
-            
-            log('info', `Found ${dkimSignatures.length} DKIM-Signature header(s)`);
-            
-            return { headers, body, dkimSignatures };
-        }
-
-        async function verifyDKIMSignature(dkimSig, headers, body) {
-            const tags = dkimSig.parsed;
-            const result = {
-                domain: tags.d || 'unknown',
-                selector: tags.s || 'unknown',
-                tags: tags,
-                rawHeader: dkimSig.raw,
-                status: 'pending',
-                errors: [],
-                details: {}
-            };
-            
-            try {
-                // Validate required tags
-                const requiredTags = ['v', 'a', 'b', 'bh', 'd', 'h', 's'];
-                for (const tag of requiredTags) {
-                    if (!tags[tag]) {
-                        result.errors.push(`Missing required tag: ${tag}`);
-                    }
-                }
-                
-                if (result.errors.length > 0) {
-                    result.status = 'invalid';
-                    return result;
-                }
-                
-                // Check version
-                if (tags.v !== '1') {
-                    result.errors.push(`Unsupported DKIM version: ${tags.v}`);
-                    result.status = 'invalid';
-                    return result;
-                }
-                
-                // Check algorithm
-                if (tags.a !== 'rsa-sha256') {
-                    result.errors.push(`Unsupported algorithm: ${tags.a} (only rsa-sha256 supported)`);
-                    result.status = 'invalid';
-                    return result;
-                }
-                
-                // Parse canonicalization
-                const canon = (tags.c || 'simple/simple').split('/');
-                const headerCanon = canon[0] || 'simple';
-                const bodyCanon = canon[1] || canon[0] || 'simple';
-                result.details.headerCanonicalization = headerCanon;
-                result.details.bodyCanonicalization = bodyCanon;
-                
-                // Fetch DNS record
-                const dnsResult = await fetchDNSRecord(tags.d, tags.s);
-                result.dns = dnsResult;
-                
-                if (!dnsResult.success) {
-                    result.errors.push(`DNS lookup failed: ${dnsResult.error}`);
-                    result.status = 'invalid';
-                    return result;
-                }
-                
-                // Parse DNS record
-                const dnsTags = parseDNSRecord(dnsResult.record);
-                result.dnsTags = dnsTags;
-                
-                if (!dnsTags.p) {
-                    result.errors.push('No public key (p=) in DNS record');
-                    result.status = 'invalid';
-                    return result;
-                }
-                
-                if (dnsTags.p === '') {
-                    result.errors.push('Public key revoked (empty p= tag)');
-                    result.status = 'invalid';
-                    return result;
-                }
-                
-                // Verify body hash
-                const computedBodyHash = await computeBodyHash(body, bodyCanon, tags.l);
-                result.details.computedBodyHash = computedBodyHash;
-                result.details.declaredBodyHash = tags.bh;
-                result.details.bodyHashMatch = computedBodyHash === tags.bh;
-                
-                if (!result.details.bodyHashMatch) {
-                    result.errors.push(`Body hash mismatch: computed ${computedBodyHash}, declared ${tags.bh}`);
-                    
-                    // Try variants to help diagnose
-                    log('info', 'Body hash mismatch - trying variants to diagnose...');
-                    const variants = await tryBodyHashVariants(body, tags.bh, tags.l);
-                    result.details.bodyHashVariants = variants;
-                    
-                    const matchingVariant = variants.find(v => v.match);
-                    if (matchingVariant) {
-                        result.details.matchingVariant = matchingVariant;
-                        log('success', `Found matching variant: ${matchingVariant.name}`);
-                    }
-                }
-                
-                // Import public key
-                const publicKey = await importPublicKey(dnsTags.p);
-                
-                // Build signing input
-                const signingInput = buildSigningInput(headers, tags, dkimSig.raw, headerCanon);
-                result.details.signingInput = signingInput;
-                
-                // Verify signature
-                const signatureValid = await verifySignature(signingInput, tags.b, publicKey);
-                result.details.signatureValid = signatureValid;
-                
-                if (!signatureValid) {
-                    result.errors.push('Signature verification failed');
-                }
-                
-                // Set final status
-                if (result.details.bodyHashMatch && result.details.signatureValid) {
-                    result.status = 'valid';
-                    log('success', `DKIM signature for ${tags.d} is VALID`);
-                } else {
-                    result.status = 'invalid';
-                    log('error', `DKIM signature for ${tags.d} is INVALID`);
-                }
-                
-            } catch (error) {
-                result.errors.push(`Verification error: ${error.message}`);
-                result.status = 'invalid';
-                log('error', `Verification error: ${error.message}`);
-            }
-            
-            return result;
-        }
-
-        async function validateDKIM() {
-            const resultsSection = document.getElementById('resultsSection');
-            const summaryBar = document.getElementById('summaryBar');
-            const container = document.getElementById('signaturesContainer');
-            
-            // Clear previous results
-            debugLogs.length = 0;
-            container.innerHTML = '';
-            summaryBar.innerHTML = '';
-            resultsSection.classList.remove('visible');
-            
-            const emailInput = document.getElementById('emailInput').value.trim();
-            
-            if (!emailInput) {
-                return;
-            }
-            
-            try {
-                log('info', 'Starting DKIM validation');
-                
-                // Parse email
-                const { headers, body, dkimSignatures } = parseEmail(emailInput);
-                
-                if (dkimSignatures.length === 0) {
-                    container.innerHTML = `
-                        <div class="error-message">
-                            No DKIM-Signature headers found in the email.
-                        </div>
-                    `;
-                    resultsSection.classList.add('visible');
-                    renderDebugLog();
-                    return;
-                }
-                
-                // Verify all signatures
-                const results = [];
-                for (const dkimSig of dkimSignatures) {
-                    log('info', `Verifying signature ${results.length + 1} for domain: ${dkimSig.parsed?.d || 'unknown'}`);
-                    const result = await verifyDKIMSignature(dkimSig, headers, body);
-                    results.push(result);
-                }
-                
-                // Render summary
-                const validCount = results.filter(r => r.status === 'valid').length;
-                const invalidCount = results.filter(r => r.status === 'invalid').length;
-                
-                summaryBar.innerHTML = `
-                    <div class="summary-item">
-                        <div class="summary-icon">📧</div>
-                        <div class="summary-content">
-                            <span class="summary-count neutral">${results.length}</span>
-                            <span class="summary-label">Signatures Found</span>
-                        </div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-icon">✓</div>
-                        <div class="summary-content">
-                            <span class="summary-count success">${validCount}</span>
-                            <span class="summary-label">Valid</span>
-                        </div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-icon">✗</div>
-                        <div class="summary-content">
-                            <span class="summary-count error">${invalidCount}</span>
-                            <span class="summary-label">Invalid</span>
-                        </div>
-                    </div>
-                `;
-                
-                // Render signature cards
-                for (let i = 0; i < results.length; i++) {
-                    const result = results[i];
-                    container.innerHTML += renderSignatureCard(result, i + 1);
-                }
-                
-                resultsSection.classList.add('visible');
-                renderDebugLog();
-                
-                // Auto-expand all cards
-                setTimeout(() => {
-                    document.querySelectorAll('.signature-card').forEach(card => {
-                        card.classList.add('expanded');
-                    });
-                }, 100);
-                
-            } catch (error) {
-                log('error', `Validation failed: ${error.message}`);
-                container.innerHTML = `
-                    <div class="error-message">
-                        Validation failed: ${escapeHtml(error.message)}
-                    </div>
-                `;
-                resultsSection.classList.add('visible');
-                renderDebugLog();
-            }
-        }
-
-        function renderSignatureCard(result, index) {
-            const statusClass = result.status === 'valid' ? 'valid' : 'invalid';
-            const statusIcon = result.status === 'valid' ? '✓' : '✗';
-            const statusText = result.status === 'valid' ? 'PASS' : 'FAIL';
-            
-            const tagsHtml = Object.entries(result.tags || {}).map(([name, value]) => {
-                const tagInfo = tagDescriptions[name] || { name: name.toUpperCase(), desc: 'DKIM signature tag' };
-                return `
-                <div class="tag-card" data-tag="${escapeHtml(name)}" data-tag-name="${escapeHtml(tagInfo.name)}" data-tag-desc="${escapeHtml(tagInfo.desc)}" data-tag-value="${escapeHtml(value)}">
-                    <span class="signed-indicator"></span>
-                    <span class="tag-name">${escapeHtml(name)}</span>
-                    <span class="tag-value">${escapeHtml(value.substring(0, 25))}${value.length > 25 ? '…' : ''}</span>
-                    <button class="copy-btn-inline" onclick="event.stopPropagation(); copyTagValue(this, \`${escapeHtml(value.replace(/`/g, '\\`').replace(/\\/g, '\\\\'))}\`)" title="Copy value">⧉</button>
-                </div>
-            `}).join('');
-            
-            const errorsHtml = result.errors.length > 0 ? `
-                <div style="margin-bottom: 1.5rem;">
-                    ${result.errors.map(err => `
-                        <div class="error-message">
-                            ${escapeHtml(err)}
-                        </div>
-                    `).join('')}
-                </div>
-            ` : '';
-            
-            const dnsCommand = result.dns ? 
-                `dig TXT ${result.dns.dnsName}` : 
-                `dig TXT ${result.selector}._domainkey.${result.domain}`;
-            
-            const dnsResultHtml = result.dns ? `
-                <div class="dns-result">
-                    <div class="dns-result-label">DNS Response</div>
-                    ${result.dns.success ? `
-                        <div class="dns-tags-grid">
-                            ${Object.entries(result.dnsTags || {}).map(([name, value]) => {
-                                const dnsInfo = dnsTagDescriptions[name] || { name: name.toUpperCase(), desc: 'DNS record tag' };
-                                return `
-                                <div class="dns-tag" data-tag="${escapeHtml(name)}" data-tag-name="${escapeHtml(dnsInfo.name)}" data-tag-desc="${escapeHtml(dnsInfo.desc)}" data-tag-value="${escapeHtml(value)}">
-                                    <span class="dns-indicator"></span>
-                                    <span class="dns-tag-name">${escapeHtml(name)}</span>
-                                    <span class="dns-tag-value">${escapeHtml(value.substring(0, 20))}${value.length > 20 ? '…' : ''}</span>
-                                    <button class="copy-btn-inline" onclick="event.stopPropagation(); copyTagValue(this, \`${escapeHtml(value.replace(/`/g, '\\`').replace(/\\/g, '\\\\'))}\`)" title="Copy value">⧉</button>
-                                </div>
-                            `}).join('')}
-                        </div>
-                        <div class="dns-raw-response">${escapeHtml(result.dns.record)}</div>
-                    ` : `<div class="dns-result-value" style="color: var(--error);">Error: ${escapeHtml(result.dns.error)}</div>`}
-                </div>
-            ` : '';
-            
-            return `
-                <div class="signature-card ${statusClass}">
-                    <div class="signature-header" onclick="toggleSection(this.parentElement)">
-                        <div class="signature-title">
-                            <div class="signature-number">${index}</div>
-                            <h3>${escapeHtml(result.domain)}</h3>
-                            <span class="status-badge ${statusClass}">
-                                <span>${statusIcon}</span>
-                                ${statusText}
-                            </span>
-                        </div>
-                        <span class="expand-icon">▼</span>
-                    </div>
-                    <div class="signature-content">
-                        <div class="content-inner">
-                            ${errorsHtml}
-                            
-                            <div class="section-title">
-                                <span class="icon">🏷️</span>
-                                DKIM Tags
-                            </div>
-                            <div class="tags-grid">
-                                ${tagsHtml}
-                            </div>
-                            
-                            <div class="section-title">
-                                <span class="icon">🌐</span>
-                                DNS Record
-                            </div>
-                            <div class="dns-section">
-                                <div class="dns-command-wrapper">
-                                    <code class="dns-command">${escapeHtml(dnsCommand)}</code>
-                                    <button class="copy-btn-inline" style="opacity: 1;" onclick="event.stopPropagation(); copyTagValue(this, '${escapeHtml(dnsCommand)}')" title="Copy command">⧉</button>
-                                </div>
-                                ${dnsResultHtml}
-                            </div>
-                            
-                            <div class="section-title">
-                                <span class="icon">🔐</span>
-                                Verification Details
-                            </div>
-                            <div class="verification-details">
-                                <div class="detail-row">
-                                    <span class="detail-label">Algorithm</span>
-                                    <span class="detail-value">${escapeHtml(result.tags?.a || 'N/A')}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Canonicalization</span>
-                                    <span class="detail-value">${escapeHtml(result.details?.headerCanonicalization || 'N/A')}/${escapeHtml(result.details?.bodyCanonicalization || 'N/A')}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Signed Headers</span>
-                                    <span class="detail-value">${escapeHtml(result.tags?.h || 'N/A')}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Body Hash Match</span>
-                                    <span class="detail-value ${result.details?.bodyHashMatch ? 'success' : 'error'}">
-                                        ${result.details?.bodyHashMatch ? '✓ Match' : '✗ Mismatch'}
-                                    </span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Declared Body Hash</span>
-                                    <span class="detail-value">${escapeHtml(result.details?.declaredBodyHash || 'N/A')}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Computed Body Hash</span>
-                                    <span class="detail-value">${escapeHtml(result.details?.computedBodyHash || 'N/A')}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Signature Valid</span>
-                                    <span class="detail-value ${result.details?.signatureValid ? 'success' : 'error'}">
-                                        ${result.details?.signatureValid ? '✓ Valid' : '✗ Invalid'}
-                                    </span>
-                                </div>
-                                ${result.details?.bodyHashVariants ? `
-                                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                                    <div style="color: var(--warning); font-size: 0.8rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
-                                        <span>⚠️</span>
-                                        <span>Body Hash Diagnostic - Tried ${result.details.bodyHashVariants.length} variants</span>
-                                    </div>
-                                    ${result.details.matchingVariant ? `
-                                    <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid var(--success); border-radius: 10px; padding: 0.85rem; margin-bottom: 0.75rem;">
-                                        <div style="color: var(--success); font-weight: 600; margin-bottom: 0.35rem;">✓ Match Found!</div>
-                                        <div style="color: var(--text-secondary); font-size: 0.8rem;">
-                                            Variant: <strong>${escapeHtml(result.details.matchingVariant.name)}</strong><br>
-                                            <span style="opacity: 0.8;">This suggests the email body was modified during copy/paste.</span>
-                                        </div>
-                                    </div>
-                                    ` : `
-                                    <div style="background: rgba(255, 107, 122, 0.1); border: 1px solid var(--error); border-radius: 10px; padding: 0.85rem; margin-bottom: 0.75rem;">
-                                        <div style="color: var(--error); font-weight: 600; margin-bottom: 0.35rem;">✗ No Variant Matched</div>
-                                        <div style="color: var(--text-secondary); font-size: 0.8rem;">
-                                            The body content may have been significantly altered, or this could be a MIME/encoding issue.
-                                        </div>
-                                    </div>
-                                    `}
-                                    <details style="margin-top: 0.5rem;">
-                                        <summary style="color: var(--text-secondary); font-size: 0.75rem; cursor: pointer; padding: 0.5rem; background: var(--glass); border-radius: 8px;">Show all variants tested</summary>
-                                        <div style="margin-top: 0.5rem; max-height: 200px; overflow-y: auto; background: var(--bg-secondary); border-radius: 8px; padding: 0.5rem;">
-                                            ${result.details.bodyHashVariants.map(v => `
-                                                <div style="font-size: 0.72rem; padding: 0.4rem 0.5rem; border-radius: 4px; margin-bottom: 0.25rem; display: flex; justify-content: space-between; gap: 1rem; background: ${v.match ? 'rgba(0, 255, 136, 0.1)' : 'transparent'};">
-                                                    <span style="color: ${v.match ? 'var(--success)' : 'var(--text-dim)'}; font-weight: ${v.match ? '600' : '400'};">${v.match ? '✓' : '✗'} ${escapeHtml(v.name)}</span>
-                                                    <span style="color: var(--text-dim); font-family: 'JetBrains Mono', monospace;">${v.length}b</span>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    </details>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function copyTagValue(btn, value) {
-            copyToClipboard(value);
-            btn.classList.add('copied');
-            const original = btn.textContent;
-            btn.textContent = '✓';
-            setTimeout(() => {
-                btn.classList.remove('copied');
-                btn.textContent = original;
-            }, 2000);
-        }
-
-        // Tag tooltip handling
-        (function() {
-            const tooltip = document.getElementById('tagTooltip');
-            const titleEl = document.getElementById('tooltipTitle');
-            const descEl = document.getElementById('tooltipDesc');
-            const valueEl = document.getElementById('tooltipValue');
-            let hideTimeout;
-
-            document.addEventListener('mouseover', (e) => {
-                const tagEl = e.target.closest('.tag-card, .dns-tag');
-                if (tagEl && !e.target.closest('.copy-btn-inline')) {
-                    clearTimeout(hideTimeout);
-                    
-                    const name = tagEl.dataset.tag;
-                    const tagName = tagEl.dataset.tagName;
-                    const desc = tagEl.dataset.tagDesc;
-                    const value = tagEl.dataset.tagValue;
-                    
-                    titleEl.textContent = `${tagName} (${name}=)`;
-                    descEl.textContent = desc;
-                    valueEl.textContent = value;
-                    
-                    const rect = tagEl.getBoundingClientRect();
-                    
-                    let left = rect.left;
-                    let top = rect.bottom + 8;
-                    
-                    // Keep tooltip in viewport
-                    if (left + 300 > window.innerWidth) {
-                        left = window.innerWidth - 310;
-                    }
-                    if (left < 10) {
-                        left = 10;
-                    }
-                    if (top + 150 > window.innerHeight) {
-                        top = rect.top - 8 - 150;
-                    }
-                    
-                    tooltip.style.left = left + 'px';
-                    tooltip.style.top = top + 'px';
-                    tooltip.classList.add('visible');
-                }
-            });
-
-            document.addEventListener('mouseout', (e) => {
-                const tagEl = e.target.closest('.tag-card, .dns-tag');
-                if (tagEl) {
-                    hideTimeout = setTimeout(() => {
-                        tooltip.classList.remove('visible');
-                    }, 100);
-                }
-            });
-        })();
+        document.getElementById('sigsEl').innerHTML = results.map((r, i) => renderSig(r, i + 1)).join('');
+        document.getElementById('debugLog').innerHTML = renderDebug();
+        document.getElementById('results').classList.add('visible');
+        document.getElementById('status').innerHTML = '';
+        initTooltips();
+    }
     </script>
 </body>
 </html>
