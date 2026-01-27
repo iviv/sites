@@ -224,6 +224,30 @@
         .relay-card.expanded .sig-content { max-height: 2000px; }
         .relay-card.expanded .expand-icon { transform: rotate(180deg); }
 
+        /* DMARC Card */
+        .dmarc-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .dmarc-card.reject { border-color: var(--success); }
+        .dmarc-card.quarantine { border-color: var(--warning); }
+        .dmarc-card.none { border-color: var(--text-secondary); }
+        .dmarc-card.notfound { border-color: var(--error); }
+        .dmarc-card .sig-content { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+        .dmarc-card.expanded .sig-content { max-height: 2000px; }
+        .dmarc-card.expanded .expand-icon { transform: rotate(180deg); }
+
+        /* DMARC Tags */
+        .tag.dmarc-reject .dot { background: var(--success); }
+        .tag.dmarc-reject .tag-name { color: var(--success); }
+        .tag.dmarc-quarantine .dot { background: var(--warning); }
+        .tag.dmarc-quarantine .tag-name { color: var(--warning); }
+        .tag.dmarc-none .dot { background: var(--text-secondary); }
+        .tag.dmarc-none .tag-name { color: var(--text-secondary); }
+
         /* Relay Timeline */
         .relay-timeline { position: relative; padding-left: 24px; }
         .relay-hop {
@@ -478,6 +502,7 @@
             <div class="summary" id="summaryEl"></div>
             <div id="relayEl"></div>
             <div id="spfEl"></div>
+            <div id="dmarcEl"></div>
             <div id="sigsEl"></div>
             <div class="debug" id="debugEl">
                 <div class="debug-header" onclick="this.parentElement.classList.toggle('expanded')">
@@ -543,6 +568,26 @@
         none: { name: 'None', desc: 'No SPF record found', color: 'neutral', icon: '−' },
         permerror: { name: 'PermError', desc: 'Permanent error in SPF evaluation', color: 'error', icon: '!' },
         temperror: { name: 'TempError', desc: 'Temporary error (DNS timeout)', color: 'warning', icon: '⚠' }
+    };
+
+    const DMARC_TAGS = {
+        v: { name: 'Version', desc: 'DMARC version (must be "DMARC1")' },
+        p: { name: 'Policy', desc: 'Policy for the domain (none, quarantine, reject)' },
+        sp: { name: 'Subdomain Policy', desc: 'Policy for subdomains (defaults to p= value)' },
+        pct: { name: 'Percentage', desc: 'Percentage of messages to apply policy (default: 100)' },
+        rua: { name: 'Aggregate Reports', desc: 'URI(s) for aggregate reports' },
+        ruf: { name: 'Forensic Reports', desc: 'URI(s) for forensic/failure reports' },
+        adkim: { name: 'DKIM Alignment', desc: 'DKIM alignment mode (r=relaxed, s=strict)' },
+        aspf: { name: 'SPF Alignment', desc: 'SPF alignment mode (r=relaxed, s=strict)' },
+        fo: { name: 'Failure Options', desc: 'When to generate failure reports (0, 1, d, s)' },
+        rf: { name: 'Report Format', desc: 'Format for failure reports (afrf)' },
+        ri: { name: 'Report Interval', desc: 'Interval between aggregate reports in seconds' }
+    };
+
+    const DMARC_POLICIES = {
+        none: { name: 'None', desc: 'No action taken, monitor only', color: 'warning', icon: '?' },
+        quarantine: { name: 'Quarantine', desc: 'Treat as suspicious (spam folder)', color: 'warning', icon: '⚠' },
+        reject: { name: 'Reject', desc: 'Reject the message outright', color: 'success', icon: '✓' }
     };
 
     // State
@@ -1306,6 +1351,45 @@
         }
     }
 
+    // Fetch DMARC record
+    async function fetchDmarcRecord(domain) {
+        const dmarcDomain = `_dmarc.${domain}`;
+        log('info', `DMARC lookup: ${dmarcDomain}`);
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(dmarcDomain)}&type=TXT`, {
+                headers: { Accept: 'application/dns-json' }
+            });
+            const data = await res.json();
+            if (data.Answer) {
+                for (const a of data.Answer) {
+                    if (a.type === 16) {
+                        const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                        if (record.startsWith('v=DMARC1')) {
+                            log('success', `DMARC found: ${record.slice(0, 80)}...`);
+                            return { ok: true, record, domain, dmarcDomain };
+                        }
+                    }
+                }
+            }
+            log('warn', `No DMARC record found for ${domain}`);
+            return { ok: false, error: 'No DMARC record found', domain, dmarcDomain };
+        } catch (e) {
+            log('error', `DMARC DNS error: ${e.message}`);
+            return { ok: false, error: e.message, domain, dmarcDomain };
+        }
+    }
+
+    // Parse DMARC record into tags
+    function parseDmarcRecord(record) {
+        const tags = {};
+        const re = /([a-z]+)\s*=\s*([^;]+)/gi;
+        let m;
+        while ((m = re.exec(record))) {
+            tags[m[1].toLowerCase()] = m[2].trim();
+        }
+        return tags;
+    }
+
     // Parse SPF record into mechanisms
     function parseSpfRecord(record) {
         const mechanisms = [];
@@ -1762,6 +1846,118 @@
         </div>`;
     }
 
+    // Render DMARC tag
+    function renderDmarcTag(name, value) {
+        const info = DMARC_TAGS[name] || { name: name.toUpperCase(), desc: 'DMARC tag' };
+        let tagClass = '';
+        if (name === 'p' || name === 'sp') {
+            tagClass = `dmarc-${value.toLowerCase()}`;
+        }
+        const short = value.length > 30 ? value.slice(0, 30) + '…' : value;
+        return `<div class="tag ${tagClass}" data-tag="${esc(name)}" data-tag-name="${esc(info.name)}" data-tag-desc="${esc(info.desc)}" data-tag-value="${esc(value)}">
+            <span class="dot"></span>
+            <span class="tag-name">${esc(name)}</span>
+            <span class="tag-value">${esc(short)}</span>
+            <button class="copy-btn" onclick="event.stopPropagation();copy(this,\`${esc(value.replace(/`/g, ''))}\`)">⧉</button>
+        </div>`;
+    }
+
+    // Render DMARC result
+    function renderDmarc(dmarcResult) {
+        if (!dmarcResult) return '';
+
+        const dnsCmd = `dig TXT _dmarc.${dmarcResult.domain}`;
+
+        if (!dmarcResult.ok) {
+            return `<div class="dmarc-card notfound expanded">
+                <div class="sig-header" onclick="toggleCard(this)">
+                    <div class="sig-title">
+                        <span class="sig-num">📋</span>
+                        <span class="sig-domain">DMARC Policy</span>
+                        <span class="badge" style="background:rgba(255,107,122,0.15);color:var(--error)">NOT FOUND</span>
+                    </div>
+                    <span class="expand-icon">▼</span>
+                </div>
+                <div class="sig-content"><div class="sig-body">
+                    <div class="error-msg">${esc(dmarcResult.error)} for ${esc(dmarcResult.domain)}</div>
+                    <div class="sig-section">
+                        <div class="sig-section-title">🌐 DNS Lookup</div>
+                        <div class="dns-cmd">
+                            <code>${esc(dnsCmd)}</code>
+                            <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">⧉</button>
+                        </div>
+                    </div>
+                </div></div>
+            </div>`;
+        }
+
+        const tags = parseDmarcRecord(dmarcResult.record);
+        const policy = tags.p?.toLowerCase() || 'none';
+        const policyInfo = DMARC_POLICIES[policy] || DMARC_POLICIES.none;
+
+        // Determine badge styling
+        let badgeStyle, badgeText;
+        switch (policy) {
+            case 'reject':
+                badgeStyle = 'background:rgba(0,255,136,0.15);color:var(--success)';
+                badgeText = '✓ REJECT';
+                break;
+            case 'quarantine':
+                badgeStyle = 'background:rgba(255,179,71,0.15);color:var(--warning)';
+                badgeText = '⚠ QUARANTINE';
+                break;
+            default:
+                badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
+                badgeText = '? NONE';
+        }
+
+        const dmarcTags = Object.entries(tags).map(([k, v]) => renderDmarcTag(k, v)).join('');
+
+        return `<div class="dmarc-card ${policy} expanded">
+            <div class="sig-header" onclick="toggleCard(this)">
+                <div class="sig-title">
+                    <span class="sig-num">📋</span>
+                    <span class="sig-domain">DMARC Policy</span>
+                    <span class="badge" style="${badgeStyle}">${badgeText}</span>
+                </div>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="sig-content"><div class="sig-body">
+                <div class="sig-section">
+                    <div class="sig-section-title">📊 Policy Details</div>
+                    <div class="details">
+                        <div class="detail-row"><span class="detail-label">Policy</span><span class="detail-value ${policyInfo.color}">${policyInfo.icon} ${policyInfo.name}</span></div>
+                        <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">${esc(policyInfo.desc)}</span></div>
+                        ${tags.sp ? `<div class="detail-row"><span class="detail-label">Subdomain Policy</span><span class="detail-value">${esc(tags.sp)}</span></div>` : ''}
+                        <div class="detail-row"><span class="detail-label">DKIM Alignment</span><span class="detail-value">${tags.adkim === 's' ? 'Strict' : 'Relaxed'}</span></div>
+                        <div class="detail-row"><span class="detail-label">SPF Alignment</span><span class="detail-value">${tags.aspf === 's' ? 'Strict' : 'Relaxed'}</span></div>
+                        ${tags.pct ? `<div class="detail-row"><span class="detail-label">Percentage Applied</span><span class="detail-value">${esc(tags.pct)}%</span></div>` : ''}
+                    </div>
+                </div>
+                <div class="sig-section">
+                    <div class="sig-section-title">🏷️ DMARC Tags</div>
+                    <div class="tags-grid">${dmarcTags}</div>
+                </div>
+                ${tags.rua || tags.ruf ? `<div class="sig-section">
+                    <div class="sig-section-title">📬 Reporting</div>
+                    <div class="details">
+                        ${tags.rua ? `<div class="detail-row"><span class="detail-label">Aggregate Reports</span><span class="detail-value" style="word-break:break-all">${esc(tags.rua)}</span></div>` : ''}
+                        ${tags.ruf ? `<div class="detail-row"><span class="detail-label">Forensic Reports</span><span class="detail-value" style="word-break:break-all">${esc(tags.ruf)}</span></div>` : ''}
+                        ${tags.ri ? `<div class="detail-row"><span class="detail-label">Report Interval</span><span class="detail-value">${esc(tags.ri)} seconds</span></div>` : ''}
+                    </div>
+                </div>` : ''}
+                <div class="sig-section">
+                    <div class="sig-section-title">🌐 DNS Record</div>
+                    <div class="dns-cmd">
+                        <code>${esc(dnsCmd)}</code>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">⧉</button>
+                    </div>
+                    <div class="dns-raw">${esc(dmarcResult.record)}</div>
+                </div>
+            </div></div>
+        </div>`;
+    }
+
     // Initialize tooltips on all tags in the results
     function initTooltips() {
         document.querySelectorAll('#results .tag').forEach(tag => {
@@ -1811,6 +2007,13 @@
             log('warn', 'Could not extract mail domain for SPF check');
         }
         document.getElementById('spfEl').innerHTML = spfEvalResult ? renderSpfEvaluation(spfEvalResult) : '<div class="error-msg">Could not determine sender domain for SPF lookup</div>';
+
+        // DMARC check
+        let dmarcResult = null;
+        if (mailDomain) {
+            dmarcResult = await fetchDmarcRecord(mailDomain);
+        }
+        document.getElementById('dmarcEl').innerHTML = dmarcResult ? renderDmarc(dmarcResult) : '';
 
         // Determine SPF summary display
         const spfSummaryClass = spfEvalResult?.result === 'pass' ? 'success' : (spfEvalResult?.result === 'fail' || spfEvalResult?.result === 'permerror' ? 'error' : 'warning');
