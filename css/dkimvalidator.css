@@ -97,6 +97,24 @@ h1 {
     backdrop-filter: blur(20px);
 }
 .input-section:focus-within { border-color: var(--accent); box-shadow: 0 0 30px var(--accent-glow); }
+.input-section.drag-over {
+    border-color: var(--accent);
+    border-style: dashed;
+    box-shadow: 0 0 40px var(--accent-glow);
+    background: rgba(0, 255, 136, 0.05);
+}
+.input-section.drag-over::after {
+    content: '\uD83D\uDCC2 Drop email file here';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.2rem;
+    color: var(--accent);
+    font-weight: 600;
+    pointer-events: none;
+}
+.input-section { position: relative; }
 .input-label { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; margin-bottom: 0.75rem; }
 textarea {
     width: 100%;
@@ -242,6 +260,63 @@ textarea::placeholder { color: var(--text-dim); }
 .tag.dmarc-quarantine .tag-name { color: var(--warning); }
 .tag.dmarc-none .dot { background: var(--text-secondary); }
 .tag.dmarc-none .tag-name { color: var(--text-secondary); }
+
+/* BIMI Card */
+.bimi-card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+.bimi-card.pass { border-color: var(--success); }
+.bimi-card.notfound { border-color: var(--text-secondary); }
+.bimi-card .sig-content { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+.bimi-card.expanded .sig-content { max-height: 2000px; }
+.bimi-card.expanded .expand-icon { transform: rotate(180deg); }
+.bimi-logo-preview {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+}
+
+/* MTA-STS Card */
+.mta-sts-card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+.mta-sts-card.enforce { border-color: var(--success); }
+.mta-sts-card.testing { border-color: var(--warning); }
+.mta-sts-card.none, .mta-sts-card.notfound { border-color: var(--text-secondary); }
+.mta-sts-card .sig-content { max-height: 0; overflow: hidden; transition: max-height 0.4s; }
+.mta-sts-card.expanded .sig-content { max-height: 2000px; }
+.mta-sts-card.expanded .expand-icon { transform: rotate(180deg); }
+
+/* Info message (neutral) */
+.info-msg {
+    background: rgba(139,148,158,0.1);
+    border-left: 3px solid var(--text-secondary);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Raw record display */
+.raw-record {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    background: var(--bg-secondary);
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-top: 0.5rem;
+    word-break: break-all;
+    color: var(--text-secondary);
+}
 
 /* SPF Trace */
 .spf-trace {

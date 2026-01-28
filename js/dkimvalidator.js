@@ -122,6 +122,20 @@ const ARC_CV_STATUS = {
     fail: { name: 'Fail', desc: 'Previous ARC set validation failed [RFC 8617 §4.1]', color: 'error', icon: '\u2717' }
 };
 
+// BIMI (Brand Indicators for Message Identification) - draft-brand-indicators-for-message-identification
+const BIMI_TAGS = {
+    v: { name: 'Version', desc: 'BIMI version (must be "BIMI1") [BIMI spec]' },
+    l: { name: 'Logo Location', desc: 'HTTPS URL to SVG logo file [BIMI spec]' },
+    a: { name: 'Authority', desc: 'URL to Verified Mark Certificate (VMC) [BIMI spec]' }
+};
+
+// MTA-STS (Mail Transfer Agent Strict Transport Security) - RFC 8461
+const MTA_STS_MODES = {
+    enforce: { name: 'Enforce', desc: 'Require TLS; reject on failure [RFC 8461 §5]', color: 'success', icon: '\u2713' },
+    testing: { name: 'Testing', desc: 'Report TLS failures but deliver anyway [RFC 8461 §5]', color: 'warning', icon: '~' },
+    none: { name: 'None', desc: 'MTA-STS is disabled [RFC 8461 §5]', color: 'neutral', icon: '\u2212' }
+};
+
 // ============================================================================
 // State
 // ============================================================================
@@ -1033,6 +1047,422 @@ function parseDmarcRecord(record) {
     return parseTagValuePairs(record);
 }
 
+/**
+ * Check DKIM alignment for DMARC
+ * @param {string} fromDomain - Domain from the From header
+ * @param {string} dkimDomain - Domain from DKIM d= tag
+ * @param {string} mode - Alignment mode: 'r' (relaxed) or 's' (strict)
+ * @returns {{aligned: boolean, mode: string, fromDomain: string, dkimDomain: string}}
+ */
+function checkDkimAlignment(fromDomain, dkimDomain, mode = 'r') {
+    if (!fromDomain || !dkimDomain) {
+        return { aligned: false, mode, fromDomain, dkimDomain, reason: 'Missing domain' };
+    }
+
+    const from = fromDomain.toLowerCase();
+    const dkim = dkimDomain.toLowerCase();
+
+    if (mode === 's') {
+        // Strict: exact match required
+        const aligned = from === dkim;
+        return { aligned, mode: 'strict', fromDomain: from, dkimDomain: dkim };
+    } else {
+        // Relaxed: organizational domain match (same root domain)
+        const fromOrg = getOrganizationalDomain(from);
+        const dkimOrg = getOrganizationalDomain(dkim);
+        const aligned = fromOrg === dkimOrg;
+        return { aligned, mode: 'relaxed', fromDomain: from, dkimDomain: dkim, fromOrg, dkimOrg };
+    }
+}
+
+/**
+ * Check SPF alignment for DMARC
+ * @param {string} fromDomain - Domain from the From header
+ * @param {string} mailFromDomain - Domain from Return-Path/envelope sender
+ * @param {string} mode - Alignment mode: 'r' (relaxed) or 's' (strict)
+ * @returns {{aligned: boolean, mode: string, fromDomain: string, mailFromDomain: string}}
+ */
+function checkSpfAlignment(fromDomain, mailFromDomain, mode = 'r') {
+    if (!fromDomain || !mailFromDomain) {
+        return { aligned: false, mode, fromDomain, mailFromDomain, reason: 'Missing domain' };
+    }
+
+    const from = fromDomain.toLowerCase();
+    const mailFrom = mailFromDomain.toLowerCase();
+
+    if (mode === 's') {
+        // Strict: exact match required
+        const aligned = from === mailFrom;
+        return { aligned, mode: 'strict', fromDomain: from, mailFromDomain: mailFrom };
+    } else {
+        // Relaxed: organizational domain match
+        const fromOrg = getOrganizationalDomain(from);
+        const mailFromOrg = getOrganizationalDomain(mailFrom);
+        const aligned = fromOrg === mailFromOrg;
+        return { aligned, mode: 'relaxed', fromDomain: from, mailFromDomain: mailFrom, fromOrg, mailFromOrg };
+    }
+}
+
+/**
+ * Get the organizational domain (registrable domain) from a hostname
+ * This is a simplified implementation - production would use Public Suffix List
+ * @param {string} domain - Full domain name
+ * @returns {string} Organizational domain
+ */
+function getOrganizationalDomain(domain) {
+    const parts = domain.split('.');
+    if (parts.length <= 2) return domain;
+
+    // Handle common multi-part TLDs
+    const multiPartTlds = ['co.uk', 'com.au', 'co.nz', 'co.jp', 'com.br', 'co.za', 'org.uk', 'net.au'];
+    const lastTwo = parts.slice(-2).join('.');
+
+    if (multiPartTlds.includes(lastTwo)) {
+        return parts.slice(-3).join('.');
+    }
+
+    return parts.slice(-2).join('.');
+}
+
+/**
+ * Evaluate DMARC policy based on DKIM and SPF results
+ * @param {Object} params - Evaluation parameters
+ * @returns {Object} DMARC evaluation result
+ */
+function evaluateDmarc(params) {
+    const { fromDomain, dkimResults, spfResult, dmarcRecord } = params;
+
+    if (!dmarcRecord || !dmarcRecord.ok) {
+        return { result: 'none', reason: 'No DMARC record found' };
+    }
+
+    const tags = parseDmarcRecord(dmarcRecord.record);
+    const adkim = tags.adkim || 'r';
+    const aspf = tags.aspf || 'r';
+    const policy = tags.p || 'none';
+
+    // Check DKIM alignment
+    let dkimAligned = false;
+    const dkimAlignments = [];
+    for (const dkim of (dkimResults || [])) {
+        if (dkim.status === 'valid') {
+            const alignment = checkDkimAlignment(fromDomain, dkim.domain, adkim);
+            dkimAlignments.push(alignment);
+            if (alignment.aligned) {
+                dkimAligned = true;
+            }
+        }
+    }
+
+    // Check SPF alignment
+    const spfAligned = spfResult?.result === 'pass' &&
+        checkSpfAlignment(fromDomain, spfResult.domain, aspf).aligned;
+
+    // DMARC passes if either DKIM or SPF is aligned
+    const pass = dkimAligned || spfAligned;
+
+    return {
+        result: pass ? 'pass' : 'fail',
+        policy,
+        dkimAligned,
+        spfAligned,
+        dkimAlignments,
+        adkim,
+        aspf,
+        reason: pass
+            ? `${dkimAligned ? 'DKIM' : ''}${dkimAligned && spfAligned ? ' and ' : ''}${spfAligned ? 'SPF' : ''} aligned`
+            : 'Neither DKIM nor SPF aligned with From domain'
+    };
+}
+
+// ============================================================================
+// BIMI (Brand Indicators for Message Identification)
+// ============================================================================
+
+/**
+ * Fetch BIMI record for a domain
+ * @param {string} domain - Domain to lookup
+ * @returns {Promise<{ok: boolean, record?: string, l?: string, a?: string, error?: string}>}
+ */
+async function fetchBimiRecord(domain) {
+    const bimiDomain = `default._bimi.${domain}`;
+    log('info', `BIMI lookup: ${bimiDomain}`);
+
+    try {
+        const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(bimiDomain)}&type=TXT`, {
+            headers: { Accept: 'application/dns-json' }
+        });
+        const data = await res.json();
+        if (data.Answer) {
+            for (const a of data.Answer) {
+                if (a.type === 16) {
+                    const record = cleanDnsRecord(a.data);
+                    if (record.startsWith('v=BIMI1')) {
+                        log('success', `BIMI found: ${record.slice(0, 80)}...`);
+                        const tags = parseTagValuePairs(record);
+                        return { ok: true, record, domain, l: tags.l, a: tags.a };
+                    }
+                }
+            }
+        }
+        log('info', `No BIMI record found for ${domain}`);
+        return { ok: false, error: 'No BIMI record found', domain };
+    } catch (e) {
+        log('error', `BIMI DNS error: ${e.message}`);
+        return { ok: false, error: e.message, domain };
+    }
+}
+
+/**
+ * Render BIMI section
+ * @param {Object} bimiResult - BIMI lookup result
+ * @returns {string} HTML string
+ */
+function renderBimi(bimiResult) {
+    if (!bimiResult) return '';
+
+    const dnsCmd = `dig TXT default._bimi.${bimiResult.domain}`;
+
+    if (!bimiResult.ok) {
+        return `<div class="bimi-card notfound">
+            <div class="sig-header" onclick="toggleCard(this)">
+                <div class="sig-title">
+                    <span class="sig-num">\uD83C\uDFF7\uFE0F</span>
+                    <span class="sig-domain">BIMI (Brand Logo)</span>
+                    <span class="badge" style="background:rgba(139,148,158,0.15);color:var(--text-secondary)">\u2212 NONE</span>
+                </div>
+                <span class="expand-icon">\u25BC</span>
+            </div>
+            <div class="sig-content"><div class="sig-body">
+                <div class="info-msg">No BIMI record found for ${esc(bimiResult.domain)}</div>
+                <div class="sig-section">
+                    <div class="sig-section-title">\uD83C\uDF10 DNS Lookup</div>
+                    <div class="dns-cmd">
+                        <code>${esc(dnsCmd)}</code>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">&#x29C9;</button>
+                    </div>
+                </div>
+            </div></div>
+        </div>`;
+    }
+
+    const logoUrl = bimiResult.l || '';
+    const vmcUrl = bimiResult.a || '';
+
+    return `<div class="bimi-card pass expanded">
+        <div class="sig-header" onclick="toggleCard(this)">
+            <div class="sig-title">
+                <span class="sig-num">\uD83C\uDFF7\uFE0F</span>
+                <span class="sig-domain">BIMI (Brand Logo)</span>
+                <span class="badge" style="background:rgba(0,255,136,0.15);color:var(--success)">\u2713 FOUND</span>
+            </div>
+            <span class="expand-icon">\u25BC</span>
+        </div>
+        <div class="sig-content"><div class="sig-body">
+            <div class="sig-section">
+                <div class="sig-section-title">\uD83D\uDCCA BIMI Details</div>
+                <div class="details">
+                    <div class="detail-row"><span class="detail-label">Logo URL</span><span class="detail-value" style="word-break:break-all">${logoUrl ? `<a href="${esc(logoUrl)}" target="_blank" style="color:var(--accent)">${esc(logoUrl)}</a>` : '<span style="color:var(--text-dim)">Not specified</span>'}</span></div>
+                    <div class="detail-row"><span class="detail-label">VMC (Certificate)</span><span class="detail-value" style="word-break:break-all">${vmcUrl ? `<a href="${esc(vmcUrl)}" target="_blank" style="color:var(--accent)">${esc(vmcUrl)}</a>` : '<span style="color:var(--text-dim)">Not specified</span>'}</span></div>
+                </div>
+            </div>
+            ${logoUrl ? `<div class="sig-section">
+                <div class="sig-section-title">\uD83D\uDDBC\uFE0F Logo Preview</div>
+                <div class="bimi-logo-preview">
+                    <img src="${esc(logoUrl)}" alt="BIMI Logo" onerror="this.parentElement.innerHTML='<span class=\\'error-msg\\'>Could not load logo</span>'" style="max-width:100px;max-height:100px;background:white;padding:8px;border-radius:8px;">
+                </div>
+            </div>` : ''}
+            <div class="sig-section">
+                <div class="sig-section-title">\uD83C\uDF10 DNS Record</div>
+                <div class="dns-cmd">
+                    <code>${esc(dnsCmd)}</code>
+                    <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">&#x29C9;</button>
+                </div>
+                <div class="raw-record">${esc(bimiResult.record)}</div>
+            </div>
+        </div></div>
+    </div>`;
+}
+
+// ============================================================================
+// MTA-STS (Mail Transfer Agent Strict Transport Security)
+// ============================================================================
+
+/**
+ * Fetch MTA-STS record and policy for a domain
+ * @param {string} domain - Domain to lookup
+ * @returns {Promise<{ok: boolean, record?: string, policy?: Object, error?: string}>}
+ */
+async function fetchMtaStsRecord(domain) {
+    const stsDomain = `_mta-sts.${domain}`;
+    log('info', `MTA-STS lookup: ${stsDomain}`);
+
+    try {
+        // First, fetch the DNS TXT record
+        const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(stsDomain)}&type=TXT`, {
+            headers: { Accept: 'application/dns-json' }
+        });
+        const data = await res.json();
+
+        let stsRecord = null;
+        if (data.Answer) {
+            for (const a of data.Answer) {
+                if (a.type === 16) {
+                    const record = cleanDnsRecord(a.data);
+                    if (record.startsWith('v=STSv1')) {
+                        stsRecord = record;
+                        log('success', `MTA-STS record found: ${record}`);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!stsRecord) {
+            log('info', `No MTA-STS record found for ${domain}`);
+            return { ok: false, error: 'No MTA-STS record found', domain };
+        }
+
+        // Parse the record
+        const tags = parseTagValuePairs(stsRecord);
+
+        // Try to fetch the policy file
+        let policy = null;
+        try {
+            const policyUrl = `https://mta-sts.${domain}/.well-known/mta-sts.txt`;
+            log('info', `Fetching MTA-STS policy: ${policyUrl}`);
+            const policyRes = await fetch(policyUrl);
+            if (policyRes.ok) {
+                const policyText = await policyRes.text();
+                policy = parseMtaStsPolicy(policyText);
+                log('success', `MTA-STS policy fetched: mode=${policy.mode}`);
+            } else {
+                log('warn', `Could not fetch MTA-STS policy: ${policyRes.status}`);
+            }
+        } catch (e) {
+            log('warn', `MTA-STS policy fetch error: ${e.message}`);
+        }
+
+        return { ok: true, record: stsRecord, domain, id: tags.id, policy };
+    } catch (e) {
+        log('error', `MTA-STS DNS error: ${e.message}`);
+        return { ok: false, error: e.message, domain };
+    }
+}
+
+/**
+ * Parse MTA-STS policy file
+ * @param {string} policyText - Raw policy text
+ * @returns {Object} Parsed policy
+ */
+function parseMtaStsPolicy(policyText) {
+    const policy = { mode: 'none', mx: [], max_age: 0 };
+    const lines = policyText.split('\n');
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('version:')) {
+            policy.version = trimmed.split(':')[1]?.trim();
+        } else if (trimmed.startsWith('mode:')) {
+            policy.mode = trimmed.split(':')[1]?.trim().toLowerCase();
+        } else if (trimmed.startsWith('mx:')) {
+            policy.mx.push(trimmed.split(':')[1]?.trim());
+        } else if (trimmed.startsWith('max_age:')) {
+            policy.max_age = parseInt(trimmed.split(':')[1]?.trim(), 10) || 0;
+        }
+    }
+
+    return policy;
+}
+
+/**
+ * Render MTA-STS section
+ * @param {Object} stsResult - MTA-STS lookup result
+ * @returns {string} HTML string
+ */
+function renderMtaSts(stsResult) {
+    if (!stsResult) return '';
+
+    const dnsCmd = `dig TXT _mta-sts.${stsResult.domain}`;
+
+    if (!stsResult.ok) {
+        return `<div class="mta-sts-card notfound">
+            <div class="sig-header" onclick="toggleCard(this)">
+                <div class="sig-title">
+                    <span class="sig-num">\uD83D\uDD12</span>
+                    <span class="sig-domain">MTA-STS (TLS Policy)</span>
+                    <span class="badge" style="background:rgba(139,148,158,0.15);color:var(--text-secondary)">\u2212 NONE</span>
+                </div>
+                <span class="expand-icon">\u25BC</span>
+            </div>
+            <div class="sig-content"><div class="sig-body">
+                <div class="info-msg">No MTA-STS record found for ${esc(stsResult.domain)}</div>
+                <div class="sig-section">
+                    <div class="sig-section-title">\uD83C\uDF10 DNS Lookup</div>
+                    <div class="dns-cmd">
+                        <code>${esc(dnsCmd)}</code>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">&#x29C9;</button>
+                    </div>
+                </div>
+            </div></div>
+        </div>`;
+    }
+
+    const policy = stsResult.policy;
+    const mode = policy?.mode || 'unknown';
+    const modeInfo = MTA_STS_MODES[mode] || MTA_STS_MODES.none;
+
+    let badgeStyle, badgeText;
+    if (mode === 'enforce') {
+        badgeStyle = 'background:rgba(0,255,136,0.15);color:var(--success)';
+        badgeText = '\u2713 ENFORCE';
+    } else if (mode === 'testing') {
+        badgeStyle = 'background:rgba(255,179,71,0.15);color:var(--warning)';
+        badgeText = '~ TESTING';
+    } else {
+        badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
+        badgeText = '? ' + mode.toUpperCase();
+    }
+
+    const maxAgeDays = policy?.max_age ? Math.round(policy.max_age / 86400) : 0;
+
+    return `<div class="mta-sts-card ${mode} expanded">
+        <div class="sig-header" onclick="toggleCard(this)">
+            <div class="sig-title">
+                <span class="sig-num">\uD83D\uDD12</span>
+                <span class="sig-domain">MTA-STS (TLS Policy)</span>
+                <span class="badge" style="${badgeStyle}">${badgeText}</span>
+            </div>
+            <span class="expand-icon">\u25BC</span>
+        </div>
+        <div class="sig-content"><div class="sig-body">
+            <div class="sig-section">
+                <div class="sig-section-title">\uD83D\uDCCA Policy Details</div>
+                <div class="details">
+                    <div class="detail-row"><span class="detail-label">Mode</span><span class="detail-value ${modeInfo.color}">${modeInfo.icon} ${modeInfo.name}</span></div>
+                    <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">${esc(modeInfo.desc)}</span></div>
+                    ${policy?.max_age ? `<div class="detail-row"><span class="detail-label">Max Age</span><span class="detail-value">${policy.max_age}s (${maxAgeDays} days)</span></div>` : ''}
+                    ${stsResult.id ? `<div class="detail-row"><span class="detail-label">Policy ID</span><span class="detail-value">${esc(stsResult.id)}</span></div>` : ''}
+                </div>
+            </div>
+            ${policy?.mx?.length ? `<div class="sig-section">
+                <div class="sig-section-title">\uD83D\uDCE7 Authorized MX Hosts</div>
+                <div class="details">
+                    ${policy.mx.map(mx => `<div class="detail-row"><span class="detail-label">MX</span><span class="detail-value" style="color:var(--accent)">${esc(mx)}</span></div>`).join('')}
+                </div>
+            </div>` : ''}
+            <div class="sig-section">
+                <div class="sig-section-title">\uD83C\uDF10 DNS Record</div>
+                <div class="dns-cmd">
+                    <code>${esc(dnsCmd)}</code>
+                    <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copy(this,'${esc(dnsCmd)}')">&#x29C9;</button>
+                </div>
+                <div class="raw-record">${esc(stsResult.record)}</div>
+            </div>
+        </div></div>
+    </div>`;
+}
+
 // ============================================================================
 // ARC (Authenticated Received Chain)
 // ============================================================================
@@ -1903,6 +2333,20 @@ async function validate() {
     }
     document.getElementById('dmarcEl').innerHTML = dmarcResult ? renderDmarc(dmarcResult) : '';
 
+    // BIMI lookup
+    let bimiResult = null;
+    if (mailDomain) {
+        bimiResult = await fetchBimiRecord(mailDomain);
+    }
+    document.getElementById('bimiEl').innerHTML = bimiResult ? renderBimi(bimiResult) : '';
+
+    // MTA-STS lookup
+    let mtaStsResult = null;
+    if (mailDomain) {
+        mtaStsResult = await fetchMtaStsRecord(mailDomain);
+    }
+    document.getElementById('mtaStsEl').innerHTML = mtaStsResult ? renderMtaSts(mtaStsResult) : '';
+
     const arcSets = parseArcHeaders(headers);
     document.getElementById('arcEl').innerHTML = renderArc(arcSets);
     if (arcSets.length > 0) {
@@ -1977,6 +2421,70 @@ if (typeof document !== 'undefined') {
             document.getElementById('status').innerHTML = '<div class="spinner"></div> Validating...';
             validateTimeout = setTimeout(validate, 400);
         });
+
+        // Drag & Drop support for .eml files
+        const inputSection = document.querySelector('.input-section');
+        const textarea = document.getElementById('input');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            inputSection.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            inputSection.addEventListener(eventName, () => {
+                inputSection.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            inputSection.addEventListener(eventName, () => {
+                inputSection.classList.remove('drag-over');
+            }, false);
+        });
+
+        inputSection.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                handleFiles(files);
+            }
+        }
+
+        function handleFiles(files) {
+            const file = files[0];
+            const validExtensions = ['.eml', '.txt', '.msg'];
+            const fileName = file.name.toLowerCase();
+            const isValidExt = validExtensions.some(ext => fileName.endsWith(ext));
+
+            if (!isValidExt && !file.type.includes('text') && !file.type.includes('message')) {
+                showToast('Please drop an email file (.eml, .txt)');
+                return;
+            }
+
+            document.getElementById('status').innerHTML = '<div class="spinner"></div> Reading file...';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                textarea.value = e.target.result;
+                document.getElementById('status').innerHTML = '<div class="spinner"></div> Validating...';
+                clearTimeout(validateTimeout);
+                validateTimeout = setTimeout(validate, 100);
+                showToast(`Loaded: ${file.name}`);
+            };
+            reader.onerror = function() {
+                document.getElementById('status').innerHTML = '';
+                showToast('Error reading file');
+            };
+            reader.readAsText(file);
+        }
     });
 }
 
@@ -1997,6 +2505,7 @@ if (typeof module !== 'undefined' && module.exports) {
         parseArcTags,
         parseArcAuthResults,
         parseRelayChain,
+        parseMtaStsPolicy,
 
         // Canonicalization
         canonHeaderRelaxed,
@@ -2015,6 +2524,12 @@ if (typeof module !== 'undefined' && module.exports) {
         extractMailDomain,
         extractSenderIP,
 
+        // DMARC Alignment
+        checkDkimAlignment,
+        checkSpfAlignment,
+        getOrganizationalDomain,
+        evaluateDmarc,
+
         // Utilities
         esc,
         formatLatency,
@@ -2031,6 +2546,8 @@ if (typeof module !== 'undefined' && module.exports) {
         ARC_SEAL_TAGS,
         ARC_MESSAGE_TAGS,
         ARC_AUTH_TAGS,
-        ARC_CV_STATUS
+        ARC_CV_STATUS,
+        BIMI_TAGS,
+        MTA_STS_MODES
     };
 }

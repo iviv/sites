@@ -14,6 +14,7 @@ const {
     parseArcTags,
     parseArcAuthResults,
     parseRelayChain,
+    parseMtaStsPolicy,
 
     // Canonicalization
     canonHeaderRelaxed,
@@ -32,6 +33,12 @@ const {
     extractMailDomain,
     extractSenderIP,
 
+    // DMARC Alignment
+    checkDkimAlignment,
+    checkSpfAlignment,
+    getOrganizationalDomain,
+    evaluateDmarc,
+
     // Utilities
     esc,
     formatLatency,
@@ -44,7 +51,9 @@ const {
     SPF_QUALIFIERS,
     SPF_RESULTS,
     DMARC_TAGS,
-    DMARC_POLICIES
+    DMARC_POLICIES,
+    BIMI_TAGS,
+    MTA_STS_MODES
 } = require('./dkimvalidator.js');
 
 // ============================================================================
@@ -720,5 +729,159 @@ describe('Constants', () => {
         expect(DMARC_POLICIES.none).toBeDefined();
         expect(DMARC_POLICIES.quarantine).toBeDefined();
         expect(DMARC_POLICIES.reject).toBeDefined();
+    });
+
+    test('BIMI_TAGS has expected tags', () => {
+        expect(BIMI_TAGS.v).toBeDefined();
+        expect(BIMI_TAGS.l).toBeDefined();
+        expect(BIMI_TAGS.a).toBeDefined();
+    });
+
+    test('MTA_STS_MODES has all modes', () => {
+        expect(MTA_STS_MODES.enforce).toBeDefined();
+        expect(MTA_STS_MODES.testing).toBeDefined();
+        expect(MTA_STS_MODES.none).toBeDefined();
+    });
+});
+
+// ============================================================================
+// DMARC Alignment Tests
+// ============================================================================
+
+describe('getOrganizationalDomain', () => {
+    test('returns domain for two-part domains', () => {
+        expect(getOrganizationalDomain('example.com')).toBe('example.com');
+    });
+
+    test('extracts org domain from subdomain', () => {
+        expect(getOrganizationalDomain('mail.example.com')).toBe('example.com');
+        expect(getOrganizationalDomain('sub.mail.example.com')).toBe('example.com');
+    });
+
+    test('handles multi-part TLDs', () => {
+        expect(getOrganizationalDomain('mail.example.co.uk')).toBe('example.co.uk');
+        expect(getOrganizationalDomain('sub.mail.example.co.uk')).toBe('example.co.uk');
+    });
+});
+
+describe('checkDkimAlignment', () => {
+    test('strict alignment requires exact match', () => {
+        const result = checkDkimAlignment('example.com', 'example.com', 's');
+        expect(result.aligned).toBe(true);
+        expect(result.mode).toBe('strict');
+    });
+
+    test('strict alignment fails for subdomains', () => {
+        const result = checkDkimAlignment('example.com', 'mail.example.com', 's');
+        expect(result.aligned).toBe(false);
+    });
+
+    test('relaxed alignment allows subdomain match', () => {
+        const result = checkDkimAlignment('example.com', 'mail.example.com', 'r');
+        expect(result.aligned).toBe(true);
+        expect(result.mode).toBe('relaxed');
+    });
+
+    test('relaxed alignment fails for different domains', () => {
+        const result = checkDkimAlignment('example.com', 'other.com', 'r');
+        expect(result.aligned).toBe(false);
+    });
+
+    test('handles missing domains', () => {
+        const result = checkDkimAlignment(null, 'example.com', 'r');
+        expect(result.aligned).toBe(false);
+    });
+});
+
+describe('checkSpfAlignment', () => {
+    test('strict alignment requires exact match', () => {
+        const result = checkSpfAlignment('example.com', 'example.com', 's');
+        expect(result.aligned).toBe(true);
+        expect(result.mode).toBe('strict');
+    });
+
+    test('relaxed alignment allows subdomain match', () => {
+        const result = checkSpfAlignment('example.com', 'mail.example.com', 'r');
+        expect(result.aligned).toBe(true);
+        expect(result.mode).toBe('relaxed');
+    });
+});
+
+describe('evaluateDmarc', () => {
+    test('passes when DKIM is aligned', () => {
+        const result = evaluateDmarc({
+            fromDomain: 'example.com',
+            dkimResults: [{ status: 'valid', domain: 'example.com' }],
+            spfResult: { result: 'fail', domain: 'other.com' },
+            dmarcRecord: { ok: true, record: 'v=DMARC1; p=reject' }
+        });
+        expect(result.result).toBe('pass');
+        expect(result.dkimAligned).toBe(true);
+    });
+
+    test('passes when SPF is aligned', () => {
+        const result = evaluateDmarc({
+            fromDomain: 'example.com',
+            dkimResults: [{ status: 'invalid', domain: 'example.com' }],
+            spfResult: { result: 'pass', domain: 'example.com' },
+            dmarcRecord: { ok: true, record: 'v=DMARC1; p=reject' }
+        });
+        expect(result.result).toBe('pass');
+        expect(result.spfAligned).toBe(true);
+    });
+
+    test('fails when neither is aligned', () => {
+        const result = evaluateDmarc({
+            fromDomain: 'example.com',
+            dkimResults: [{ status: 'valid', domain: 'other.com' }],
+            spfResult: { result: 'pass', domain: 'other.com' },
+            dmarcRecord: { ok: true, record: 'v=DMARC1; p=reject' }
+        });
+        expect(result.result).toBe('fail');
+    });
+
+    test('returns none when no DMARC record', () => {
+        const result = evaluateDmarc({
+            fromDomain: 'example.com',
+            dkimResults: [],
+            spfResult: null,
+            dmarcRecord: { ok: false }
+        });
+        expect(result.result).toBe('none');
+    });
+});
+
+// ============================================================================
+// MTA-STS Parsing Tests
+// ============================================================================
+
+describe('parseMtaStsPolicy', () => {
+    test('parses enforce mode policy', () => {
+        const policy = parseMtaStsPolicy(`version: STSv1
+mode: enforce
+mx: mail.example.com
+mx: backup.example.com
+max_age: 604800`);
+
+        expect(policy.version).toBe('STSv1');
+        expect(policy.mode).toBe('enforce');
+        expect(policy.mx).toEqual(['mail.example.com', 'backup.example.com']);
+        expect(policy.max_age).toBe(604800);
+    });
+
+    test('parses testing mode policy', () => {
+        const policy = parseMtaStsPolicy(`version: STSv1
+mode: testing
+mx: *.example.com
+max_age: 86400`);
+
+        expect(policy.mode).toBe('testing');
+        expect(policy.mx).toContain('*.example.com');
+    });
+
+    test('handles empty policy', () => {
+        const policy = parseMtaStsPolicy('');
+        expect(policy.mode).toBe('none');
+        expect(policy.mx).toEqual([]);
     });
 });
