@@ -169,9 +169,18 @@ function closeHelp() {
 // ============================================================================
 
 function esc(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
+    if (typeof document !== 'undefined') {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+    // Node.js fallback for testing
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function log(type, msg) {
@@ -1995,30 +2004,33 @@ async function validate() {
 // Event Listeners and Initialization
 // ============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    initTheme();
-    Tooltip.init();
+// Only run DOM initialization in browser environment
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initTheme();
+        Tooltip.init();
 
-    // Close help modal on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && document.getElementById('helpModal').classList.contains('visible')) {
-            closeHelp();
-        }
-    });
+        // Close help modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('helpModal').classList.contains('visible')) {
+                closeHelp();
+            }
+        });
 
-    // Auto-validate on input
-    document.getElementById('input').addEventListener('input', () => {
-        clearTimeout(validateTimeout);
-        const val = document.getElementById('input').value.trim();
-        if (!val || val.length < 50) {
-            document.getElementById('results').classList.remove('visible');
-            document.getElementById('status').innerHTML = '';
-            return;
-        }
-        document.getElementById('status').innerHTML = '<div class="spinner"></div> Validating...';
-        validateTimeout = setTimeout(validate, 400);
+        // Auto-validate on input
+        document.getElementById('input').addEventListener('input', () => {
+            clearTimeout(validateTimeout);
+            const val = document.getElementById('input').value.trim();
+            if (!val || val.length < 50) {
+                document.getElementById('results').classList.remove('visible');
+                document.getElementById('status').innerHTML = '';
+                return;
+            }
+            document.getElementById('status').innerHTML = '<div class="spinner"></div> Validating...';
+            validateTimeout = setTimeout(validate, 400);
+        });
     });
-});
+}
 
 // ============================================================================
 // Exports for Testing
