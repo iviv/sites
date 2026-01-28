@@ -1166,7 +1166,7 @@ textarea::placeholder { color: var(--text-dim); }
 }
 .sig-header:hover { background: var(--border); }
 .sig-title { display: flex; align-items: center; gap: 0.75rem; }
-.sig-dkim { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-secondary); }
+.sig-dkim { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
 .sig-num { width: 28px; height: 28px; background: var(--glass); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent); }
 .sig-domain { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
 .badge { padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
