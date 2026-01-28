@@ -2026,6 +2026,7 @@ function renderSig(r, i) {
     return `<div class="sig-card ${r.status} expanded">
         <div class="sig-header" onclick="toggleCard(this)">
             <div class="sig-title">
+                <span class="sig-dkim">\uD83D\uDCE7 DKIM Signature #</span>
                 <span class="sig-num">${i}</span>
                 <span class="sig-domain">${esc(r.domain)}</span>
                 <span class="badge ${r.status}">${r.status === 'valid' ? '\u2713 PASS' : '\u2717 FAIL'}</span>
