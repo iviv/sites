@@ -187,6 +187,58 @@ function log(type, msg) {
     logs.push({ time: new Date().toISOString().split('T')[1].split('.')[0], type, msg });
 }
 
+/**
+ * Clean DNS TXT record data by removing quotes and joining split strings
+ * @param {string} data - Raw DNS TXT record data
+ * @returns {string} Cleaned record string
+ */
+function cleanDnsRecord(data) {
+    return data.replace(/^"|"$/g, '').replace(/" "/g, '');
+}
+
+/**
+ * Parse tag=value pairs from a record string (used by DKIM, DMARC, ARC)
+ * @param {string} record - Record string with tag=value; format
+ * @param {string[]} stripWhitespace - Tags that should have whitespace removed
+ * @returns {Object} Object with tag names as keys
+ */
+function parseTagValuePairs(record, stripWhitespace = []) {
+    const tags = {};
+    const re = /([a-z]+)\s*=\s*([^;]+)/gi;
+    let m;
+    while ((m = re.exec(record))) {
+        let val = m[2].trim();
+        if (stripWhitespace.includes(m[1].toLowerCase())) {
+            val = val.replace(/\s+/g, '');
+        }
+        tags[m[1].toLowerCase()] = val;
+    }
+    return tags;
+}
+
+/**
+ * Get badge style and text for validation results
+ * @param {string} result - Result type (pass, fail, etc.)
+ * @param {string} type - Context type (spf, dmarc, arc)
+ * @returns {{badgeStyle: string, badgeText: string}}
+ */
+function getBadgeForResult(result, type = 'generic') {
+    const styles = {
+        pass: { style: 'background:rgba(0,255,136,0.15);color:var(--success)', text: '\u2713 PASS' },
+        fail: { style: 'background:rgba(255,107,122,0.15);color:var(--error)', text: '\u2717 FAIL' },
+        softfail: { style: 'background:rgba(255,179,71,0.15);color:var(--warning)', text: '~ SOFTFAIL' },
+        neutral: { style: 'background:rgba(139,148,158,0.15);color:var(--text-secondary)', text: '? NEUTRAL' },
+        none: { style: 'background:rgba(139,148,158,0.15);color:var(--text-secondary)', text: '\u2212 NONE' },
+        permerror: { style: 'background:rgba(255,107,122,0.15);color:var(--error)', text: '! ERROR' },
+        temperror: { style: 'background:rgba(255,107,122,0.15);color:var(--error)', text: '! ERROR' },
+        reject: { style: 'background:rgba(0,255,136,0.15);color:var(--success)', text: '\u2713 REJECT' },
+        quarantine: { style: 'background:rgba(255,179,71,0.15);color:var(--warning)', text: '\u26A0 QUARANTINE' },
+        notfound: { style: 'background:rgba(255,107,122,0.15);color:var(--error)', text: 'NOT FOUND' }
+    };
+    const config = styles[result] || styles.none;
+    return { badgeStyle: config.style, badgeText: config.text };
+}
+
 function showToast(msg) {
     const t = document.getElementById('toast');
     document.getElementById('toastMsg').textContent = msg;
@@ -379,29 +431,11 @@ function parseDkimTags(raw) {
     const unfolded = raw.replace(/\r?\n[ \t]+/g, ' ');
     const match = unfolded.match(/DKIM-Signature:\s*(.+)/i);
     if (!match) return null;
-    const tags = {};
-    const re = /([a-z]+)\s*=\s*([^;]+)/gi;
-    let m;
-    while ((m = re.exec(match[1]))) {
-        let val = m[2].trim();
-        if (m[1] === 'b' || m[1] === 'bh') val = val.replace(/\s+/g, '');
-        tags[m[1].toLowerCase()] = val;
-    }
-    return tags;
+    return parseTagValuePairs(match[1], ['b', 'bh']);
 }
 
 function parseDnsTags(record) {
-    const tags = {};
-    const re = /([a-z]+)\s*=\s*([^;]+)/gi;
-    let m;
-    while ((m = re.exec(record))) {
-        let val = m[2].trim();
-        if (m[1].toLowerCase() === 'p') {
-            val = val.replace(/\s+/g, '');
-        }
-        tags[m[1].toLowerCase()] = val;
-    }
-    return tags;
+    return parseTagValuePairs(record, ['p']);
 }
 
 // ============================================================================
@@ -631,66 +665,49 @@ function ipv6MatchesCIDR(ip, cidr) {
 // DNS Lookups
 // ============================================================================
 
-async function fetchARecords(domain) {
+/**
+ * Generic DNS query helper
+ * @param {string} domain - Domain to query
+ * @param {string} type - DNS record type (A, AAAA, MX, TXT)
+ * @param {number} typeCode - DNS type code for filtering answers
+ * @param {function} extractor - Function to extract data from answer record
+ * @returns {Promise<Array>} Array of extracted values
+ */
+async function fetchDnsRecords(domain, type, typeCode, extractor) {
     try {
-        const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`, {
+        const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${type}`, {
             headers: { Accept: 'application/dns-json' }
         });
         const data = await res.json();
-        const ips = [];
+        const results = [];
         if (data.Answer) {
             for (const a of data.Answer) {
-                if (a.type === 1) ips.push(a.data);
-            }
-        }
-        return ips;
-    } catch (e) {
-        log('error', `A record lookup failed for ${domain}: ${e.message}`);
-        return [];
-    }
-}
-
-async function fetchAAAARecords(domain) {
-    try {
-        const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=AAAA`, {
-            headers: { Accept: 'application/dns-json' }
-        });
-        const data = await res.json();
-        const ips = [];
-        if (data.Answer) {
-            for (const a of data.Answer) {
-                if (a.type === 28) ips.push(a.data);
-            }
-        }
-        return ips;
-    } catch (e) {
-        log('error', `AAAA record lookup failed for ${domain}: ${e.message}`);
-        return [];
-    }
-}
-
-async function fetchMXRecords(domain) {
-    try {
-        const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=MX`, {
-            headers: { Accept: 'application/dns-json' }
-        });
-        const data = await res.json();
-        const hosts = [];
-        if (data.Answer) {
-            for (const a of data.Answer) {
-                if (a.type === 15) {
-                    const parts = a.data.split(' ');
-                    if (parts.length >= 2) {
-                        hosts.push(parts[1].replace(/\.$/, ''));
-                    }
+                if (a.type === typeCode) {
+                    const value = extractor(a);
+                    if (value) results.push(value);
                 }
             }
         }
-        return hosts;
+        return results;
     } catch (e) {
-        log('error', `MX record lookup failed for ${domain}: ${e.message}`);
+        log('error', `${type} record lookup failed for ${domain}: ${e.message}`);
         return [];
     }
+}
+
+async function fetchARecords(domain) {
+    return fetchDnsRecords(domain, 'A', 1, a => a.data);
+}
+
+async function fetchAAAARecords(domain) {
+    return fetchDnsRecords(domain, 'AAAA', 28, a => a.data);
+}
+
+async function fetchMXRecords(domain) {
+    return fetchDnsRecords(domain, 'MX', 15, a => {
+        const parts = a.data.split(' ');
+        return parts.length >= 2 ? parts[1].replace(/\.$/, '') : null;
+    });
 }
 
 async function fetchDns(domain, selector) {
@@ -704,7 +721,7 @@ async function fetchDns(domain, selector) {
         if (data.Answer) {
             for (const a of data.Answer) {
                 if (a.type === 16) {
-                    const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                    const record = cleanDnsRecord(a.data);
                     if (record.match(/^v\s*=\s*DKIM1/i) || record.match(/[;]?\s*p\s*=/)) {
                         log('success', `DNS found: ${record.slice(0, 80)}...`);
                         return { ok: true, record, name };
@@ -713,7 +730,7 @@ async function fetchDns(domain, selector) {
             }
             for (const a of data.Answer) {
                 if (a.type === 16) {
-                    const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                    const record = cleanDnsRecord(a.data);
                     log('warn', `DNS found non-DKIM TXT: ${record.slice(0, 80)}...`);
                     return { ok: true, record, name };
                 }
@@ -740,7 +757,7 @@ async function fetchSpfRecord(domain) {
         if (data.Answer) {
             for (const a of data.Answer) {
                 if (a.type === 16) {
-                    const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                    const record = cleanDnsRecord(a.data);
                     if (record.startsWith('v=spf1')) {
                         log('success', `SPF found: ${record.slice(0, 80)}...`);
                         return { ok: true, record, domain };
@@ -996,7 +1013,7 @@ async function fetchDmarcRecord(domain) {
         if (data.Answer) {
             for (const a of data.Answer) {
                 if (a.type === 16) {
-                    const record = a.data.replace(/^"|"$/g, '').replace(/" "/g, '');
+                    const record = cleanDnsRecord(a.data);
                     if (record.startsWith('v=DMARC1')) {
                         log('success', `DMARC found: ${record.slice(0, 80)}...`);
                         return { ok: true, record, domain, dmarcDomain };
@@ -1013,13 +1030,7 @@ async function fetchDmarcRecord(domain) {
 }
 
 function parseDmarcRecord(record) {
-    const tags = {};
-    const re = /([a-z]+)\s*=\s*([^;]+)/gi;
-    let m;
-    while ((m = re.exec(record))) {
-        tags[m[1].toLowerCase()] = m[2].trim();
-    }
-    return tags;
+    return parseTagValuePairs(record);
 }
 
 // ============================================================================
@@ -1069,15 +1080,7 @@ function parseArcHeaders(headers) {
 
 function parseArcTags(value) {
     const unfolded = value.replace(/\r?\n[ \t]+/g, ' ');
-    const tags = {};
-    const re = /([a-z]+)\s*=\s*([^;]+)/gi;
-    let m;
-    while ((m = re.exec(unfolded))) {
-        let val = m[2].trim();
-        if (m[1] === 'b' || m[1] === 'bh') val = val.replace(/\s+/g, '');
-        tags[m[1].toLowerCase()] = val;
-    }
-    return tags;
+    return parseTagValuePairs(unfolded, ['b', 'bh']);
 }
 
 function parseArcAuthResults(value) {
@@ -1422,37 +1425,7 @@ function renderSpfEvaluation(evalResult) {
     const resultInfo = SPF_RESULTS[evalResult.result] || SPF_RESULTS.none;
     const dnsCmd = `dig TXT ${evalResult.domain}`;
 
-    let badgeStyle, badgeText;
-    switch (evalResult.result) {
-        case 'pass':
-            badgeStyle = 'background:rgba(0,255,136,0.15);color:var(--success)';
-            badgeText = '\u2713 PASS';
-            break;
-        case 'fail':
-            badgeStyle = 'background:rgba(255,107,122,0.15);color:var(--error)';
-            badgeText = '\u2717 FAIL';
-            break;
-        case 'softfail':
-            badgeStyle = 'background:rgba(255,179,71,0.15);color:var(--warning)';
-            badgeText = '~ SOFTFAIL';
-            break;
-        case 'neutral':
-            badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
-            badgeText = '? NEUTRAL';
-            break;
-        case 'none':
-            badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
-            badgeText = '\u2212 NONE';
-            break;
-        case 'permerror':
-        case 'temperror':
-            badgeStyle = 'background:rgba(255,107,122,0.15);color:var(--error)';
-            badgeText = '! ERROR';
-            break;
-        default:
-            badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
-            badgeText = evalResult.result.toUpperCase();
-    }
+    const { badgeStyle, badgeText } = getBadgeForResult(evalResult.result);
 
     let content = '';
 
@@ -1596,12 +1569,13 @@ function renderDmarc(dmarcResult) {
     const dnsCmd = `dig TXT _dmarc.${dmarcResult.domain}`;
 
     if (!dmarcResult.ok) {
+        const { badgeStyle, badgeText } = getBadgeForResult('notfound');
         return `<div class="dmarc-card notfound expanded">
             <div class="sig-header" onclick="toggleCard(this)">
                 <div class="sig-title">
                     <span class="sig-num">\uD83D\uDCCB</span>
                     <span class="sig-domain">DMARC Policy</span>
-                    <span class="badge" style="background:rgba(255,107,122,0.15);color:var(--error)">NOT FOUND</span>
+                    <span class="badge" style="${badgeStyle}">${badgeText}</span>
                 </div>
                 <span class="expand-icon">\u25BC</span>
             </div>
@@ -1622,20 +1596,7 @@ function renderDmarc(dmarcResult) {
     const policy = tags.p?.toLowerCase() || 'none';
     const policyInfo = DMARC_POLICIES[policy] || DMARC_POLICIES.none;
 
-    let badgeStyle, badgeText;
-    switch (policy) {
-        case 'reject':
-            badgeStyle = 'background:rgba(0,255,136,0.15);color:var(--success)';
-            badgeText = '\u2713 REJECT';
-            break;
-        case 'quarantine':
-            badgeStyle = 'background:rgba(255,179,71,0.15);color:var(--warning)';
-            badgeText = '\u26A0 QUARANTINE';
-            break;
-        default:
-            badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
-            badgeText = '? NONE';
-    }
+    const { badgeStyle, badgeText } = getBadgeForResult(policy);
 
     const dmarcTags = Object.entries(tags).map(([k, v]) => renderDmarcTag(k, v)).join('');
 
@@ -1693,20 +1654,7 @@ function renderArc(arcSets) {
     const chainStatus = latestSet?.seal?.tags?.cv?.toLowerCase() || 'none';
     const statusInfo = ARC_CV_STATUS[chainStatus] || ARC_CV_STATUS.none;
 
-    let badgeStyle, badgeText;
-    switch (chainStatus) {
-        case 'pass':
-            badgeStyle = 'background:rgba(0,255,136,0.15);color:var(--success)';
-            badgeText = '\u2713 PASS';
-            break;
-        case 'fail':
-            badgeStyle = 'background:rgba(255,107,122,0.15);color:var(--error)';
-            badgeText = '\u2717 FAIL';
-            break;
-        default:
-            badgeStyle = 'background:rgba(139,148,158,0.15);color:var(--text-secondary)';
-            badgeText = '\u2212 NONE';
-    }
+    const { badgeStyle, badgeText } = getBadgeForResult(chainStatus);
 
     const setsHtml = arcSets.map(set => {
         const sealTags = set.seal?.tags || {};
