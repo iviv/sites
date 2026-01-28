@@ -147,21 +147,41 @@ let validateTimeout;
 // Theme Management
 // ============================================================================
 
-function toggleTheme() {
-    const html = document.documentElement;
+// Available themes
+const THEMES = {
+    dark: ['dark-cyber', 'dark-dracula', 'dark-nord', 'dark-monokai', 'dark-ocean'],
+    light: ['light-classic', 'light-solarized', 'light-github', 'light-rose', 'light-mint']
+};
+
+function setTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('theme', theme);
+
+    // Update active button state
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+
+    // Update legacy toggle button if present
     const btn = document.getElementById('themeBtn');
-    const isDark = html.dataset.theme === 'dark';
-    html.dataset.theme = isDark ? 'light' : 'dark';
-    btn.textContent = isDark ? '\u2600\uFE0F' : '\uD83C\uDF19';
-    localStorage.setItem('theme', html.dataset.theme);
+    if (btn) {
+        const isDark = theme.startsWith('dark');
+        btn.textContent = isDark ? '\uD83C\uDF19' : '\u2600\uFE0F';
+    }
+}
+
+function toggleTheme() {
+    const current = document.documentElement.dataset.theme || 'dark-cyber';
+    const isDark = current.startsWith('dark');
+
+    // Toggle between first dark and first light theme
+    const newTheme = isDark ? 'light-classic' : 'dark-cyber';
+    setTheme(newTheme);
 }
 
 function initTheme() {
-    const saved = localStorage.getItem('theme');
-    if (saved) {
-        document.documentElement.dataset.theme = saved;
-        document.getElementById('themeBtn').textContent = saved === 'dark' ? '\uD83C\uDF19' : '\u2600\uFE0F';
-    }
+    const saved = localStorage.getItem('theme') || 'dark-cyber';
+    setTheme(saved);
 }
 
 // ============================================================================

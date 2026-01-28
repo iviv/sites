@@ -8,6 +8,26 @@
     <link rel="stylesheet" href="css/dkimvalidator.css">
 </head>
 <body>
+    <!-- Theme Selector Bar -->
+    <div class="theme-selector">
+        <div class="theme-group">
+            <span class="theme-group-label">Dark</span>
+            <button class="theme-btn active" data-theme="dark-cyber" onclick="setTheme('dark-cyber')" title="Cyber Green"></button>
+            <button class="theme-btn" data-theme="dark-dracula" onclick="setTheme('dark-dracula')" title="Dracula"></button>
+            <button class="theme-btn" data-theme="dark-nord" onclick="setTheme('dark-nord')" title="Nord"></button>
+            <button class="theme-btn" data-theme="dark-monokai" onclick="setTheme('dark-monokai')" title="Monokai"></button>
+            <button class="theme-btn" data-theme="dark-ocean" onclick="setTheme('dark-ocean')" title="Ocean"></button>
+        </div>
+        <div class="theme-group">
+            <span class="theme-group-label">Light</span>
+            <button class="theme-btn" data-theme="light-classic" onclick="setTheme('light-classic')" title="Classic"></button>
+            <button class="theme-btn" data-theme="light-solarized" onclick="setTheme('light-solarized')" title="Solarized"></button>
+            <button class="theme-btn" data-theme="light-github" onclick="setTheme('light-github')" title="GitHub"></button>
+            <button class="theme-btn" data-theme="light-rose" onclick="setTheme('light-rose')" title="Rose"></button>
+            <button class="theme-btn" data-theme="light-mint" onclick="setTheme('light-mint')" title="Mint"></button>
+        </div>
+    </div>
+
     <div class="tooltip" id="tooltip">
         <div class="tooltip-title" id="tooltipTitle"></div>
         <div class="tooltip-desc" id="tooltipDesc"></div>
@@ -83,7 +103,6 @@
     <div class="container">
         <header>
             <button class="help-btn" onclick="openHelp()" title="Help">&#x2753;</button>
-            <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">&#x1F319;</button>
             <div class="logo">
                 <div class="logo-icon">&#x1F510;</div>
                 <div>
