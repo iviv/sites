@@ -13,19 +13,61 @@
 // Constants - Tag descriptions with RFC references
 // ============================================================================
 
+// RFC Links for clickable references
+const RFC_LINKS = {
+    6376: { title: 'DKIM Signatures', url: 'https://datatracker.ietf.org/doc/html/rfc6376' },
+    7208: { title: 'SPF', url: 'https://datatracker.ietf.org/doc/html/rfc7208' },
+    7489: { title: 'DMARC', url: 'https://datatracker.ietf.org/doc/html/rfc7489' },
+    8601: { title: 'Authentication-Results', url: 'https://datatracker.ietf.org/doc/html/rfc8601' },
+    8617: { title: 'ARC', url: 'https://datatracker.ietf.org/doc/html/rfc8617' },
+    8461: { title: 'MTA-STS', url: 'https://datatracker.ietf.org/doc/html/rfc8461' }
+};
+
+// Security implications for authentication results
+const SECURITY_IMPLICATIONS = {
+    dkim: {
+        pass: { level: 'good', message: 'Email content has not been modified since it was signed by the sender\'s domain.' },
+        fail: { level: 'bad', message: 'Email may have been tampered with, or the signature is invalid. Treat with caution.' },
+        none: { level: 'neutral', message: 'No DKIM signature present. Cannot verify message integrity.' }
+    },
+    spf: {
+        pass: { level: 'good', message: 'Sending server is authorized to send mail for this domain.' },
+        fail: { level: 'bad', message: 'Sending server is NOT authorized. This could be a spoofed email.' },
+        softfail: { level: 'warning', message: 'Sender is probably not authorized. Domain is transitioning to stricter policy.' },
+        neutral: { level: 'neutral', message: 'Domain makes no assertion about the sender\'s authorization.' },
+        none: { level: 'neutral', message: 'No SPF record found. Domain has not configured sender authorization.' },
+        permerror: { level: 'bad', message: 'SPF record has errors. Domain configuration is broken.' },
+        temperror: { level: 'warning', message: 'Temporary DNS error. Try again later.' }
+    },
+    dmarc: {
+        pass: { level: 'good', message: 'Email passes DMARC alignment. Both authentication and domain alignment verified.' },
+        fail: { level: 'bad', message: 'DMARC check failed. Email may be forged or misconfigured.' },
+        none: { level: 'neutral', message: 'No DMARC policy. Domain owner has not set up anti-spoofing protection.' },
+        reject: { level: 'good', message: 'Domain uses strict policy - unauthorized emails are rejected.' },
+        quarantine: { level: 'warning', message: 'Domain uses moderate policy - suspicious emails go to spam.' },
+        policy_none: { level: 'warning', message: 'Domain is only monitoring - no action taken on failures.' }
+    },
+    overall: {
+        pass: { level: 'good', title: 'Email Authentication: \u2713 Fully Authenticated', message: 'All authentication checks passed. This email can be trusted as legitimately from the claimed sender.' },
+        partial: { level: 'warning', title: 'Email Authentication: \u26A0 Partial Issues', message: 'Some authentication checks passed, but there are issues. Review the specific failures below.' },
+        fail: { level: 'bad', title: 'Email Authentication: \u2717 Authentication Failed', message: 'Critical authentication failures detected. This email may be forged or spoofed.' },
+        unknown: { level: 'neutral', title: 'Email Authentication: ? Unknown', message: 'Could not determine authentication status.' }
+    }
+};
+
 const DKIM_TAGS = {
-    v: { name: 'Version', desc: 'DKIM signature version (must be "1") [RFC 6376 §3.5]' },
-    a: { name: 'Algorithm', desc: 'Signing algorithm: rsa-sha256 or rsa-sha1 [RFC 6376 §3.5]' },
-    b: { name: 'Signature', desc: 'Base64-encoded cryptographic signature [RFC 6376 §3.5]' },
-    bh: { name: 'Body Hash', desc: 'Hash of canonicalized message body [RFC 6376 §3.5]' },
-    c: { name: 'Canonicalization', desc: 'Header/body normalization: simple or relaxed [RFC 6376 §3.4]' },
-    d: { name: 'Domain', desc: 'Signing domain identifier (SDID) [RFC 6376 §3.5]' },
-    s: { name: 'Selector', desc: 'DNS selector for public key lookup [RFC 6376 §3.5]' },
-    h: { name: 'Signed Headers', desc: 'Headers included in signature [RFC 6376 §3.5]' },
-    t: { name: 'Timestamp', desc: 'Signature creation time (Unix epoch) [RFC 6376 §3.5]' },
-    x: { name: 'Expiration', desc: 'Signature expiration time (Unix epoch) [RFC 6376 §3.5]' },
-    l: { name: 'Body Length', desc: 'Number of body bytes signed (security risk!) [RFC 6376 §3.5]' },
-    i: { name: 'Identity', desc: 'Agent/user identifier (AUID) [RFC 6376 §3.5]' }
+    v: { name: 'Version', desc: 'DKIM signature version (must be "1")', rfc: '6376', section: '3.5' },
+    a: { name: 'Algorithm', desc: 'Signing algorithm: rsa-sha256 or rsa-sha1', rfc: '6376', section: '3.5' },
+    b: { name: 'Signature', desc: 'Base64-encoded cryptographic signature', rfc: '6376', section: '3.5' },
+    bh: { name: 'Body Hash', desc: 'Hash of canonicalized message body', rfc: '6376', section: '3.5' },
+    c: { name: 'Canonicalization', desc: 'Header/body normalization: simple or relaxed', rfc: '6376', section: '3.4' },
+    d: { name: 'Domain', desc: 'Signing domain identifier (SDID)', rfc: '6376', section: '3.5' },
+    s: { name: 'Selector', desc: 'DNS selector for public key lookup', rfc: '6376', section: '3.5' },
+    h: { name: 'Signed Headers', desc: 'Headers included in signature', rfc: '6376', section: '3.5' },
+    t: { name: 'Timestamp', desc: 'Signature creation time (Unix epoch)', rfc: '6376', section: '3.5' },
+    x: { name: 'Expiration', desc: 'Signature expiration time (Unix epoch)', rfc: '6376', section: '3.5' },
+    l: { name: 'Body Length', desc: 'Number of body bytes signed (security risk!)', rfc: '6376', section: '3.5' },
+    i: { name: 'Identity', desc: 'Agent/user identifier (AUID)', rfc: '6376', section: '3.5' }
 };
 
 const DNS_TAGS = {
@@ -134,6 +176,20 @@ const MTA_STS_MODES = {
     enforce: { name: 'Enforce', desc: 'Require TLS; reject on failure [RFC 8461 §5]', color: 'success', icon: '\u2713' },
     testing: { name: 'Testing', desc: 'Report TLS failures but deliver anyway [RFC 8461 §5]', color: 'warning', icon: '~' },
     none: { name: 'None', desc: 'MTA-STS is disabled [RFC 8461 §5]', color: 'neutral', icon: '\u2212' }
+};
+
+// Authentication-Results result codes (RFC 8601)
+const AUTH_RESULTS = {
+    pass: { name: 'Pass', desc: 'Authentication passed', color: 'success', icon: '\u2713' },
+    fail: { name: 'Fail', desc: 'Authentication failed', color: 'error', icon: '\u2717' },
+    softfail: { name: 'SoftFail', desc: 'Soft failure', color: 'warning', icon: '~' },
+    neutral: { name: 'Neutral', desc: 'No assertion', color: 'neutral', icon: '?' },
+    none: { name: 'None', desc: 'No authentication performed', color: 'neutral', icon: '\u2212' },
+    temperror: { name: 'TempError', desc: 'Temporary error', color: 'warning', icon: '\u26A0' },
+    permerror: { name: 'PermError', desc: 'Permanent error', color: 'error', icon: '!' },
+    policy: { name: 'Policy', desc: 'Policy decision', color: 'neutral', icon: 'P' },
+    hardfail: { name: 'HardFail', desc: 'Hard failure', color: 'error', icon: '\u2717' },
+    bestguesspass: { name: 'BestGuessPass', desc: 'Best guess pass', color: 'warning', icon: '~' }
 };
 
 // ============================================================================
@@ -289,6 +345,13 @@ function copy(btn, val) {
     showToast('Copied!');
 }
 
+function copyFlattenedSpf(btn) {
+    const preview = document.getElementById('spfFlattenedPreview');
+    if (preview) {
+        copy(btn, preview.textContent);
+    }
+}
+
 function clearAll() {
     document.getElementById('input').value = '';
     document.getElementById('results').classList.remove('visible');
@@ -296,7 +359,7 @@ function clearAll() {
 }
 
 function toggleCard(el) {
-    el.closest('.sig-card, .spf-card, .dmarc-card, .arc-card, .relay-card').classList.toggle('expanded');
+    el.closest('.sig-card, .spf-card, .dmarc-card, .arc-card, .relay-card, .bimi-card, .mta-sts-card, .auth-results-card').classList.toggle('expanded');
 }
 
 // ============================================================================
@@ -318,11 +381,25 @@ const Tooltip = {
         this.cancelHide();
         this.activeTag = tag;
 
-        const { tag: name, tagName, tagDesc, tagValue } = tag.dataset;
+        const { tag: name, tagName, tagDesc, tagValue, rfc, section } = tag.dataset;
         document.getElementById('tooltipTitle').textContent =
             tag.classList.contains('header') ? tagName : `${tagName} (${name}=)`;
         document.getElementById('tooltipDesc').textContent = tagDesc;
         document.getElementById('tooltipValue').textContent = tagValue;
+
+        // Add RFC link if present
+        const rfcEl = document.getElementById('tooltipRfc');
+        if (rfcEl) {
+            if (rfc && RFC_LINKS[rfc]) {
+                const rfcInfo = RFC_LINKS[rfc];
+                const url = section ? `${rfcInfo.url}#section-${section}` : rfcInfo.url;
+                rfcEl.innerHTML = `<a href="${esc(url)}" target="_blank" rel="noopener" class="rfc-link">RFC ${rfc}${section ? ' \u00A7' + section : ''} - ${esc(rfcInfo.title)}</a>`;
+                rfcEl.style.display = 'block';
+            } else {
+                rfcEl.innerHTML = '';
+                rfcEl.style.display = 'none';
+            }
+        }
 
         const r = tag.getBoundingClientRect();
         let left = r.left;
@@ -458,7 +535,12 @@ function parseEmail(raw) {
         parsed: parseDkimTags(h.raw)
     }));
 
-    return { headers, body, dkimSigs, errors, warnings };
+    // Parse Authentication-Results headers
+    const authResults = headers
+        .filter(h => h.name.toLowerCase() === 'authentication-results')
+        .map(h => parseAuthenticationResults(h.value));
+
+    return { headers, body, dkimSigs, authResults, errors, warnings };
 }
 
 function parseDkimTags(raw) {
@@ -470,6 +552,117 @@ function parseDkimTags(raw) {
 
 function parseDnsTags(record) {
     return parseTagValuePairs(record, ['p']);
+}
+
+// ============================================================================
+// Authentication-Results Header Parsing (RFC 8601)
+// ============================================================================
+
+function parseAuthenticationResults(value) {
+    const unfolded = value.replace(/\r?\n[ \t]+/g, ' ').trim();
+    const result = {
+        authserv_id: null,
+        version: null,
+        results: []
+    };
+
+    const firstSemicolon = unfolded.indexOf(';');
+    if (firstSemicolon === -1) {
+        result.authserv_id = unfolded.trim();
+        return result;
+    }
+
+    const authservPart = unfolded.slice(0, firstSemicolon).trim();
+    const versionMatch = authservPart.match(/^(.+?)\s+(\d+)$/);
+    if (versionMatch) {
+        result.authserv_id = versionMatch[1].trim();
+        result.version = parseInt(versionMatch[2], 10);
+    } else {
+        result.authserv_id = authservPart;
+    }
+
+    const resultsPart = unfolded.slice(firstSemicolon + 1);
+    const resultEntries = splitAuthResults(resultsPart);
+
+    for (const entry of resultEntries) {
+        const parsed = parseAuthResultEntry(entry.trim());
+        if (parsed) {
+            result.results.push(parsed);
+        }
+    }
+
+    return result;
+}
+
+function splitAuthResults(str) {
+    const results = [];
+    let current = '';
+    let inQuotes = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if (char === '"' && str[i - 1] !== '\\') {
+            inQuotes = !inQuotes;
+            current += char;
+        } else if (char === '(' && !inQuotes) {
+            parenDepth++;
+            current += char;
+        } else if (char === ')' && !inQuotes) {
+            parenDepth--;
+            current += char;
+        } else if (char === ';' && !inQuotes && parenDepth === 0) {
+            if (current.trim()) {
+                results.push(current);
+            }
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    if (current.trim()) {
+        results.push(current);
+    }
+    return results;
+}
+
+function parseAuthResultEntry(entry) {
+    if (!entry) return null;
+
+    const methodMatch = entry.match(/^(\w+)\s*=\s*(\w+)/);
+    if (!methodMatch) return null;
+
+    const method = methodMatch[1].toLowerCase();
+    const resultCode = methodMatch[2].toLowerCase();
+
+    const parsed = {
+        method,
+        result: resultCode,
+        resultInfo: AUTH_RESULTS[resultCode] || { name: resultCode.toUpperCase(), desc: 'Unknown result', color: 'neutral', icon: '?' },
+        properties: {},
+        reason: null
+    };
+
+    const reasonMatch = entry.match(/\(\s*([^)]+)\s*\)/);
+    if (reasonMatch) {
+        parsed.reason = reasonMatch[1].trim();
+    }
+
+    const propRegex = /([\w.]+)\s*=\s*(?:"([^"]+)"|([^\s;]+))/g;
+    let match;
+    let skipFirst = true;
+
+    while ((match = propRegex.exec(entry)) !== null) {
+        if (skipFirst) {
+            skipFirst = false;
+            continue;
+        }
+        const propName = match[1];
+        const propValue = match[2] || match[3];
+        parsed.properties[propName] = propValue;
+    }
+
+    return parsed;
 }
 
 // ============================================================================
@@ -577,7 +770,7 @@ function parseRelayChain(headers) {
 
     for (const hdr of receivedHeaders) {
         const val = hdr.value.replace(/\r?\n[ \t]+/g, ' ');
-        const hop = { raw: val };
+        const hop = { raw: val, type: 'received' };
 
         const fromMatch = val.match(/from\s+([^\s(]+)/i);
         if (fromMatch) hop.from = fromMatch[1];
@@ -617,8 +810,41 @@ function parseRelayChain(headers) {
         hops.push(hop);
     }
 
-    hops.reverse();
+    // Parse X-Received headers (Google/Gmail internal headers)
+    const xReceivedHeaders = headers.filter(h => h.name.toLowerCase() === 'x-received');
+    for (const hdr of xReceivedHeaders) {
+        const val = hdr.value.replace(/\r?\n[ \t]+/g, ' ');
+        const hop = { raw: val, type: 'x-received', isInternal: true };
 
+        const byMatch = val.match(/by\s+([^\s;]+)/i);
+        if (byMatch) hop.by = byMatch[1];
+
+        const withMatch = val.match(/with\s+(\w+)/i);
+        if (withMatch) hop.protocol = withMatch[1].toUpperCase();
+
+        const dateMatch = val.match(/;\s*([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s*[+-]?\d{0,4})/);
+        if (dateMatch) {
+            try {
+                hop.timestamp = new Date(dateMatch[1]);
+                if (isNaN(hop.timestamp.getTime())) hop.timestamp = null;
+            } catch { hop.timestamp = null; }
+        }
+
+        const idMatch = val.match(/id\s+([^\s;]+)/i);
+        if (idMatch) hop.smtpId = idMatch[1];
+
+        hops.push(hop);
+    }
+
+    // Sort by timestamp if available
+    hops.sort((a, b) => {
+        if (a.timestamp && b.timestamp) {
+            return a.timestamp.getTime() - b.timestamp.getTime();
+        }
+        return 0;
+    });
+
+    // Calculate latencies
     for (let i = 1; i < hops.length; i++) {
         if (hops[i].timestamp && hops[i-1].timestamp) {
             hops[i].latency = hops[i].timestamp.getTime() - hops[i-1].timestamp.getTime();
@@ -1882,6 +2108,7 @@ function renderSpfEvaluation(evalResult) {
     content += `
         <div class="sig-section">
             <div class="sig-section-title">\uD83D\uDCCA SPF Evaluation Result</div>
+            ${renderSecurityHint('spf', evalResult.result)}
             <div class="details">
                 <div class="detail-row"><span class="detail-label">Result</span><span class="detail-value ${resultInfo.color}">${resultInfo.icon} ${resultInfo.name}</span></div>
                 <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">${esc(resultInfo.desc)}</span></div>
@@ -1922,10 +2149,44 @@ function renderSpfEvaluation(evalResult) {
     }
 
     if (evalResult.trace && evalResult.trace.domains && evalResult.trace.domains.length > 0) {
+        // Build flattened SPF visualization
+        const flattenedMechanisms = [];
+        for (const domainTrace of evalResult.trace.domains) {
+            if (domainTrace.mechanisms) {
+                for (const mech of domainTrace.mechanisms) {
+                    if (mech.type === 'ip4' || mech.type === 'ip6') {
+                        flattenedMechanisms.push({
+                            type: mech.type,
+                            value: mech.mechanism,
+                            source: domainTrace.domain,
+                            depth: domainTrace.depth
+                        });
+                    }
+                }
+            }
+        }
+
         content += `
             <div class="spf-trace">
                 <div class="spf-trace-title">\uD83D\uDD0D Recursive SPF Trace (${evalResult.trace.domains.length} domain${evalResult.trace.domains.length > 1 ? 's' : ''} evaluated)</div>
         `;
+
+        // SPF Flattening Visualization
+        if (flattenedMechanisms.length > 0) {
+            content += `
+                <div class="spf-flattened">
+                    <div class="spf-flattened-header">
+                        <span class="spf-flattened-title">\uD83D\uDCCB Flattened SPF (${flattenedMechanisms.length} IP mechanisms)</span>
+                        <button class="copy-btn" style="opacity:1" onclick="event.stopPropagation();copyFlattenedSpf(this)">Copy Flattened</button>
+                    </div>
+                    <div class="spf-flattened-preview" id="spfFlattenedPreview">v=spf1 ${flattenedMechanisms.map(m => m.value).join(' ')} ~all</div>
+                    <div class="spf-flattened-sources">
+                        ${flattenedMechanisms.slice(0, 10).map(m => `<span class="spf-source-tag" title="From ${esc(m.source)}">${esc(m.value.split(':')[0] === 'ip4' || m.value.split(':')[0] === 'ip6' ? m.value : m.type + ':' + m.value)}</span>`).join('')}
+                        ${flattenedMechanisms.length > 10 ? `<span class="spf-source-tag more">+${flattenedMechanisms.length - 10} more</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
 
         for (const domainTrace of evalResult.trace.domains) {
             const depthClass = `depth-${Math.min(domainTrace.depth, 3)}`;
@@ -2218,11 +2479,13 @@ function renderRelayChain(hops) {
         const timeStr = hop.timestamp ? hop.timestamp.toLocaleString() : '';
         const latencyHtml = hop.latency !== undefined ?
             `<span class="relay-latency ${getLatencyClass(hop.latency)}">+${formatLatency(hop.latency)}</span>` : '';
+        const isXReceived = hop.type === 'x-received';
+        const hopTypeLabel = isXReceived ? '<span class="hop-type-badge internal">X-Received</span>' : '';
 
         return `
-            <div class="relay-hop ${isOrigin ? 'origin' : ''}">
+            <div class="relay-hop ${isOrigin ? 'origin' : ''} ${isXReceived ? 'x-received' : ''}">
                 <div class="relay-hop-header">
-                    <span class="relay-hop-server">${esc(server)}</span>
+                    <span class="relay-hop-server">${esc(server)} ${hopTypeLabel}</span>
                     <span class="relay-hop-time">${esc(timeStr)} ${latencyHtml}</span>
                 </div>
                 <div class="relay-hop-details">
@@ -2230,6 +2493,8 @@ function renderRelayChain(hops) {
                     ${hop.ip ? `<span class="relay-hop-detail">IP <span>${esc(hop.ip)}</span></span>` : ''}
                     ${hop.protocol ? `<span class="relay-hop-detail">via <span>${esc(hop.protocol)}</span></span>` : ''}
                     ${hop.tls ? `<span class="relay-hop-detail" style="color:var(--success)">TLS</span>` : ''}
+                    ${hop.smtpId ? `<span class="relay-hop-detail">ID <span>${esc(hop.smtpId)}</span></span>` : ''}
+                    ${hop.isInternal ? `<span class="relay-hop-detail" style="color:var(--text-dim)">Internal</span>` : ''}
                 </div>
             </div>
         `;
@@ -2262,6 +2527,254 @@ function renderRelayChain(hops) {
 // Initialize Tooltips
 // ============================================================================
 
+// ============================================================================
+// Security Hint Rendering
+// ============================================================================
+
+function renderSecurityHint(type, result) {
+    const implications = SECURITY_IMPLICATIONS[type];
+    if (!implications) return '';
+    const info = implications[result];
+    if (!info) return '';
+
+    const levelClass = info.level === 'good' ? 'success' : (info.level === 'bad' ? 'error' : (info.level === 'warning' ? 'warning' : 'neutral'));
+    return `<div class="security-hint ${levelClass}">
+        <span class="security-hint-icon">${info.level === 'good' ? '\u2713' : (info.level === 'bad' ? '\u26A0' : '\u2139')}</span>
+        <span class="security-hint-text">${esc(info.message)}</span>
+    </div>`;
+}
+
+// ============================================================================
+// Overall Authentication Summary
+// ============================================================================
+
+function computeOverallStatus(results) {
+    const { dkimResults, spfResult, dmarcResult, authResults } = results;
+
+    let level = 'unknown';
+    const issues = [];
+    const passes = [];
+    let score = 0;
+    const scoreBreakdown = { dkim: 0, spf: 0, dmarc: 0 };
+
+    // Check DKIM (40% of score)
+    const validDkim = dkimResults?.filter(r => r.status === 'valid').length || 0;
+    const totalDkim = dkimResults?.length || 0;
+    if (totalDkim === 0) {
+        issues.push({ text: 'No DKIM signatures', type: 'dkim', severity: 'warning' });
+        scoreBreakdown.dkim = 0;
+    } else if (validDkim === 0) {
+        issues.push({ text: 'All DKIM signatures failed', type: 'dkim', severity: 'error' });
+        scoreBreakdown.dkim = 0;
+    } else if (validDkim < totalDkim) {
+        passes.push({ text: `DKIM (${validDkim}/${totalDkim} valid)`, type: 'dkim' });
+        scoreBreakdown.dkim = Math.round((validDkim / totalDkim) * 40);
+    } else {
+        passes.push({ text: 'DKIM', type: 'dkim' });
+        scoreBreakdown.dkim = 40;
+    }
+
+    // Check SPF (30% of score)
+    if (!spfResult || spfResult.result === 'none') {
+        issues.push({ text: 'No SPF record', type: 'spf', severity: 'warning' });
+        scoreBreakdown.spf = 0;
+    } else if (spfResult.result === 'pass') {
+        passes.push({ text: 'SPF', type: 'spf' });
+        scoreBreakdown.spf = 30;
+    } else if (spfResult.result === 'fail' || spfResult.result === 'permerror') {
+        issues.push({ text: `SPF ${spfResult.result}`, type: 'spf', severity: 'error' });
+        scoreBreakdown.spf = 0;
+    } else if (spfResult.result === 'softfail') {
+        issues.push({ text: 'SPF softfail', type: 'spf', severity: 'warning' });
+        scoreBreakdown.spf = 10;
+    } else {
+        issues.push({ text: `SPF ${spfResult.result}`, type: 'spf', severity: 'warning' });
+        scoreBreakdown.spf = 5;
+    }
+
+    // Check DMARC (30% of score)
+    if (!dmarcResult || !dmarcResult.ok) {
+        issues.push({ text: 'No DMARC policy', type: 'dmarc', severity: 'warning' });
+        scoreBreakdown.dmarc = 0;
+    } else {
+        const policy = parseDmarcRecord(dmarcResult.record).p || 'none';
+        if (policy === 'reject') {
+            passes.push({ text: 'DMARC (reject)', type: 'dmarc' });
+            scoreBreakdown.dmarc = 30;
+        } else if (policy === 'quarantine') {
+            passes.push({ text: 'DMARC (quarantine)', type: 'dmarc' });
+            scoreBreakdown.dmarc = 20;
+        } else {
+            issues.push({ text: 'DMARC policy=none', type: 'dmarc', severity: 'warning' });
+            scoreBreakdown.dmarc = 5;
+        }
+    }
+
+    score = scoreBreakdown.dkim + scoreBreakdown.spf + scoreBreakdown.dmarc;
+
+    // Determine overall level
+    if (issues.filter(i => i.severity === 'error').length > 0) {
+        level = 'fail';
+    } else if (issues.length === 0) {
+        level = 'pass';
+    } else if (passes.length > 0 && issues.length > 0) {
+        level = 'partial';
+    } else if (passes.length === 0) {
+        level = 'fail';
+    } else {
+        level = 'partial';
+    }
+
+    const securityInfo = SECURITY_IMPLICATIONS.overall[level] || SECURITY_IMPLICATIONS.overall.unknown;
+    let message, icon, colorClass;
+    switch (level) {
+        case 'pass':
+            message = 'Fully Authenticated';
+            icon = '\u2713';
+            colorClass = 'success';
+            break;
+        case 'partial':
+            message = 'Partially Authenticated';
+            icon = '\u26A0';
+            colorClass = 'warning';
+            break;
+        case 'fail':
+            message = 'Authentication Failed';
+            icon = '\u2717';
+            colorClass = 'error';
+            break;
+        default:
+            message = 'Unknown Status';
+            icon = '?';
+            colorClass = 'neutral';
+    }
+
+    return { level, message, icon, colorClass, passes, issues, score, scoreBreakdown, securityInfo };
+}
+
+function renderOverallSummary(results) {
+    const status = computeOverallStatus(results);
+
+    const passesHtml = status.passes.map(p =>
+        `<span class="auth-check pass" data-type="${p.type}">\u2713 ${esc(p.text)}</span>`
+    ).join('');
+
+    const issuesHtml = status.issues.map(i =>
+        `<span class="auth-check ${i.severity === 'error' ? 'fail' : 'warn'}" data-type="${i.type}">${i.severity === 'error' ? '\u2717' : '\u26A0'} ${esc(i.text)}</span>`
+    ).join('');
+
+    const scoreColor = status.score >= 80 ? 'var(--success)' : (status.score >= 50 ? 'var(--warning)' : 'var(--error)');
+    const scorePercent = (status.score / 100) * 283;
+    const scoreGrade = status.score >= 90 ? 'A' : (status.score >= 80 ? 'B' : (status.score >= 60 ? 'C' : (status.score >= 40 ? 'D' : 'F')));
+
+    return `<div class="overall-summary-card ${status.level}">
+        <div class="overall-summary-header">
+            <div class="overall-score-ring">
+                <svg viewBox="0 0 100 100" class="score-svg">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="var(--border)" stroke-width="6"/>
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="${scoreColor}" stroke-width="6"
+                        stroke-dasharray="${scorePercent} 283"
+                        stroke-linecap="round" transform="rotate(-90 50 50)"/>
+                </svg>
+                <div class="score-text">
+                    <div class="score-value">${status.score}</div>
+                    <div class="score-grade">${scoreGrade}</div>
+                </div>
+            </div>
+            <div class="overall-summary-main">
+                <div class="overall-title-row">
+                    <span class="overall-icon ${status.colorClass}">${status.icon}</span>
+                    <span class="overall-title">${status.securityInfo.title}</span>
+                </div>
+                <div class="overall-description">${esc(status.securityInfo.message)}</div>
+                <div class="overall-checks">
+                    ${passesHtml}${issuesHtml}
+                </div>
+            </div>
+        </div>
+        <div class="score-breakdown">
+            <div class="score-breakdown-title">Score Breakdown</div>
+            <div class="score-breakdown-items">
+                <div class="score-item">
+                    <span class="score-item-label">DKIM (40%)</span>
+                    <div class="score-item-bar">
+                        <div class="score-item-fill" style="width:${(status.scoreBreakdown.dkim / 40) * 100}%;background:${status.scoreBreakdown.dkim >= 30 ? 'var(--success)' : (status.scoreBreakdown.dkim > 0 ? 'var(--warning)' : 'var(--error)')}"></div>
+                    </div>
+                    <span class="score-item-value">${status.scoreBreakdown.dkim}/40</span>
+                </div>
+                <div class="score-item">
+                    <span class="score-item-label">SPF (30%)</span>
+                    <div class="score-item-bar">
+                        <div class="score-item-fill" style="width:${(status.scoreBreakdown.spf / 30) * 100}%;background:${status.scoreBreakdown.spf >= 20 ? 'var(--success)' : (status.scoreBreakdown.spf > 0 ? 'var(--warning)' : 'var(--error)')}"></div>
+                    </div>
+                    <span class="score-item-value">${status.scoreBreakdown.spf}/30</span>
+                </div>
+                <div class="score-item">
+                    <span class="score-item-label">DMARC (30%)</span>
+                    <div class="score-item-bar">
+                        <div class="score-item-fill" style="width:${(status.scoreBreakdown.dmarc / 30) * 100}%;background:${status.scoreBreakdown.dmarc >= 20 ? 'var(--success)' : (status.scoreBreakdown.dmarc > 0 ? 'var(--warning)' : 'var(--error)')}"></div>
+                    </div>
+                    <span class="score-item-value">${status.scoreBreakdown.dmarc}/30</span>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+// ============================================================================
+// Authentication-Results Header Rendering
+// ============================================================================
+
+function renderAuthenticationResults(authResults) {
+    if (!authResults || authResults.length === 0) {
+        return '';
+    }
+
+    const resultsHtml = authResults.map((ar, idx) => {
+        const serverName = ar.authserv_id || 'Unknown Server';
+
+        const methodsHtml = ar.results.map(r => {
+            const resultInfo = r.resultInfo || AUTH_RESULTS[r.result] || AUTH_RESULTS.none;
+            const propsHtml = Object.entries(r.properties || {})
+                .map(([k, v]) => `<span class="auth-prop">${esc(k)}=${esc(v)}</span>`)
+                .join('');
+
+            return `<div class="auth-result-item">
+                <span class="auth-method">${esc(r.method.toUpperCase())}</span>
+                <span class="auth-result-badge ${resultInfo.color}">${resultInfo.icon} ${esc(r.result)}</span>
+                ${r.reason ? `<span class="auth-reason">(${esc(r.reason)})</span>` : ''}
+                ${propsHtml ? `<div class="auth-props">${propsHtml}</div>` : ''}
+            </div>`;
+        }).join('');
+
+        return `<div class="auth-results-entry">
+            <div class="auth-server">
+                <span class="auth-server-icon">\uD83D\uDDA5\uFE0F</span>
+                <span class="auth-server-name">${esc(serverName)}</span>
+                ${ar.version ? `<span class="auth-version">v${ar.version}</span>` : ''}
+            </div>
+            <div class="auth-methods">${methodsHtml}</div>
+        </div>`;
+    }).join('');
+
+    return `<div class="auth-results-card expanded">
+        <div class="sig-header" onclick="toggleCard(this)">
+            <div class="sig-title">
+                <span class="sig-num">\uD83D\uDCDD</span>
+                <span class="sig-domain">Server Authentication Results</span>
+                <span class="badge" style="background:rgba(0,212,255,0.15);color:var(--accent-secondary)">${authResults.length} SERVER${authResults.length > 1 ? 'S' : ''}</span>
+            </div>
+            <span class="expand-icon">\u25BC</span>
+        </div>
+        <div class="sig-content"><div class="sig-body">
+            <div class="info-msg">These are the authentication results reported by receiving mail servers in the Authentication-Results header.</div>
+            <div class="auth-results-list">
+                ${resultsHtml}
+            </div>
+        </div></div>
+    </div>`;
+}
+
 function initTooltips() {
     document.querySelectorAll('#results .tag').forEach(tag => {
         Tooltip.attachToTag(tag);
@@ -2278,7 +2791,7 @@ async function validate() {
     if (!input) return;
 
     log('info', 'Starting validation');
-    const { headers, body, dkimSigs, errors, warnings } = parseEmail(input);
+    const { headers, body, dkimSigs, authResults, errors, warnings } = parseEmail(input);
 
     let parsingIssuesHtml = '';
     if (errors && errors.length > 0) {
@@ -2303,11 +2816,15 @@ async function validate() {
     }
 
     if (errors && errors.length > 0 && headers.length === 0) {
+        document.getElementById('overallSummaryEl').innerHTML = '';
+        document.getElementById('authResultsEl').innerHTML = '';
         document.getElementById('headersEl').innerHTML = '';
         document.getElementById('summaryEl').innerHTML = '';
         document.getElementById('relayEl').innerHTML = '';
         document.getElementById('spfEl').innerHTML = '';
         document.getElementById('dmarcEl').innerHTML = '';
+        document.getElementById('bimiEl').innerHTML = '';
+        document.getElementById('mtaStsEl').innerHTML = '';
         document.getElementById('arcEl').innerHTML = '';
         document.getElementById('sigsEl').innerHTML = '';
         document.getElementById('debugLog').innerHTML = renderDebug();
@@ -2378,6 +2895,17 @@ async function validate() {
     const spfSummaryLabel = spfEvalResult ? (SPF_RESULTS[spfEvalResult.result]?.name || 'Unknown') : 'N/A';
 
     if (!dkimSigs.length) {
+        // Render Authentication-Results header (from receiving server)
+        document.getElementById('authResultsEl').innerHTML = renderAuthenticationResults(authResults);
+
+        // Render overall summary card (with no DKIM)
+        document.getElementById('overallSummaryEl').innerHTML = renderOverallSummary({
+            dkimResults: [],
+            spfResult: spfEvalResult,
+            dmarcResult,
+            authResults
+        });
+
         document.getElementById('summaryEl').innerHTML = `
             <div class="summary-item"><div class="summary-icon">\uD83D\uDEE1\uFE0F</div><div><span class="summary-value ${spfSummaryClass}">${spfSummaryIcon}</span><div class="summary-label">SPF ${spfSummaryLabel}</div></div></div>
             <div class="summary-item"><div class="summary-icon">\uD83D\uDCE7</div><div><span class="summary-value">0</span><div class="summary-label">DKIM Signatures</div></div></div>
@@ -2390,22 +2918,33 @@ async function validate() {
         return;
     }
 
-    const results = [];
+    const dkimResults = [];
     for (const sig of dkimSigs) {
-        results.push(await verifyDkim(sig, headers, body));
+        dkimResults.push(await verifyDkim(sig, headers, body));
     }
 
-    const valid = results.filter(r => r.status === 'valid').length;
-    const invalid = results.length - valid;
+    const valid = dkimResults.filter(r => r.status === 'valid').length;
+    const invalid = dkimResults.length - valid;
+
+    // Render Authentication-Results header (from receiving server)
+    document.getElementById('authResultsEl').innerHTML = renderAuthenticationResults(authResults);
+
+    // Render overall summary card
+    document.getElementById('overallSummaryEl').innerHTML = renderOverallSummary({
+        dkimResults,
+        spfResult: spfEvalResult,
+        dmarcResult,
+        authResults
+    });
 
     document.getElementById('summaryEl').innerHTML = `
         <div class="summary-item"><div class="summary-icon">\uD83D\uDEE1\uFE0F</div><div><span class="summary-value ${spfSummaryClass}">${spfSummaryIcon}</span><div class="summary-label">SPF ${spfSummaryLabel}</div></div></div>
-        <div class="summary-item"><div class="summary-icon">\uD83D\uDCE7</div><div><span class="summary-value">${results.length}</span><div class="summary-label">DKIM Signatures</div></div></div>
+        <div class="summary-item"><div class="summary-icon">\uD83D\uDCE7</div><div><span class="summary-value">${dkimResults.length}</span><div class="summary-label">DKIM Signatures</div></div></div>
         <div class="summary-item"><div class="summary-icon">\u2713</div><div><span class="summary-value success">${valid}</span><div class="summary-label">Valid</div></div></div>
         <div class="summary-item"><div class="summary-icon">\u2717</div><div><span class="summary-value error">${invalid}</span><div class="summary-label">Invalid</div></div></div>
     `;
 
-    document.getElementById('sigsEl').innerHTML = results.map((r, i) => renderSig(r, i + 1)).join('');
+    document.getElementById('sigsEl').innerHTML = dkimResults.map((r, i) => renderSig(r, i + 1)).join('');
     document.getElementById('debugLog').innerHTML = renderDebug();
     document.getElementById('results').classList.add('visible');
     document.getElementById('status').innerHTML = '';
