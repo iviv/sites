@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Email Parser & DKIM Validator</title>
+<link rel="stylesheet" href="v2_style.css">
+</head>
+<body>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1 style="margin: 0;">Email Parser & DKIM Validator</h1>
+        <div id="theme-selector" class="theme-buttons">
+            <button class="theme-btn" data-theme="theme-light-nord" title="Nord Light"></button>
+            <div class="theme-separator"></div>
+            <button class="theme-btn" data-theme="theme-dark-solarized" title="Solarized Dark"></button>
+            <button class="theme-btn" data-theme="theme-dark-dracula" title="Dracula"></button>
+            <button class="theme-btn" data-theme="theme-dark-monokai" title="Monokai"></button>
+        </div>
+    </div>
+    <div id="drop-zone">Drag and drop an .eml file here or click to select</div>
+    <input type="file" id="file-input" class="hidden" accept=".eml,.txt">
+    <div id="error-msg" class="error hidden"></div>
+    
+    <div id="results" class="hidden">
+        <div class="section">
+            <h2>Summary</h2>
+            <div id="summary-output"></div>
+        </div>
+       <div class="section">
+            <h2>DMARC Analysis <span class="header-controls"><button class="toggle-section-btn rotated" title="Collapse section">›</button></span></h2>
+            <div id="dmarc-output"></div>
+        </div>        
+        <div class="section">
+            <h2>SPF Record <span class="header-controls"><button class="toggle-section-btn rotated" title="Collapse section">›</button></span></h2>
+            <div id="spf-output"></div>
+        </div>
+        <div class="section">
+            <h2>DKIM Signatures <span class="header-controls"><button class="toggle-section-btn rotated" title="Collapse section">›</button></span></h2>
+            <div id="dkim-output"></div>
+        </div>
+        <div class="section">
+            <h2>Headers 
+                <span class="header-controls">
+                    <button id="toggle-signed-only" title="Show all headers">🔐</button>
+                    <button class="toggle-section-btn rotated" title="Collapse section">›</button>
+                </span>
+            </h2>
+            <div id="headers-output"></div>
+        </div>
+    </div>
+<script src="v2_email_parser.js"></script>
+<script src="v2_dkim_validator.js"></script>
+<script src="v2_spf_validator.js"></script>
+<script src="v2_dmarc_validator.js"></script>
+<script src="v2_render.js"></script>
+</body>
+</html>
