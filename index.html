@@ -19,6 +19,7 @@
             --border-color: rgba(56, 189, 248, 0.15);
             --code-font: 'JetBrains Mono', monospace;
             --success: #22c55e;
+            --fail: #c5225e;
         }
 
         [data-theme="light"] {
@@ -183,6 +184,14 @@
             width: 6px;
             height: 6px;
             background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-dot-red {
+            width: 6px;
+            height: 6px;
+            background: var(--fail);
             border-radius: 50%;
             animation: pulse 2s ease-in-out infinite;
         }
@@ -399,9 +408,12 @@
             <span class="terminal-prompt">whoami</span>
             <h1>Ivaliy Ivanov</h1>
             <div class="role">Infrastructure Engineer · Backend Systems</div>
-            
             <div class="status-badge">
                 <span class="status-dot"></span>
+                salesforce
+            </div>            
+            <div class="status-badge">
+                <span class="status-dot-red"></span>
                 ex-msft
             </div>
         </div>
