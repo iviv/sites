@@ -261,10 +261,8 @@
             font-size: 0.7rem;
         }
 
-        .tech-item:hover {
-            border-color: var(--accent-primary);
-            background: var(--accent-glow);
-            transform: translateX(3px);
+        .tech-item {
+            cursor: default;
         }
 
         .stats-grid {
@@ -304,35 +302,42 @@
             letter-spacing: 0.5px;
         }
 
+        .vibe-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 28px;
+        }
+
         .vibe-button {
-            width: 100%;
-            padding: 14px 24px;
-            background: transparent;
-            border: 1px solid var(--accent-primary);
-            color: var(--accent-primary);
+            padding: 12px 16px;
+            background: var(--card-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
             font-family: var(--code-font);
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 8px;
+            gap: 10px;
             text-decoration: none;
         }
 
-         .vibe-button::before {
-            content: "";
-            opacity: 0.7;
+        .vibe-button::before {
+            content: ">";
+            color: var(--accent-primary);
+            font-size: 0.75rem;
+            font-weight: 700;
         }
 
         .vibe-button:hover {
-            background: var(--accent-primary);
-            color: var(--bg-dark);
-            box-shadow: 0 0 20px var(--accent-glow);
-            transform: translateY(-2px);
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+            background: var(--accent-glow);
+            transform: translateX(3px);
         }
 
         .connect-button {
@@ -402,7 +407,7 @@
     <div class="card">
         <div class="card-header">
             <div class="controls">
-                <button class="matrix-toggle active" id="matrixToggle" title="Toggle Matrix effect">
+                <button class="matrix-toggle" id="matrixToggle" title="Toggle Matrix effect">
                     <span>⚡</span>
                 </button>
                 <button class="theme-toggle" id="themeToggle" title="Toggle theme">
@@ -445,17 +450,17 @@
                 <div class="tech-item">LLM/FT</div>
             </div>
 
-          <div class="section-title">Vibes (100% AI Slop)</div>
-            <div class="tech-grid">
-             <div class="tech-item"><a href="dkimsignaturevalidator.html" class="vibe-button" target="_blank">Email validator</a></div>
-             <div class="tech-item"><a href="v2_index.html" class="vibe-button" target="_blank">Email validator (WIP)</a></div>
-             <div class="tech-item"><a href="dnsbind.html" class="vibe-button" target="_blank">DNS & Bind cheat sheet</a></div>
+            <div class="section-title">Vibes (100% AI Slop)</div>
+            <div class="vibe-grid">
+                <a href="dkimsignaturevalidator.html" class="vibe-button" target="_blank">Email validator</a>
+                <a href="v2_index.html" class="vibe-button" target="_blank">Email validator (WIP)</a>
+                <a href="dnsbind.html" class="vibe-button" target="_blank">DNS & Bind cheat sheet</a>
             </div>
+
             <div class="section-title">Contact</div>
             <a href="https://www.linkedin.com/in/ivaliy" class="connect-button" target="_blank">
                 ivaliy@linkedin.com
             </a>
-            </div>
         </div>
     </div>
 
@@ -472,7 +477,7 @@
         const columns = canvas.width / fontSize;
         const drops = Array(Math.floor(columns)).fill(1);
 
-        let matrixEnabled = true;
+        let matrixEnabled = false;
         let animationId;
 
         function drawMatrix() {
@@ -496,8 +501,6 @@
 
             animationId = setTimeout(drawMatrix, 35);
         }
-
-        drawMatrix();
 
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
