@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS &amp; BIND — The Complete Guide</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e1a;--bg2:#111827;--bg3:#1e293b;--bg4:#334155;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --accent:#3b82f6;--accent2:#60a5fa;--accent3:#2563eb;
+  --green:#10b981;--green2:#34d399;
+  --orange:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--cyan:#06b6d4;
+  --radius:12px;--radius-sm:8px;
+  --shadow:0 4px 24px rgba(0,0,0,.3);
+  --font-mono:'SF Mono','Cascadia Code','Fira Code',monospace;
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --max-w:1200px;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden}
+a{color:var(--accent2);text-decoration:none;transition:color .2s}
+a:hover{color:var(--cyan)}
+h1,h2,h3,h4{font-weight:700;line-height:1.3}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
+
+/* Nav */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,14,26,.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.06)}
+.nav-inner{max-width:var(--max-w);margin:0 auto;padding:.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between}
+.nav-logo{font-size:1.1rem;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:.5rem}
+.nav-logo .dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.nav-links{display:flex;gap:1.5rem;font-size:.85rem}
+.nav-links a{color:var(--text2);font-weight:500}
+.nav-links a:hover{color:var(--accent2)}
+.hamburger{display:none;flex-direction:column;gap:4px;cursor:pointer;padding:4px}
+.hamburger span{display:block;width:20px;height:2px;background:var(--text);border-radius:2px;transition:all .3s}
+@media(max-width:768px){
+  .nav-links{display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);flex-direction:column;padding:1rem 1.5rem;border-bottom:1px solid rgba(255,255,255,.06)}
+  .nav-links.open{display:flex}
+  .hamburger{display:flex}
+}
+
+/* Hero */
+.hero{padding:8rem 1.5rem 4rem;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-40%;left:-20%;width:140%;height:140%;background:radial-gradient(ellipse at 50% 0%,rgba(59,130,246,.12) 0%,transparent 60%);pointer-events:none}
+.hero h1{font-size:clamp(2.5rem,6vw,4.5rem);letter-spacing:-.03em;margin-bottom:1rem;background:linear-gradient(135deg,#fff 0%,var(--accent2) 50%,var(--cyan) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:clamp(1rem,2vw,1.25rem);color:var(--text2);max-width:700px;margin:0 auto 2rem}
+.hero-badges{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;margin-bottom:2.5rem}
+.badge{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .75rem;border-radius:20px;font-size:.75rem;font-weight:600;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+.badge.blue{border-color:rgba(59,130,246,.3);color:var(--accent2)}
+.badge.green{border-color:rgba(16,185,129,.3);color:var(--green2)}
+.badge.purple{border-color:rgba(139,92,246,.3);color:var(--purple)}
+.badge.cyan{border-color:rgba(6,182,212,.3);color:var(--cyan)}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;max-width:800px;margin:0 auto}
+.stat{text-align:center;padding:1.5rem 1rem;background:var(--bg2);border-radius:var(--radius);border:1px solid rgba(255,255,255,.05)}
+.stat-num{font-size:2rem;font-weight:800;color:var(--accent2)}
+.stat-label{font-size:.8rem;color:var(--text3);margin-top:.25rem}
+
+/* TOC */
+.toc-section{max-width:var(--max-w);margin:3rem auto;padding:0 1.5rem}
+.toc{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:2rem}
+.toc h2{font-size:1.25rem;margin-bottom:1rem;color:var(--text)}
+.toc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.5rem}
+.toc a{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-radius:var(--radius-sm);color:var(--text2);font-size:.9rem;transition:all .2s}
+.toc a:hover{background:rgba(59,130,246,.08);color:var(--accent2)}
+.toc-num{font-size:.7rem;font-weight:700;color:var(--accent);min-width:1.5rem}
+
+/* Sections */
+.container{max-width:var(--max-w);margin:0 auto;padding:0 1.5rem}
+section{padding:4rem 0}
+section h2{font-size:clamp(1.75rem,3.5vw,2.5rem);margin-bottom:.5rem;letter-spacing:-.02em}
+section .section-sub{color:var(--text3);font-size:1rem;margin-bottom:2rem}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:1.75rem;transition:transform .2s,border-color .2s}
+.card:hover{border-color:rgba(59,130,246,.2);transform:translateY(-2px)}
+.card h3{font-size:1.1rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+.card p,.card li{color:var(--text2);font-size:.92rem}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.25rem;margin-top:1.5rem}
+.card-icon{width:36px;height:36px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+.card-icon.blue{background:rgba(59,130,246,.15);color:var(--accent2)}
+.card-icon.green{background:rgba(16,185,129,.15);color:var(--green2)}
+.card-icon.orange{background:rgba(245,158,11,.15);color:var(--orange)}
+.card-icon.purple{background:rgba(139,92,246,.15);color:var(--purple)}
+.card-icon.cyan{background:rgba(6,182,212,.15);color:var(--cyan)}
+.card-icon.red{background:rgba(239,68,68,.15);color:var(--red)}
+
+/* Code blocks */
+.code-block{background:#0d1117;border:1px solid rgba(255,255,255,.08);border-radius:var(--radius-sm);overflow:hidden;margin:1rem 0;font-size:.82rem}
+.code-header{display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.06);font-size:.75rem;color:var(--text3)}
+.code-header .lang{font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.code-block pre{padding:1rem;overflow-x:auto;line-height:1.6;font-family:var(--font-mono)}
+.code-block code{color:#c9d1d9;font-family:var(--font-mono)}
+.cm{color:#8b949e}.kw{color:#ff7b72}.str{color:#a5d6ff}.fn{color:#d2a8ff}.num{color:#79c0ff}.dir{color:#ffa657}.var{color:#ffa657}
+
+/* Diagram */
+.diagram{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);padding:2rem;margin:1.5rem 0;overflow-x:auto}
+.diagram-title{font-size:.85rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem}
+.diagram pre{font-family:var(--font-mono);font-size:.78rem;line-height:1.5;color:var(--text2);white-space:pre}
+
+/* Table */
+.table-wrap{overflow-x:auto;margin:1.5rem 0;border-radius:var(--radius);border:1px solid rgba(255,255,255,.06)}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{background:rgba(59,130,246,.08);color:var(--accent2);font-weight:600;text-align:left;padding:.75rem 1rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td{padding:.65rem 1rem;border-top:1px solid rgba(255,255,255,.04);color:var(--text2)}
+tr:hover td{background:rgba(255,255,255,.02)}
+code{font-family:var(--font-mono);font-size:.85em;background:rgba(59,130,246,.1);padding:.15em .4em;border-radius:4px;color:var(--accent2)}
+
+/* Info box */
+.info-box{border-radius:var(--radius-sm);padding:1.25rem 1.5rem;margin:1.5rem 0;font-size:.9rem;display:flex;gap:1rem;align-items:flex-start;line-height:1.6}
+.info-box.blue{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.15);color:var(--accent2)}
+.info-box.green{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.15);color:var(--green2)}
+.info-box.orange{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.15);color:var(--orange)}
+.info-box.red{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.15);color:var(--red)}
+.info-icon{font-size:1.25rem;flex-shrink:0;margin-top:.1rem}
+
+/* Timeline */
+.timeline{position:relative;padding-left:2.5rem;margin:1.5rem 0}
+.timeline::before{content:'';position:absolute;left:.75rem;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--accent) 0%,var(--purple) 50%,var(--cyan) 100%)}
+.timeline-item{position:relative;margin-bottom:1.5rem}
+.timeline-item::before{content:'';position:absolute;left:-1.85rem;top:.45rem;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);box-shadow:0 0 0 3px rgba(59,130,246,.2)}
+.timeline-item h4{font-size:1rem;margin-bottom:.25rem}
+.timeline-item p{font-size:.88rem;color:var(--text2)}
+
+/* Columns */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin:1.5rem 0}
+@media(max-width:768px){.two-col{grid-template-columns:1fr}}
+
+/* Lists */
+.feature-list{list-style:none;margin:1rem 0}
+.feature-list li{padding:.5rem 0;padding-left:1.5rem;position:relative;color:var(--text2);font-size:.92rem}
+.feature-list li::before{content:'›';position:absolute;left:0;color:var(--accent);font-weight:700;font-size:1.1rem}
+
+/* RFC Table */
+.rfc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem;margin:1.5rem 0}
+.rfc-card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);padding:1.25rem;transition:border-color .2s}
+.rfc-card:hover{border-color:rgba(59,130,246,.2)}
+.rfc-num{font-family:var(--font-mono);font-size:.8rem;font-weight:700;color:var(--accent);margin-bottom:.25rem}
+.rfc-title{font-weight:600;font-size:.95rem;margin-bottom:.35rem}
+.rfc-desc{font-size:.82rem;color:var(--text3);line-height:1.5}
+
+/* Footer */
+footer{background:var(--bg2);border-top:1px solid rgba(255,255,255,.06);padding:3rem 1.5rem;text-align:center;margin-top:4rem}
+footer p{color:var(--text3);font-size:.85rem}
+
+/* Smooth scroll offset */
+section[id]{scroll-margin-top:5rem}
+
+/* Glow effects */
+.glow{position:absolute;border-radius:50%;filter:blur(80px);opacity:.15;pointer-events:none}
+
+/* Command reference cards */
+.cmd-card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);overflow:hidden;transition:border-color .2s}
+.cmd-card:hover{border-color:rgba(59,130,246,.2)}
+.cmd-card-header{padding:1rem 1.25rem .75rem;display:flex;align-items:center;gap:.75rem}
+.cmd-card-header h3{font-size:1.05rem;margin:0}
+.cmd-card-header .tool-badge{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:.2rem .5rem;border-radius:4px;background:rgba(59,130,246,.12);color:var(--accent2)}
+.cmd-card-header .tool-badge.green{background:rgba(16,185,129,.12);color:var(--green2)}
+.cmd-card-header .tool-badge.orange{background:rgba(245,158,11,.12);color:var(--orange)}
+.cmd-card-header .tool-badge.purple{background:rgba(139,92,246,.12);color:var(--purple)}
+.cmd-card-header .tool-badge.cyan{background:rgba(6,182,212,.12);color:var(--cyan)}
+.cmd-card-desc{padding:0 1.25rem .75rem;font-size:.85rem;color:var(--text3);line-height:1.5}
+.cmd-row{display:flex;align-items:stretch;border-top:1px solid rgba(255,255,255,.04);font-size:.82rem;transition:background .15s}
+.cmd-row:hover{background:rgba(255,255,255,.02)}
+.cmd-text{flex:1;padding:.6rem 1rem;font-family:var(--font-mono);color:#c9d1d9;display:flex;align-items:center;gap:.5rem;overflow-x:auto;white-space:nowrap}
+.cmd-text .cm{color:#8b949e;font-family:var(--font-sans);font-size:.78rem;white-space:nowrap}
+.cmd-comment{flex:0 0 auto;padding:.6rem 1rem;color:var(--text3);font-size:.78rem;display:flex;align-items:center;border-left:1px solid rgba(255,255,255,.04);min-width:0}
+@media(max-width:768px){.cmd-comment{display:none}}
+.copy-btn{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:40px;background:none;border:none;border-left:1px solid rgba(255,255,255,.04);cursor:pointer;color:var(--text3);font-size:.85rem;transition:all .2s;padding:0}
+.copy-btn:hover{background:rgba(59,130,246,.1);color:var(--accent2)}
+.copy-btn.copied{color:var(--green2);background:rgba(16,185,129,.1)}
+.copy-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* Command grid layout */
+.cmd-grid{display:grid;grid-template-columns:1fr;gap:1.5rem;margin:1.5rem 0}
+.cmd-grid.two{grid-template-columns:repeat(auto-fit,minmax(480px,1fr))}
+@media(max-width:768px){.cmd-grid.two{grid-template-columns:1fr}}
+
+/* Tool tabs */
+.tool-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem}
+.tool-tab{padding:.4rem 1rem;border-radius:20px;font-size:.82rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:var(--text2);transition:all .2s;user-select:none}
+.tool-tab:hover{border-color:rgba(59,130,246,.3);color:var(--accent2)}
+.tool-tab.active{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:var(--accent2)}
+
+/* RFC link styling */
+.rfc-card a.rfc-link{display:inline-flex;align-items:center;gap:.35rem;margin-top:.5rem;font-size:.75rem;font-weight:600;color:var(--accent2);opacity:.7;transition:opacity .2s}
+.rfc-card a.rfc-link:hover{opacity:1;color:var(--cyan)}
+.rfc-card a.rfc-link svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2}
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo"><span class="dot"></span> DNS &amp; BIND Guide</div>
+    <div class="hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+      <span></span><span></span><span></span>
+    </div>
+    <div class="nav-links">
+      <a href="#fundamentals">Fundamentals</a>
+      <a href="#resolution">Resolution</a>
+      <a href="#records">Records</a>
+      <a href="#bind">BIND</a>
+      <a href="#security">Security</a>
+      <a href="#rfcs">RFCs</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="glow" style="width:600px;height:600px;background:var(--accent);top:-200px;left:50%;transform:translateX(-50%)"></div>
+  <h1>DNS &amp; BIND</h1>
+  <p>A cheatsheet the Domain Name System and the Berkeley Internet Name Domain — the backbone of the modern internet.</p>
+  <div class="hero-badges">
+    <span class="badge blue">RFC 1035</span>
+    <span class="badge green">BIND 9</span>
+    <span class="badge purple">DNSSEC</span>
+    <span class="badge cyan">DoH / DoT</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-num">1983</div><div class="stat-label">Year DNS was invented</div></div>
+    <div class="stat"><div class="stat-num">13</div><div class="stat-label">Root name servers</div></div>
+    <div class="stat"><div class="stat-num">1500+</div><div class="stat-label">TLDs in service</div></div>
+    <div class="stat"><div class="stat-num">~370M</div><div class="stat-label">Registered domains</div></div>
+  </div>
+</header>
+
+<!-- TOC -->
+<div class="toc-section">
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <div class="toc-grid">
+      <a href="#fundamentals"><span class="toc-num">01</span> DNS Fundamentals</a>
+      <a href="#history"><span class="toc-num">02</span> History &amp; Evolution</a>
+      <a href="#hierarchy"><span class="toc-num">03</span> The DNS Hierarchy</a>
+      <a href="#resolution"><span class="toc-num">04</span> Name Resolution Process</a>
+      <a href="#records"><span class="toc-num">05</span> Resource Record Types</a>
+      <a href="#zones"><span class="toc-num">06</span> Zones &amp; Zone Files</a>
+      <a href="#bind"><span class="toc-num">07</span> BIND — Introduction</a>
+      <a href="#bind-config"><span class="toc-num">08</span> BIND Configuration</a>
+      <a href="#bind-zones"><span class="toc-num">09</span> BIND Zone Examples</a>
+      <a href="#bind-advanced"><span class="toc-num">10</span> Advanced BIND Features</a>
+      <a href="#security"><span class="toc-num">11</span> DNS Security (DNSSEC)</a>
+      <a href="#modern"><span class="toc-num">12</span> Modern DNS (DoH/DoT)</a>
+      <a href="#troubleshooting"><span class="toc-num">13</span> Troubleshooting &amp; Commands</a>
+      <a href="#rfcs"><span class="toc-num">14</span> RFC Reference</a>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- 1. DNS Fundamentals -->
+<section id="fundamentals">
+  <h2>01 — DNS Fundamentals</h2>
+  <p class="section-sub">Understanding the phone book of the internet</p>
+
+  <p style="color:var(--text2);margin-bottom:1.5rem">The <strong>Domain Name System (DNS)</strong> is a hierarchical, distributed database that translates human-readable domain names (such as <code>example.com</code>) into machine-readable IP addresses (such as <code>93.184.216.34</code>). Without DNS, users would need to memorize numeric IP addresses for every website they visit.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon blue">&#x1F310;</span> Distributed Database</h3>
+      <p>DNS data is not stored in one place. It is distributed across millions of name servers worldwide. No single server holds all DNS records — each is authoritative for its own portion (zone) of the namespace.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon green">&#x1F5C2;</span> Hierarchical Structure</h3>
+      <p>The DNS namespace is organized as an inverted tree. The root is at the top, followed by Top-Level Domains (TLDs), second-level domains, and so on. Each level delegates authority to the level below it.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon orange">&#x26A1;</span> Caching &amp; Performance</h3>
+      <p>DNS resolvers cache responses based on the TTL (Time To Live) value. This dramatically reduces query load and latency. Most DNS lookups are resolved from cache without contacting authoritative servers.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon purple">&#x1F512;</span> Security Extensions</h3>
+      <p>DNSSEC adds cryptographic signatures to DNS records, allowing resolvers to verify that responses have not been tampered with. This protects against cache poisoning and man-in-the-middle attacks.</p>
+    </div>
+  </div>
+
+  <div class="info-box blue" style="margin-top:2rem">
+    <span class="info-icon">&#x1F4A1;</span>
+    <div><strong>Key Concept:</strong> DNS operates primarily over UDP on port 53 for standard queries, and TCP on port 53 for zone transfers and responses larger than 512 bytes (or 4096 bytes with EDNS0). Modern DNS also uses TCP/443 (DoH) and TCP/853 (DoT).</div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Core DNS Components</h3>
+  <div class="two-col">
+    <div>
+      <ul class="feature-list">
+        <li><strong>Stub Resolver</strong> — The client-side library (e.g., <code>libc</code>) that sends DNS queries from applications. It typically forwards queries to a configured recursive resolver.</li>
+        <li><strong>Recursive Resolver</strong> — A server (like your ISP's or <code>8.8.8.8</code>) that resolves queries on behalf of clients by traversing the DNS tree from root to authoritative.</li>
+        <li><strong>Authoritative Server</strong> — A server that holds the actual DNS records for a zone and provides definitive answers to queries for that zone.</li>
+      </ul>
+    </div>
+    <div>
+      <ul class="feature-list">
+        <li><strong>Root Server</strong> — One of 13 root server clusters (A through M) that direct queries to the appropriate TLD server.</li>
+        <li><strong>TLD Server</strong> — Handles queries for top-level domains (.com, .org, .net, etc.) and points to authoritative servers for second-level domains.</li>
+        <li><strong>Forwarder</strong> — A DNS server that forwards queries it cannot resolve locally to another resolver, rather than performing full recursion itself.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 2. History -->
+<section id="history">
+  <h2>02 — History &amp; Evolution</h2>
+  <p class="section-sub">From HOSTS.TXT to a global distributed system</p>
+
+  <div class="timeline">
+    <div class="timeline-item">
+      <h4>1970s — The HOSTS.TXT Era</h4>
+      <p>Before DNS, the Stanford Research Institute (SRI-NIC) maintained a single file called <code>HOSTS.TXT</code> that mapped all hostnames to addresses. Every machine on the ARPANET had to periodically download this file. As the network grew, this became unmanageable — updates were slow, the file grew large, and name collisions were common.</p>
+    </div>
+    <div class="timeline-item">
+      <h4>1983 — DNS is Born (RFC 882 &amp; RFC 883)</h4>
+      <p>Paul Mockapetris designed the Domain Name System and published the original specifications. DNS introduced a distributed, hierarchical naming system that could scale with the growing internet. The key insight was delegation — each organization could manage its own names.</p>
+    </div>
+    <div class="timeline-item">
+      <h4>1984 — First DNS Implementation</h4>
+      <p>The first DNS implementation, called "Jeeves," was written at ISI. Soon after, a group of UC Berkeley students wrote the Berkeley Internet Name Domain (BIND) software, which would go on to become the most widely used DNS software in history.</p>
+    </div>
+    <div class="timeline-item">
+      <h4>1987 — RFC 1034 &amp; RFC 1035</h4>
+      <p>The DNS specification was refined and republished as RFC 1034 (Concepts and Facilities) and RFC 1035 (Implementation and Specification). These remain the foundational DNS standards, though many extensions have been added since.</p>
+    </div>
+    <div class="timeline-item">
+      <h4>1997 — Dynamic DNS (RFC 2136)</h4>
+      <p>Dynamic updates allowed DNS records to be modified in real time without restarting the server. This was essential for DHCP integration and environments where IP addresses change frequently.</p>
+    </div>
+    <div class="timeline-item">
+      <h4>2005 — DNSSEC Deployed (RFC 4033–4035)</h4>
+      <p>DNS Security Extensions provided authentication and integrity for DNS data using public-key cryptography. The root zone was signed in 2010, marking a milestone in DNS security.</p>
+    </div>
+    <div class="timeline-item">
+      <h4>2018 — DNS over HTTPS (RFC 8484)</h4>
+      <p>DoH encrypts DNS queries inside HTTPS, providing privacy against eavesdropping and enabling DNS resolution even on networks that filter traditional DNS traffic.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3. DNS Hierarchy -->
+<section id="hierarchy">
+  <h2>03 — The DNS Hierarchy</h2>
+  <p class="section-sub">A tree rooted at a single dot</p>
+
+  <div class="diagram">
+    <div class="diagram-title">DNS Namespace Tree</div>
+<pre>
+                              . (root)
+                              │
+            ┌─────────────────┼─────────────────┐
+            │                 │                  │
+          .com              .org               .net
+            │                 │                  │
+      ┌─────┼─────┐      ┌───┴───┐          ┌───┴───┐
+      │     │     │      │       │          │       │
+   google example amazon  wikipedia  apache    cloudflare  ...
+      │     │                │
+   ┌──┴──┐  │            ┌──┴──┐
+   │     │  │            │     │
+  www   mail www         en    de
+   │     │  │            │     │
+ A rec  MX  A rec      A rec  A rec
+</pre>
+  </div>
+
+  <p style="color:var(--text2);margin-bottom:1.5rem">Every fully qualified domain name (FQDN) ends with a dot representing the root. When you type <code>www.example.com</code>, the FQDN is actually <code>www.example.com.</code> (with trailing dot). Each label between dots can be up to 63 characters long, and the total FQDN can be up to 253 characters.</p>
+
+  <div class="two-col">
+    <div class="card">
+      <h3>Root Zone</h3>
+      <p>The root zone is managed by IANA (under ICANN) and served by 13 root server identities (A.root-servers.net through M.root-servers.net). In reality, these are distributed across 1,700+ instances worldwide using anycast routing. The root zone file is relatively small and only contains delegations to TLD servers.</p>
+    </div>
+    <div class="card">
+      <h3>Top-Level Domains</h3>
+      <p>TLDs fall into several categories: <strong>gTLDs</strong> (generic: .com, .org, .net, .info), <strong>ccTLDs</strong> (country-code: .uk, .de, .jp), <strong>sTLDs</strong> (sponsored: .edu, .gov, .mil), and <strong>new gTLDs</strong> (.app, .dev, .cloud). Each TLD is operated by a designated registry operator (e.g., Verisign for .com).</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Name Resolution -->
+<section id="resolution">
+  <h2>04 — Name Resolution Process</h2>
+  <p class="section-sub">How a domain name becomes an IP address</p>
+
+  <div class="diagram">
+    <div class="diagram-title">Iterative DNS Resolution Flow</div>
+<pre>
+  User types                    ┌──────────────┐
+  www.example.com ──────────►   │  Stub        │
+                                │  Resolver    │
+                                └──────┬───────┘
+                                       │ Query: www.example.com?
+                                       ▼
+                                ┌──────────────┐
+                            ┌── │  Recursive   │ ◄── Checks cache first
+                            │   │  Resolver    │
+                            │   └──────┬───────┘
+                            │          │
+              Cache miss ───┘          │ Step 1: Query root server
+                                       ▼
+                                ┌──────────────┐
+                                │  Root Server │ ─── "I don't know, but
+                                │  (.)         │      ask .com servers"
+                                └──────────────┘
+                                       │ Returns NS for .com
+                                       ▼
+                                ┌──────────────┐
+                                │  TLD Server  │ ─── "I don't know, but
+                                │  (.com)      │      ask example.com NS"
+                                └──────────────┘
+                                       │ Returns NS for example.com
+                                       ▼
+                                ┌──────────────┐
+                                │ Authoritative │ ─── "Here's the answer:
+                                │ (example.com) │      93.184.216.34"
+                                └──────────────┘
+                                       │
+                                       ▼
+                               Response cached (TTL)
+                               Answer returned to client
+</pre>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Resolution Types</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon blue">&#x1F504;</span> Recursive Query</h3>
+      <p>The client demands a complete answer. The recursive resolver must either return the answer or an error — it cannot return a referral. This is the typical mode between stub resolvers and recursive resolvers.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon green">&#x27A1;</span> Iterative Query</h3>
+      <p>The server returns the best answer it has, which may be a referral to another server. The querier is then responsible for following the referral. This is how recursive resolvers talk to authoritative servers.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon orange">&#x1F4BE;</span> Inverse Query (deprecated)</h3>
+      <p>Originally specified in RFC 1035, inverse queries mapped an answer back to a question (e.g., IP to name). This was replaced by the much more practical reverse DNS system using PTR records in the <code>in-addr.arpa</code> and <code>ip6.arpa</code> zones.</p>
+    </div>
+  </div>
+
+  <div class="info-box green" style="margin-top:1.5rem">
+    <span class="info-icon">&#x2139;</span>
+    <div><strong>DNS Packet Structure (RFC 1035 §4):</strong> Every DNS message contains a 12-byte header with fields: ID (16-bit), QR flag (query/response), Opcode, AA/TC/RD/RA flags, RCODE, and counts for Question/Answer/Authority/Additional sections.</div>
+  </div>
+</section>
+
+<!-- 5. Resource Records -->
+<section id="records">
+  <h2>05 — Resource Record Types</h2>
+  <p class="section-sub">The building blocks of DNS data</p>
+
+  <p style="color:var(--text2);margin-bottom:1rem">Every DNS record follows the format: <code>name TTL class type rdata</code>. The class is almost always <code>IN</code> (Internet). Here are the essential record types:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Type</th><th>RFC</th><th>Purpose</th><th>Example</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>A</code></td><td>1035</td><td>Maps a name to an IPv4 address</td><td><code>www  IN  A  93.184.216.34</code></td></tr>
+        <tr><td><code>AAAA</code></td><td>3596</td><td>Maps a name to an IPv6 address</td><td><code>www  IN  AAAA  2606:2800:220:1:...</code></td></tr>
+        <tr><td><code>CNAME</code></td><td>1035</td><td>Canonical name (alias) for another name</td><td><code>blog  IN  CNAME  www.example.com.</code></td></tr>
+        <tr><td><code>MX</code></td><td>1035</td><td>Mail exchange server with priority</td><td><code>@  IN  MX  10  mail.example.com.</code></td></tr>
+        <tr><td><code>NS</code></td><td>1035</td><td>Authoritative name server for the zone</td><td><code>@  IN  NS  ns1.example.com.</code></td></tr>
+        <tr><td><code>PTR</code></td><td>1035</td><td>Pointer for reverse DNS lookups</td><td><code>34  IN  PTR  www.example.com.</code></td></tr>
+        <tr><td><code>SOA</code></td><td>1035</td><td>Start of Authority — zone metadata</td><td>See zone file example below</td></tr>
+        <tr><td><code>TXT</code></td><td>1035</td><td>Arbitrary text (SPF, DKIM, DMARC, etc.)</td><td><code>@  IN  TXT  "v=spf1 mx -all"</code></td></tr>
+        <tr><td><code>SRV</code></td><td>2782</td><td>Service locator (port, priority, weight)</td><td><code>_sip._tcp  IN  SRV  10 60 5060 sip.example.com.</code></td></tr>
+        <tr><td><code>CAA</code></td><td>8659</td><td>Certificate Authority Authorization</td><td><code>@  IN  CAA  0 issue "letsencrypt.org"</code></td></tr>
+        <tr><td><code>NAPTR</code></td><td>3403</td><td>Naming Authority Pointer (ENUM, SIP)</td><td>Used in VoIP and ENUM applications</td></tr>
+        <tr><td><code>DNSKEY</code></td><td>4034</td><td>Public key for DNSSEC</td><td>Contains the zone signing key</td></tr>
+        <tr><td><code>DS</code></td><td>4034</td><td>Delegation Signer for DNSSEC chain</td><td>Hash of child zone's DNSKEY</td></tr>
+        <tr><td><code>RRSIG</code></td><td>4034</td><td>DNSSEC signature over an RRset</td><td>Cryptographic signature data</td></tr>
+        <tr><td><code>SVCB</code></td><td>9460</td><td>Service Binding (general)</td><td>Modern alternative to SRV</td></tr>
+        <tr><td><code>HTTPS</code></td><td>9460</td><td>HTTPS-specific service binding</td><td><code>@  IN  HTTPS  1 . alpn="h2,h3"</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">SOA Record Deep Dive</h3>
+  <p style="color:var(--text2);margin-bottom:1rem">The SOA record is mandatory for every zone and defines key parameters:</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Zone File — SOA Record</span></div>
+<pre><code><span class="var">example.com.</span>  IN  SOA  <span class="fn">ns1.example.com.</span> <span class="fn">admin.example.com.</span> (
+    <span class="num">2024010101</span>  <span class="cm">; Serial number (YYYYMMDDNN format)</span>
+    <span class="num">3600</span>        <span class="cm">; Refresh — secondary checks primary every 1 hour</span>
+    <span class="num">900</span>         <span class="cm">; Retry — if refresh fails, retry every 15 min</span>
+    <span class="num">1209600</span>     <span class="cm">; Expire — secondary stops serving after 14 days</span>
+    <span class="num">86400</span>       <span class="cm">; Minimum TTL — negative caching TTL (1 day)</span>
+)</code></pre>
+  </div>
+
+  <div class="info-box orange">
+    <span class="info-icon">&#x26A0;</span>
+    <div><strong>Common Mistake:</strong> The "admin email" in the SOA record uses a dot instead of <code>@</code>. So <code>admin.example.com.</code> actually means <code>admin@example.com</code>. If the local part contains a dot, escape it with a backslash: <code>first\.last.example.com.</code></div>
+  </div>
+</section>
+
+<!-- 6. Zones -->
+<section id="zones">
+  <h2>06 — Zones &amp; Zone Files</h2>
+  <p class="section-sub">Administrative boundaries in DNS</p>
+
+  <div class="two-col">
+    <div>
+      <h3 style="margin-bottom:1rem">Zone vs. Domain</h3>
+      <p style="color:var(--text2)">A <strong>domain</strong> is a subtree of the DNS namespace (e.g., <code>example.com</code> and everything below it). A <strong>zone</strong> is a contiguous portion of the namespace managed by a single administrator. Zones are defined by delegation — when you create NS records for <code>sub.example.com</code>, you create a new zone with its own SOA and authority.</p>
+      <br>
+      <p style="color:var(--text2)">The domain <code>example.com</code> might contain the subdomain <code>internal.example.com</code>, but if <code>internal.example.com</code> is delegated to different name servers, they are in separate zones.</p>
+    </div>
+    <div>
+      <h3 style="margin-bottom:1rem">Zone Transfer</h3>
+      <p style="color:var(--text2)"><strong>AXFR</strong> (Full Zone Transfer, RFC 5936): The secondary server requests the entire zone from the primary. Used for initial synchronization.</p>
+      <br>
+      <p style="color:var(--text2)"><strong>IXFR</strong> (Incremental Zone Transfer, RFC 1995): Only the changes since a given serial number are transferred. Far more efficient for large zones with small changes.</p>
+      <br>
+      <p style="color:var(--text2)"><strong>NOTIFY</strong> (RFC 1996): The primary server immediately notifies secondaries when the zone changes, rather than waiting for the SOA refresh interval.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Complete Zone File Example</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Zone File — /var/named/zones/db.example.com</span></div>
+<pre><code><span class="dir">$ORIGIN</span> example.com.
+<span class="dir">$TTL</span> 86400
+
+<span class="cm">; === SOA Record ===</span>
+<span class="var">@</span>   IN  SOA  ns1.example.com. hostmaster.example.com. (
+        <span class="num">2024010301</span>  <span class="cm">; Serial</span>
+        <span class="num">3600</span>        <span class="cm">; Refresh (1 hour)</span>
+        <span class="num">900</span>         <span class="cm">; Retry (15 minutes)</span>
+        <span class="num">1209600</span>     <span class="cm">; Expire (2 weeks)</span>
+        <span class="num">86400</span>       <span class="cm">; Minimum / Negative Cache TTL</span>
+    )
+
+<span class="cm">; === Name Servers ===</span>
+<span class="var">@</span>       IN  NS   ns1.example.com.
+<span class="var">@</span>       IN  NS   ns2.example.com.
+
+<span class="cm">; === Mail ===</span>
+<span class="var">@</span>       IN  MX   10 mail.example.com.
+<span class="var">@</span>       IN  MX   20 mail-backup.example.com.
+
+<span class="cm">; === A Records ===</span>
+<span class="var">@</span>       IN  A       93.184.216.34
+<span class="var">ns1</span>     IN  A       93.184.216.1
+<span class="var">ns2</span>     IN  A       93.184.216.2
+<span class="var">www</span>     IN  A       93.184.216.34
+<span class="var">mail</span>    IN  A       93.184.216.10
+
+<span class="cm">; === AAAA Records ===</span>
+<span class="var">@</span>       IN  AAAA    2606:2800:220:1:248:1893:25c8:1946
+<span class="var">www</span>     IN  AAAA    2606:2800:220:1:248:1893:25c8:1946
+
+<span class="cm">; === CNAME Records ===</span>
+<span class="var">blog</span>    IN  CNAME   www.example.com.
+<span class="var">ftp</span>     IN  CNAME   www.example.com.
+
+<span class="cm">; === TXT Records ===</span>
+<span class="var">@</span>       IN  TXT     "v=spf1 mx ip4:93.184.216.0/24 -all"
+<span class="var">_dmarc</span>  IN  TXT     "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
+
+<span class="cm">; === SRV Records ===</span>
+<span class="var">_sip._tcp</span>  IN  SRV  10 60 5060 sip.example.com.
+
+<span class="cm">; === CAA Record ===</span>
+<span class="var">@</span>       IN  CAA  0 issue "letsencrypt.org"</code></pre>
+  </div>
+</section>
+
+<!-- 7. BIND Intro -->
+<section id="bind">
+  <h2>07 — BIND — The Berkeley Internet Name Domain</h2>
+  <p class="section-sub">The most widely used DNS server software</p>
+
+  <p style="color:var(--text2);margin-bottom:1.5rem"><strong>BIND</strong> (Berkeley Internet Name Domain) is an open-source DNS server originally written at the University of California, Berkeley in the 1980s. Now developed and maintained by the <strong>Internet Systems Consortium (ISC)</strong>, BIND is the reference implementation for DNS and runs on the majority of the internet's name servers.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon blue">&#x1F4E6;</span> BIND 9 Architecture</h3>
+      <p>BIND 9 was a complete rewrite focused on modularity, security, and modern features. It consists of the <code>named</code> daemon (the actual server), <code>rndc</code> (remote control utility), and various zone management tools like <code>dnssec-keygen</code> and <code>named-checkzone</code>.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon green">&#x2705;</span> Key Features</h3>
+      <ul class="feature-list">
+        <li>Full recursive and authoritative support</li>
+        <li>DNSSEC signing and validation</li>
+        <li>Dynamic DNS updates (RFC 2136)</li>
+        <li>Response Rate Limiting (RRL)</li>
+        <li>TSIG/SIG(0) authentication</li>
+        <li>Views for split-horizon DNS</li>
+        <li>Catalog Zones for automated provisioning</li>
+        <li>GeoIP-based responses</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon orange">&#x1F6E0;</span> BIND Utilities</h3>
+      <ul class="feature-list">
+        <li><code>named</code> — The DNS daemon itself</li>
+        <li><code>rndc</code> — Remote Name Daemon Control</li>
+        <li><code>dig</code> — DNS lookup utility</li>
+        <li><code>nslookup</code> — Legacy query tool</li>
+        <li><code>host</code> — Simple DNS lookup</li>
+        <li><code>named-checkconf</code> — Validate config syntax</li>
+        <li><code>named-checkzone</code> — Validate zone files</li>
+        <li><code>dnssec-keygen</code> — Generate DNSSEC keys</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">BIND Installation</h3>
+  <div class="two-col">
+    <div class="code-block">
+      <div class="code-header"><span class="lang">Debian / Ubuntu</span></div>
+<pre><code><span class="fn">sudo</span> apt update
+<span class="fn">sudo</span> apt install <span class="str">bind9 bind9utils bind9-doc</span>
+<span class="fn">sudo</span> systemctl enable named
+<span class="fn">sudo</span> systemctl start named</code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span class="lang">RHEL / CentOS / Fedora</span></div>
+<pre><code><span class="fn">sudo</span> dnf install <span class="str">bind bind-utils</span>
+<span class="fn">sudo</span> systemctl enable named
+<span class="fn">sudo</span> systemctl start named
+<span class="fn">sudo</span> firewall-cmd --add-service=dns --permanent</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- 8. BIND Configuration -->
+<section id="bind-config">
+  <h2>08 — BIND Configuration</h2>
+  <p class="section-sub">The named.conf file in depth</p>
+
+  <p style="color:var(--text2);margin-bottom:1rem">BIND is configured through <code>named.conf</code> (typically in <code>/etc/named/</code> or <code>/etc/bind/</code>). The configuration file uses a C-like syntax with nested blocks.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">named.conf — Full Example</span></div>
+<pre><code><span class="cm">// ==============================================</span>
+<span class="cm">// BIND 9 Configuration — /etc/named/named.conf</span>
+<span class="cm">// ==============================================</span>
+
+<span class="cm">// Access Control Lists</span>
+<span class="kw">acl</span> <span class="str">"trusted"</span> {
+    <span class="num">10.0.0.0/8</span>;
+    <span class="num">172.16.0.0/12</span>;
+    <span class="num">192.168.0.0/16</span>;
+    localhost;
+    localnets;
+};
+
+<span class="kw">options</span> {
+    directory          <span class="str">"/var/named"</span>;
+    pid-file           <span class="str">"/run/named/named.pid"</span>;
+    dump-file          <span class="str">"/var/named/data/cache_dump.db"</span>;
+    statistics-file    <span class="str">"/var/named/data/named_stats.txt"</span>;
+
+    <span class="cm">// Listen on interfaces</span>
+    listen-on port 53  { <span class="num">127.0.0.1</span>; <span class="num">10.0.1.1</span>; };
+    listen-on-v6 port 53 { ::1; };
+
+    <span class="cm">// Recursion — only for trusted clients</span>
+    recursion yes;
+    allow-recursion     { <span class="str">"trusted"</span>; };
+    allow-query         { any; };
+    allow-transfer      { none; };
+
+    <span class="cm">// Forwarding</span>
+    forwarders {
+        <span class="num">8.8.8.8</span>;
+        <span class="num">1.1.1.1</span>;
+    };
+    forward only;
+
+    <span class="cm">// DNSSEC</span>
+    dnssec-validation auto;
+
+    <span class="cm">// Performance tuning</span>
+    max-cache-size     256M;
+    max-cache-ttl      3600;
+    max-ncache-ttl     300;
+
+    <span class="cm">// Rate limiting (anti-DDoS)</span>
+    rate-limit {
+        responses-per-second 10;
+        window 5;
+    };
+
+    <span class="cm">// Query logging (disable in production)</span>
+    querylog no;
+};
+
+<span class="cm">// Logging configuration</span>
+<span class="kw">logging</span> {
+    channel default_log {
+        file <span class="str">"/var/log/named/default.log"</span> versions 5 size 50m;
+        severity info;
+        print-time yes;
+        print-severity yes;
+        print-category yes;
+    };
+    channel query_log {
+        file <span class="str">"/var/log/named/queries.log"</span> versions 3 size 100m;
+        severity info;
+        print-time yes;
+    };
+    channel security_log {
+        file <span class="str">"/var/log/named/security.log"</span> versions 5 size 50m;
+        severity dynamic;
+        print-time yes;
+    };
+
+    category default   { default_log; };
+    category queries   { query_log; };
+    category security  { security_log; };
+};
+
+<span class="cm">// TSIG key for zone transfers</span>
+<span class="kw">key</span> <span class="str">"transfer-key"</span> {
+    algorithm hmac-sha256;
+    secret <span class="str">"bWFzdGVyLXNlY3JldC1rZXktZm9yLXRyYW5zZmVycw=="</span>;
+};
+
+<span class="cm">// Primary zone</span>
+<span class="kw">zone</span> <span class="str">"example.com"</span> {
+    type primary;
+    file <span class="str">"zones/db.example.com"</span>;
+    allow-transfer { key <span class="str">"transfer-key"</span>; };
+    also-notify { <span class="num">10.0.2.1</span>; };
+    notify yes;
+};
+
+<span class="cm">// Secondary zone</span>
+<span class="kw">zone</span> <span class="str">"partner.com"</span> {
+    type secondary;
+    file <span class="str">"zones/db.partner.com"</span>;
+    primaries { <span class="num">203.0.113.10</span> key <span class="str">"transfer-key"</span>; };
+};
+
+<span class="cm">// Reverse DNS zone</span>
+<span class="kw">zone</span> <span class="str">"1.0.10.in-addr.arpa"</span> {
+    type primary;
+    file <span class="str">"zones/db.10.0.1"</span>;
+    allow-transfer { key <span class="str">"transfer-key"</span>; };
+};
+
+<span class="cm">// Root hints</span>
+<span class="kw">zone</span> <span class="str">"."</span> {
+    type hint;
+    file <span class="str">"named.ca"</span>;
+};</code></pre>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Configuration Blocks Explained</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h3><code>acl</code></h3>
+      <p>Defines named lists of IP addresses/networks. Reusable throughout the configuration. Built-in ACLs include <code>any</code>, <code>none</code>, <code>localhost</code>, and <code>localnets</code>.</p>
+    </div>
+    <div class="card">
+      <h3><code>options</code></h3>
+      <p>Global server settings: listening interfaces, recursion behavior, forwarders, cache size, DNSSEC, rate limiting, and file paths. These are the defaults unless overridden per-zone.</p>
+    </div>
+    <div class="card">
+      <h3><code>logging</code></h3>
+      <p>Defines channels (output destinations) and categories (types of messages). Channels can write to files, syslog, stderr, or null. Essential for debugging and security monitoring.</p>
+    </div>
+    <div class="card">
+      <h3><code>zone</code></h3>
+      <p>Defines each DNS zone the server is responsible for. Types include <code>primary</code> (authoritative master), <code>secondary</code> (slave), <code>forward</code>, <code>stub</code>, <code>hint</code> (root), and <code>mirror</code>.</p>
+    </div>
+    <div class="card">
+      <h3><code>key</code></h3>
+      <p>Defines TSIG shared secrets used for authenticating zone transfers, dynamic updates, and rndc communication. Always use <code>hmac-sha256</code> or stronger.</p>
+    </div>
+    <div class="card">
+      <h3><code>view</code></h3>
+      <p>Enables split-horizon DNS — different clients see different zones/records based on their source IP. Useful for serving different internal vs. external records.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 9. BIND Zone Examples -->
+<section id="bind-zones">
+  <h2>09 — BIND Zone Examples</h2>
+  <p class="section-sub">Practical zone file configurations</p>
+
+  <h3 style="margin-bottom:1rem">Reverse DNS Zone (IPv4)</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="lang">/var/named/zones/db.10.0.1</span></div>
+<pre><code><span class="dir">$ORIGIN</span> 1.0.10.in-addr.arpa.
+<span class="dir">$TTL</span> 86400
+
+<span class="var">@</span>   IN  SOA  ns1.example.com. hostmaster.example.com. (
+        <span class="num">2024010101</span> <span class="num">3600</span> <span class="num">900</span> <span class="num">1209600</span> <span class="num">86400</span> )
+
+<span class="var">@</span>   IN  NS   ns1.example.com.
+<span class="var">@</span>   IN  NS   ns2.example.com.
+
+<span class="cm">; PTR records — map IP to hostname</span>
+<span class="var">1</span>   IN  PTR  ns1.example.com.
+<span class="var">2</span>   IN  PTR  ns2.example.com.
+<span class="var">10</span>  IN  PTR  mail.example.com.
+<span class="var">34</span>  IN  PTR  www.example.com.</code></pre>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Split-Horizon DNS with Views</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="lang">named.conf — Views Example</span></div>
+<pre><code><span class="kw">view</span> <span class="str">"internal"</span> {
+    match-clients { <span class="str">"trusted"</span>; };
+    recursion yes;
+
+    <span class="kw">zone</span> <span class="str">"example.com"</span> {
+        type primary;
+        file <span class="str">"zones/internal/db.example.com"</span>;
+    };
+};
+
+<span class="kw">view</span> <span class="str">"external"</span> {
+    match-clients { any; };
+    recursion no;
+
+    <span class="kw">zone</span> <span class="str">"example.com"</span> {
+        type primary;
+        file <span class="str">"zones/external/db.example.com"</span>;
+    };
+};</code></pre>
+  </div>
+
+  <div class="info-box blue" style="margin-top:1rem">
+    <span class="info-icon">&#x1F4A1;</span>
+    <div><strong>Split-Horizon Use Case:</strong> Internal users resolve <code>app.example.com</code> to a private IP (10.0.1.50) for direct access, while external users resolve it to the public IP (203.0.113.50) through a load balancer. Views must be defined in order — first match wins.</div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Dynamic DNS Update</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Shell — nsupdate</span></div>
+<pre><code><span class="cm"># Using nsupdate with TSIG key</span>
+<span class="fn">nsupdate</span> -k /etc/named/keys/update-key.key &lt;&lt;EOF
+server <span class="num">10.0.1.1</span>
+zone <span class="str">example.com</span>
+update delete <span class="var">dynamic-host.example.com</span> A
+update add <span class="var">dynamic-host.example.com</span> 300 A <span class="num">10.0.1.100</span>
+send
+EOF</code></pre>
+  </div>
+</section>
+
+<!-- 10. Advanced BIND -->
+<section id="bind-advanced">
+  <h2>10 — Advanced BIND Features</h2>
+  <p class="section-sub">Going beyond the basics</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon cyan">&#x1F30D;</span> Response Policy Zones (RPZ)</h3>
+      <p>RPZ lets BIND act as a DNS firewall. You define policies that override normal DNS responses for specific domains — blocking malware domains, redirecting phishing sites, or implementing walled gardens. RPZ zones use special record types like CNAME to <code>.</code> (NXDOMAIN) or CNAME to <code>*.rpz-passthru</code>.</p>
+      <div class="code-block" style="margin-top:1rem">
+        <div class="code-header"><span class="lang">RPZ Zone</span></div>
+<pre><code><span class="cm">; Block a malware domain</span>
+<span class="var">malware.bad-site.com</span>  CNAME  .
+
+<span class="cm">; Redirect phishing to warning page</span>
+<span class="var">phish.example.com</span>  A  <span class="num">10.0.0.100</span>
+
+<span class="cm">; Passthrough (whitelist)</span>
+<span class="var">safe.example.com</span>  CNAME  *.rpz-passthru.</code></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="card-icon purple">&#x1F50D;</span> Catalog Zones (RFC 9432)</h3>
+      <p>Catalog zones automate provisioning of zones on secondary servers. Instead of manually adding zone statements to every secondary's config, you add the zone to a "catalog" zone on the primary. Secondaries automatically pick up and serve the new zone.</p>
+      <div class="code-block" style="margin-top:1rem">
+        <div class="code-header"><span class="lang">Catalog Zone</span></div>
+<pre><code><span class="var">catalog.example.com.</span> IN SOA . . 1 3600 900 1209600 86400
+<span class="var">catalog.example.com.</span> IN NS invalid.
+<span class="var">version.catalog.example.com.</span> IN TXT <span class="str">"2"</span>
+<span class="cm">; Add a member zone</span>
+<span class="var">&lt;unique-id&gt;.zones.catalog.example.com.</span> IN PTR <span class="str">newzone.com.</span></code></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="card-icon green">&#x1F504;</span> RNDC — Remote Control</h3>
+      <p>The <code>rndc</code> utility lets you control a running BIND instance without restarting:</p>
+      <div class="code-block" style="margin-top:1rem">
+        <div class="code-header"><span class="lang">Shell</span></div>
+<pre><code><span class="fn">rndc</span> reload                  <span class="cm"># Reload all zones</span>
+<span class="fn">rndc</span> reload example.com      <span class="cm"># Reload specific zone</span>
+<span class="fn">rndc</span> flush                   <span class="cm"># Flush entire cache</span>
+<span class="fn">rndc</span> flushname bad.com       <span class="cm"># Flush specific name</span>
+<span class="fn">rndc</span> status                  <span class="cm"># Server status</span>
+<span class="fn">rndc</span> querylog on             <span class="cm"># Enable query logging</span>
+<span class="fn">rndc</span> dumpdb -all              <span class="cm"># Dump cache to file</span>
+<span class="fn">rndc</span> signing -list example.com <span class="cm"># List DNSSEC keys</span>
+<span class="fn">rndc</span> retransfer example.com  <span class="cm"># Force zone transfer</span></code></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span class="card-icon orange">&#x1F527;</span> BIND Performance Tuning</h3>
+      <ul class="feature-list">
+        <li><strong>Worker threads:</strong> Set to match CPU cores for parallel query processing</li>
+        <li><strong>max-cache-size:</strong> Allocate 50–75% of available RAM for caching</li>
+        <li><strong>minimal-responses:</strong> Reduce response size by omitting unnecessary sections</li>
+        <li><strong>prefetch:</strong> Proactively refresh popular records before TTL expiry</li>
+        <li><strong>TCP clients:</strong> Tune <code>tcp-clients</code> for environments with many TCP queries</li>
+        <li><strong>Serve-stale:</strong> Return expired cache entries while refreshing in background (RFC 8767)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 11. Security -->
+<section id="security">
+  <h2>11 — DNS Security</h2>
+  <p class="section-sub">DNSSEC, DoH, DoT, and threat mitigation</p>
+
+  <h3 style="margin-bottom:1rem">DNSSEC — How It Works</h3>
+  <p style="color:var(--text2);margin-bottom:1rem">DNSSEC adds a chain of trust from the root zone to each signed domain. Zone owners sign their records with private keys; resolvers verify signatures using the corresponding public keys published in DNS.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">DNSSEC Chain of Trust</div>
+<pre>
+  Root Zone (.)
+  ├── DNSKEY (KSK + ZSK) ── Signed by root KSK
+  ├── RRSIG over DNSKEY
+  └── DS record for .com ──── Hash of .com's KSK
+         │
+         ▼
+  .com TLD Zone
+  ├── DNSKEY (KSK + ZSK) ── Validated via DS in root
+  ├── RRSIG over DNSKEY
+  └── DS record for example.com
+         │
+         ▼
+  example.com Zone
+  ├── DNSKEY (KSK + ZSK) ── Validated via DS in .com
+  ├── RRSIG over each RRset
+  ├── A record + RRSIG ──── Verifiable!
+  └── NSEC/NSEC3 ────────── Proof of non-existence
+
+  KSK = Key Signing Key (signs DNSKEY RRset)
+  ZSK = Zone Signing Key (signs all other RRsets)
+  DS  = Delegation Signer (links parent to child)
+</pre>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">DNSSEC with BIND</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="lang">Shell — DNSSEC Key Generation &amp; Zone Signing</span></div>
+<pre><code><span class="cm"># Generate Key Signing Key (KSK)</span>
+<span class="fn">dnssec-keygen</span> -a ECDSAP256SHA256 -f KSK example.com
+
+<span class="cm"># Generate Zone Signing Key (ZSK)</span>
+<span class="fn">dnssec-keygen</span> -a ECDSAP256SHA256 example.com
+
+<span class="cm"># Sign the zone</span>
+<span class="fn">dnssec-signzone</span> -A -3 $(head -c 1000 /dev/urandom | sha1sum | cut -b 1-16) \
+  -N INCREMENT -o example.com -t db.example.com
+
+<span class="cm"># Or use BIND's inline-signing (automatic)</span>
+<span class="cm"># In named.conf:</span>
+<span class="kw">zone</span> <span class="str">"example.com"</span> {
+    type primary;
+    file <span class="str">"zones/db.example.com"</span>;
+    dnssec-policy <span class="str">"default"</span>;
+    inline-signing yes;
+};</code></pre>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Common DNS Attacks &amp; Mitigations</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon red">&#x1F6A8;</span> Cache Poisoning</h3>
+      <p><strong>Attack:</strong> An attacker sends forged responses to a resolver, replacing legitimate records with malicious ones (e.g., Kaminsky attack).</p>
+      <p style="margin-top:.5rem"><strong>Mitigations:</strong> DNSSEC validation, source port randomization, 0x20 encoding (mixed-case query names), response rate limiting.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon red">&#x1F4A5;</span> DDoS Amplification</h3>
+      <p><strong>Attack:</strong> Open resolvers are abused to amplify traffic towards a victim. A small query with a spoofed source IP generates a large response sent to the victim.</p>
+      <p style="margin-top:.5rem"><strong>Mitigations:</strong> Disable open recursion, implement RRL, BCP 38 (ingress filtering), use <code>allow-recursion</code> ACLs.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon red">&#x1F575;</span> DNS Tunneling</h3>
+      <p><strong>Attack:</strong> Data exfiltration by encoding data in DNS queries/responses (e.g., <code>encoded-data.evil.com</code> TXT queries).</p>
+      <p style="margin-top:.5rem"><strong>Mitigations:</strong> Monitor for unusual query patterns (high volume, long labels, high entropy), limit TXT record query rates, use RPZ.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon red">&#x1F3AD;</span> Domain Hijacking</h3>
+      <p><strong>Attack:</strong> Taking control of a domain by exploiting weak registrar security, expired domains, or social engineering the registrar.</p>
+      <p style="margin-top:.5rem"><strong>Mitigations:</strong> Registrar lock, DNSSEC, two-factor authentication, registry lock services, monitoring for unauthorized changes.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 12. Modern DNS -->
+<section id="modern">
+  <h2>12 — Modern DNS Protocols</h2>
+  <p class="section-sub">Encrypting and evolving DNS for the modern internet</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon blue">&#x1F512;</span> DNS over HTTPS (DoH)</h3>
+      <p><strong>RFC 8484</strong> — Encapsulates DNS queries in HTTPS requests to port 443. Provides confidentiality and makes DNS indistinguishable from regular web traffic. Supported by major browsers (Firefox, Chrome, Edge) and resolvers (Cloudflare, Google, Quad9).</p>
+      <div class="code-block" style="margin-top:1rem">
+        <div class="code-header"><span class="lang">curl — DoH Query</span></div>
+<pre><code><span class="fn">curl</span> -sH <span class="str">'accept: application/dns-json'</span> \
+  <span class="str">'https://cloudflare-dns.com/dns-query?name=example.com&amp;type=A'</span></code></pre>
+      </div>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon green">&#x1F510;</span> DNS over TLS (DoT)</h3>
+      <p><strong>RFC 7858</strong> — Wraps standard DNS wire format in TLS on port 853. Easier to implement than DoH and simpler to deploy on existing infrastructure. Can be blocked by networks since it uses a dedicated port.</p>
+      <div class="code-block" style="margin-top:1rem">
+        <div class="code-header"><span class="lang">Shell — kdig (DoT query)</span></div>
+<pre><code><span class="fn">kdig</span> +tls @1.1.1.1 example.com A
+<span class="cm"># Or with dig (BIND 9.18+)</span>
+<span class="fn">dig</span> +tls @1.1.1.1 example.com A</code></pre>
+      </div>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon purple">&#x26A1;</span> DNS over QUIC (DoQ)</h3>
+      <p><strong>RFC 9250</strong> — Uses QUIC (UDP-based) on port 853 for encrypted DNS. Combines the privacy of DoT with the performance benefits of QUIC: 0-RTT connection resumption, multiplexed streams, and reduced latency.</p>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon cyan">&#x1F680;</span> Oblivious DNS (ODoH)</h3>
+      <p><strong>RFC 9230</strong> — Adds a proxy layer between client and resolver so that the proxy knows the client but not the query, and the resolver knows the query but not the client. Full privacy separation.</p>
+    </div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:2rem">
+    <table>
+      <thead>
+        <tr><th>Protocol</th><th>Port</th><th>Transport</th><th>RFC</th><th>Privacy</th><th>Firewall Visibility</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Classic DNS</td><td>53</td><td>UDP/TCP</td><td>1035</td><td>None</td><td>Fully visible</td></tr>
+        <tr><td>DoT</td><td>853</td><td>TLS</td><td>7858</td><td>Encrypted</td><td>Identifiable by port</td></tr>
+        <tr><td>DoH</td><td>443</td><td>HTTPS</td><td>8484</td><td>Encrypted</td><td>Blends with HTTPS</td></tr>
+        <tr><td>DoQ</td><td>853</td><td>QUIC</td><td>9250</td><td>Encrypted</td><td>Identifiable by port</td></tr>
+        <tr><td>ODoH</td><td>443</td><td>HTTPS+Proxy</td><td>9230</td><td>Client-resolver unlinkable</td><td>Blends with HTTPS</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 13. Troubleshooting & Command Reference -->
+<section id="troubleshooting">
+  <h2>13 — DNS Troubleshooting &amp; Command Reference</h2>
+  <p class="section-sub">Every command you need for DNS diagnostics — click the copy button to copy any command</p>
+
+  <div class="info-box blue" style="margin-top:0">
+    <span class="info-icon">&#x1F4CB;</span>
+    <div><strong>Quick Tip:</strong> Click the <strong>clipboard icon</strong> on any command row below to copy it to your clipboard. Replace <code>example.com</code> with your target domain.</div>
+  </div>
+
+  <!-- ===== DIG ===== -->
+  <h3 style="margin-top:2.5rem;margin-bottom:.5rem">dig — The DNS Swiss Army Knife</h3>
+  <p style="color:var(--text3);font-size:.9rem;margin-bottom:1rem">Part of BIND utilities. The most powerful and flexible DNS query tool. Outputs full DNS response details including headers, flags, and all sections.</p>
+
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Basic Queries</h3><span class="tool-badge">dig</span></div>
+      <div class="cmd-card-desc">Fundamental lookups for common record types</div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com</div><div class="cmd-comment">Default A record lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com A</div><div class="cmd-comment">Explicit A record query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com AAAA</div><div class="cmd-comment">IPv6 address record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com MX</div><div class="cmd-comment">Mail exchange records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com NS</div><div class="cmd-comment">Name server records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com TXT</div><div class="cmd-comment">Text records (SPF, DKIM, etc.)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com SOA</div><div class="cmd-comment">Start of Authority record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com CNAME</div><div class="cmd-comment">Canonical name (alias)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com CAA</div><div class="cmd-comment">Certificate Authority Authorization</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com ANY</div><div class="cmd-comment">All available records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig _sip._tcp.example.com SRV</div><div class="cmd-comment">Service record lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Output Control</h3><span class="tool-badge">dig</span></div>
+      <div class="cmd-card-desc">Adjust verbosity and what dig shows you</div>
+      <div class="cmd-row"><div class="cmd-text">dig +short example.com A</div><div class="cmd-comment">Terse output — IP only</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +noall +answer example.com A</div><div class="cmd-comment">Show answer section only</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +noall +answer +authority example.com NS</div><div class="cmd-comment">Answer + authority sections</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +noall +answer +additional example.com NS</div><div class="cmd-comment">Answer + glue records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +stats example.com</div><div class="cmd-comment">Show query time and stats</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +multiline example.com SOA</div><div class="cmd-comment">Readable multi-line SOA output</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +yaml example.com A</div><div class="cmd-comment">YAML-formatted output (BIND 9.18+)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Server Selection &amp; Transport</h3><span class="tool-badge">dig</span></div>
+      <div class="cmd-card-desc">Target specific servers and protocols</div>
+      <div class="cmd-row"><div class="cmd-text">dig @8.8.8.8 example.com A</div><div class="cmd-comment">Query Google DNS</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig @1.1.1.1 example.com A</div><div class="cmd-comment">Query Cloudflare DNS</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig @9.9.9.9 example.com A</div><div class="cmd-comment">Query Quad9 DNS</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig @ns1.example.com example.com A</div><div class="cmd-comment">Query authoritative directly</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +tcp example.com A</div><div class="cmd-comment">Force TCP transport</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +tls @1.1.1.1 example.com A</div><div class="cmd-comment">DNS over TLS (BIND 9.18+)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +https @1.1.1.1 example.com A</div><div class="cmd-comment">DNS over HTTPS (BIND 9.18+)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig -p 5353 @localhost example.com A</div><div class="cmd-comment">Query non-standard port</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Advanced Diagnostics</h3><span class="tool-badge">dig</span></div>
+      <div class="cmd-card-desc">Tracing, reverse lookups, zone transfers, and DNSSEC</div>
+      <div class="cmd-row"><div class="cmd-text">dig +trace example.com A</div><div class="cmd-comment">Full resolution trace root→TLD→auth</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +trace +nodnssec example.com A</div><div class="cmd-comment">Trace without DNSSEC clutter</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig -x 93.184.216.34</div><div class="cmd-comment">Reverse DNS (IP → hostname)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig -x 2606:2800:220:1::248</div><div class="cmd-comment">Reverse DNS for IPv6</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +dnssec example.com A</div><div class="cmd-comment">Request DNSSEC records (RRSIG)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +cd +dnssec example.com A</div><div class="cmd-comment">Disable DNSSEC validation</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com DNSKEY +multiline</div><div class="cmd-comment">View DNSSEC public keys</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com DS</div><div class="cmd-comment">Delegation Signer records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +tcp @ns1.example.com example.com AXFR</div><div class="cmd-comment">Full zone transfer (if permitted)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig @localhost version.bind CHAOS TXT</div><div class="cmd-comment">Query BIND version</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +nsid @1.1.1.1 example.com A</div><div class="cmd-comment">Request Name Server ID</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +subnet=203.0.113.0/24 example.com A</div><div class="cmd-comment">Test EDNS Client Subnet (ECS)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Email DNS Diagnostics</h3><span class="tool-badge">dig</span></div>
+      <div class="cmd-card-desc">Verify SPF, DKIM, DMARC, and MTA-STS records</div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com MX +short</div><div class="cmd-comment">Mail servers with priority</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com TXT +short</div><div class="cmd-comment">Check SPF record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig selector._domainkey.example.com TXT</div><div class="cmd-comment">DKIM public key record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig _dmarc.example.com TXT +short</div><div class="cmd-comment">DMARC policy record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig _mta-sts.example.com TXT +short</div><div class="cmd-comment">MTA-STS policy record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig _smtp._tls.example.com TXT +short</div><div class="cmd-comment">SMTP TLS Reporting (TLSRPT)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig _25._tcp.mail.example.com TLSA</div><div class="cmd-comment">DANE TLSA record for SMTP</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Batch &amp; Scripting</h3><span class="tool-badge">dig</span></div>
+      <div class="cmd-card-desc">Useful patterns for automation and scripts</div>
+      <div class="cmd-row"><div class="cmd-text">dig +short +identify example.com A</div><div class="cmd-comment">Show which server replied</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +noall +answer +ttlid example.com A</div><div class="cmd-comment">Show remaining TTL</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig +norec @ns1.example.com example.com A</div><div class="cmd-comment">Non-recursive (auth only)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig -f domains.txt +short A</div><div class="cmd-comment">Batch lookup from file</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">dig example.com A example.com MX example.com NS</div><div class="cmd-comment">Multiple queries at once</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+  </div>
+
+  <!-- ===== NSLOOKUP ===== -->
+  <h3 style="margin-top:3rem;margin-bottom:.5rem">nslookup — Legacy Interactive Tool</h3>
+  <p style="color:var(--text3);font-size:.9rem;margin-bottom:1rem">Available on virtually all operating systems including Windows. Supports both interactive and non-interactive modes. While considered deprecated on Unix, it remains the go-to tool on Windows systems.</p>
+
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Non-Interactive Mode</h3><span class="tool-badge green">nslookup</span></div>
+      <div class="cmd-card-desc">One-shot queries from the command line</div>
+      <div class="cmd-row"><div class="cmd-text">nslookup example.com</div><div class="cmd-comment">Default A record query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup example.com 8.8.8.8</div><div class="cmd-comment">Query specific DNS server</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=MX example.com</div><div class="cmd-comment">Query MX records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=NS example.com</div><div class="cmd-comment">Query name servers</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=TXT example.com</div><div class="cmd-comment">Query TXT records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=SOA example.com</div><div class="cmd-comment">Query SOA record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=PTR 34.216.184.93.in-addr.arpa</div><div class="cmd-comment">Reverse DNS lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=AAAA example.com</div><div class="cmd-comment">IPv6 address lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=ANY example.com</div><div class="cmd-comment">All record types</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -debug example.com</div><div class="cmd-comment">Verbose debug output</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=SRV _sip._tcp.example.com</div><div class="cmd-comment">Service record query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Windows-Specific</h3><span class="tool-badge green">nslookup</span></div>
+      <div class="cmd-card-desc">Windows nslookup and related commands</div>
+      <div class="cmd-row"><div class="cmd-text">nslookup -type=MX example.com 8.8.8.8</div><div class="cmd-comment">MX via specific server</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">ipconfig /displaydns</div><div class="cmd-comment">Show Windows DNS cache</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">ipconfig /flushdns</div><div class="cmd-comment">Flush Windows DNS cache</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">Resolve-DnsName example.com -Type A</div><div class="cmd-comment">PowerShell DNS query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">Resolve-DnsName example.com -Type MX -Server 8.8.8.8</div><div class="cmd-comment">PowerShell MX via server</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+  </div>
+
+  <!-- ===== HOST ===== -->
+  <h3 style="margin-top:3rem;margin-bottom:.5rem">host — Simple DNS Lookup</h3>
+  <p style="color:var(--text3);font-size:.9rem;margin-bottom:1rem">A streamlined utility for quick DNS lookups with clean, human-readable output. Ideal for shell scripts and fast checks. Part of the BIND utilities package.</p>
+
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>host Commands</h3><span class="tool-badge orange">host</span></div>
+      <div class="cmd-card-desc">Quick and clean DNS queries</div>
+      <div class="cmd-row"><div class="cmd-text">host example.com</div><div class="cmd-comment">A + AAAA + MX lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -t A example.com</div><div class="cmd-comment">A record only</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -t MX example.com</div><div class="cmd-comment">Mail server records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -t NS example.com</div><div class="cmd-comment">Name server records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -t TXT example.com</div><div class="cmd-comment">Text records</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -t SOA example.com</div><div class="cmd-comment">SOA record</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host 93.184.216.34</div><div class="cmd-comment">Reverse lookup (auto-detects IP)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -a example.com</div><div class="cmd-comment">Verbose — all info (like dig)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -v example.com</div><div class="cmd-comment">Verbose output with headers</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host example.com 8.8.8.8</div><div class="cmd-comment">Use specific resolver</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -l example.com ns1.example.com</div><div class="cmd-comment">List zone (zone transfer)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">host -W 5 example.com</div><div class="cmd-comment">Set 5-second timeout</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+  </div>
+
+  <!-- ===== DELV, DRILL, DOG ===== -->
+  <h3 style="margin-top:3rem;margin-bottom:.5rem">Other DNS Tools</h3>
+  <p style="color:var(--text3);font-size:.9rem;margin-bottom:1rem">Specialized tools for DNSSEC validation, modern output, and network diagnostics.</p>
+
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>delv — DNSSEC Validation</h3><span class="tool-badge purple">delv</span></div>
+      <div class="cmd-card-desc">BIND's dedicated DNSSEC validation utility. Shows the full chain of trust and validation status. Replaces <code>dig +sigchase</code>.</div>
+      <div class="cmd-row"><div class="cmd-text">delv example.com A</div><div class="cmd-comment">Validated A record lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">delv @8.8.8.8 example.com A</div><div class="cmd-comment">Validate via specific server</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">delv +vtrace example.com A</div><div class="cmd-comment">Verbose validation trace</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">delv +rtrace example.com A</div><div class="cmd-comment">Show resolver-style trace</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">delv +mtrace example.com A</div><div class="cmd-comment">Show all trust chain details</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">delv +noroot example.com DNSKEY</div><div class="cmd-comment">Skip trust anchor lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>drill — LDNS-based Lookup</h3><span class="tool-badge cyan">drill</span></div>
+      <div class="cmd-card-desc">Part of the ldns library (NLnet Labs). Similar to dig but with better DNSSEC chain validation. Common on BSDs. Install: <code>apt install ldnsutils</code>.</div>
+      <div class="cmd-row"><div class="cmd-text">drill example.com</div><div class="cmd-comment">Basic A record lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">drill -T example.com</div><div class="cmd-comment">Trace from root</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">drill -S example.com</div><div class="cmd-comment">Chase DNSSEC signatures</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">drill -DT example.com</div><div class="cmd-comment">Trace with DNSSEC</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">drill -V 5 example.com</div><div class="cmd-comment">Maximum verbosity level</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">drill example.com @8.8.8.8 MX</div><div class="cmd-comment">MX via specific server</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>kdig — Knot DNS Lookup</h3><span class="tool-badge cyan">kdig</span></div>
+      <div class="cmd-card-desc">Part of Knot DNS utilities. Advanced features including native DoT and DoH support. Install: <code>apt install knot-dnsutils</code>.</div>
+      <div class="cmd-row"><div class="cmd-text">kdig example.com A</div><div class="cmd-comment">Basic lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">kdig +tls @1.1.1.1 example.com A</div><div class="cmd-comment">DNS over TLS query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">kdig +https @1.1.1.1 example.com A</div><div class="cmd-comment">DNS over HTTPS query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">kdig +quic @dns.adguard.com example.com</div><div class="cmd-comment">DNS over QUIC query</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">kdig -x 93.184.216.34</div><div class="cmd-comment">Reverse DNS lookup</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Network &amp; OS Diagnostics</h3><span class="tool-badge orange">system</span></div>
+      <div class="cmd-card-desc">OS-level DNS configuration, caching, and connectivity checks</div>
+      <div class="cmd-row"><div class="cmd-text">cat /etc/resolv.conf</div><div class="cmd-comment">View resolver config (Linux)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">resolvectl status</div><div class="cmd-comment">systemd-resolved status</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">resolvectl query example.com</div><div class="cmd-comment">Query via systemd-resolved</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">resolvectl flush-caches</div><div class="cmd-comment">Flush systemd DNS cache</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">resolvectl statistics</div><div class="cmd-comment">Cache hit/miss statistics</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">sudo dscacheutil -flushcache</div><div class="cmd-comment">Flush macOS DNS cache</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">sudo killall -HUP mDNSResponder</div><div class="cmd-comment">Restart macOS DNS resolver</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">scutil --dns</div><div class="cmd-comment">macOS DNS config details</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">getent hosts example.com</div><div class="cmd-comment">Query NSS (hosts + DNS)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">ss -ulnp | grep :53</div><div class="cmd-comment">Check what listens on port 53</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">tcpdump -i eth0 port 53 -nn</div><div class="cmd-comment">Capture DNS traffic live</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+  </div>
+
+  <!-- ===== BIND SERVER MANAGEMENT ===== -->
+  <h3 style="margin-top:3rem;margin-bottom:.5rem">BIND Server Management</h3>
+  <p style="color:var(--text3);font-size:.9rem;margin-bottom:1rem">Commands for managing BIND named daemon, validating configurations, and controlling the server.</p>
+
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>rndc — Remote Control</h3><span class="tool-badge">rndc</span></div>
+      <div class="cmd-card-desc">Control the running BIND daemon without restarting</div>
+      <div class="cmd-row"><div class="cmd-text">rndc status</div><div class="cmd-comment">Server status &amp; version</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc reload</div><div class="cmd-comment">Reload all zones &amp; config</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc reload example.com</div><div class="cmd-comment">Reload specific zone</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc reconfig</div><div class="cmd-comment">Reload config only (new zones)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc flush</div><div class="cmd-comment">Flush entire cache</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc flushname example.com</div><div class="cmd-comment">Flush one name from cache</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc flushtree example.com</div><div class="cmd-comment">Flush name + subdomains</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc querylog on</div><div class="cmd-comment">Enable query logging</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc querylog off</div><div class="cmd-comment">Disable query logging</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc dumpdb -all</div><div class="cmd-comment">Dump cache to file</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc stats</div><div class="cmd-comment">Write statistics to file</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc retransfer example.com</div><div class="cmd-comment">Force zone transfer (secondary)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc notify example.com</div><div class="cmd-comment">Send NOTIFY to secondaries</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc signing -list example.com</div><div class="cmd-comment">List DNSSEC signing keys</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc zonestatus example.com</div><div class="cmd-comment">Detailed zone status</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc recursing</div><div class="cmd-comment">Dump recursive queries list</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc trace 3</div><div class="cmd-comment">Set debug level to 3</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc notrace</div><div class="cmd-comment">Disable debug logging</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+
+    <div class="cmd-card">
+      <div class="cmd-card-header"><h3>Config &amp; Zone Validation</h3><span class="tool-badge green">named-check*</span></div>
+      <div class="cmd-card-desc">Always validate before reloading — catch errors before they cause outages</div>
+      <div class="cmd-row"><div class="cmd-text">named-checkconf /etc/named/named.conf</div><div class="cmd-comment">Validate named.conf syntax</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named-checkconf -z /etc/named/named.conf</div><div class="cmd-comment">Check config + all zones</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named-checkconf -p /etc/named/named.conf</div><div class="cmd-comment">Print parsed config (canonical)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named-checkzone example.com /var/named/zones/db.example.com</div><div class="cmd-comment">Validate zone file</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named-checkzone -k fail example.com db.example.com</div><div class="cmd-comment">Strict checking mode</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named-checkzone 1.0.10.in-addr.arpa /var/named/zones/db.10.0.1</div><div class="cmd-comment">Check reverse zone</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named-compilezone -o - example.com db.example.com</div><div class="cmd-comment">Output compiled zone to stdout</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">rndc-confgen -a</div><div class="cmd-comment">Generate rndc.key file</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">tsig-keygen -a hmac-sha256 transfer-key</div><div class="cmd-comment">Generate TSIG key</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">journalctl -u named -f</div><div class="cmd-comment">Follow BIND logs (systemd)</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+      <div class="cmd-row"><div class="cmd-text">named -V</div><div class="cmd-comment">BIND version &amp; build options</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
+    </div>
+  </div>
+
+  <!-- ===== COMMON ISSUES ===== -->
+  <h3 style="margin-top:3rem;margin-bottom:1rem">Common Issues &amp; Solutions</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h3><span class="card-icon red">&#x274C;</span> SERVFAIL Responses</h3>
+      <ul class="feature-list">
+        <li>DNSSEC validation failure — check signatures and key rollover status</li>
+        <li>Authoritative server unreachable — verify NS records and network connectivity</li>
+        <li>Broken delegation — parent NS records don't match child zone's NS records</li>
+        <li>Use <code>dig +cd</code> to bypass DNSSEC validation for diagnosis</li>
+        <li>Check <code>delv +vtrace</code> for detailed DNSSEC chain validation</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon orange">&#x2753;</span> NXDOMAIN When Record Exists</h3>
+      <ul class="feature-list">
+        <li>Stale negative cache — wait for negative TTL or run <code>rndc flush</code></li>
+        <li>Wrong zone file loaded — validate with <code>named-checkzone</code></li>
+        <li>Serial number not incremented — secondaries won't transfer changes</li>
+        <li>Missing trailing dot on FQDN in zone file (relative vs absolute name)</li>
+        <li>Check <code>$ORIGIN</code> directive — unqualified names get it appended</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon orange">&#x1F422;</span> Slow Resolution</h3>
+      <ul class="feature-list">
+        <li>Timeout waiting for unresponsive forwarder — consider removing it</li>
+        <li>IPv6 attempted but not routable — disable AAAA queries or fix IPv6 routing</li>
+        <li>Large cache miss rate — increase <code>max-cache-size</code> in options</li>
+        <li>Enable <code>prefetch</code> to proactively refresh popular records</li>
+        <li>Use <code>dig +stats</code> to check query time from different servers</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="card-icon red">&#x1F6AB;</span> Zone Transfer Failures</h3>
+      <ul class="feature-list">
+        <li>TSIG key mismatch — verify key name, algorithm, and secret match on both</li>
+        <li>Firewall blocking TCP/53 — AXFR/IXFR <strong>require</strong> TCP</li>
+        <li>Serial number issue — primary must have higher serial than secondary</li>
+        <li>Check <code>allow-transfer</code> ACLs on primary — must list secondary IP or key</li>
+        <li>Use <code>rndc retransfer</code> to force-retry, check logs with <code>journalctl -u named</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="info-box orange" style="margin-top:1.5rem">
+    <span class="info-icon">&#x1F527;</span>
+    <div><strong>Pro Tip:</strong> When debugging DNS, always compare results from multiple resolvers. Query your local resolver, then an authoritative server directly (<code>dig @ns1.example.com</code>), then a public resolver (<code>dig @8.8.8.8</code>). Differences between them reveal where the problem lies — caching, delegation, or the zone data itself.</div>
+  </div>
+</section>
+
+<!-- 14. RFCs -->
+<section id="rfcs">
+  <h2>14 — RFC Reference</h2>
+  <p class="section-sub">The standards that define DNS</p>
+
+  <h3 style="margin-bottom:1rem">Core DNS Standards</h3>
+  <div class="rfc-grid">
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 1034</div>
+      <div class="rfc-title">Domain Names — Concepts and Facilities</div>
+      <div class="rfc-desc">The foundational RFC describing the DNS architecture, name space, and resolution algorithm. Defines domains, zones, delegation, and caching concepts. Published November 1987. (Obsoletes RFC 882, 883, 973)</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc1034" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 1034</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 1035</div>
+      <div class="rfc-title">Domain Names — Implementation and Specification</div>
+      <div class="rfc-desc">Companion to RFC 1034. Specifies the DNS wire protocol, message format, transport (UDP/TCP on port 53), master file format, and the original resource record types (A, NS, CNAME, SOA, MX, PTR, TXT).</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc1035" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 1035</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 2181</div>
+      <div class="rfc-title">Clarifications to the DNS Specification</div>
+      <div class="rfc-desc">Resolves ambiguities in RFC 1034/1035. Clarifies RRset rules, TTL handling, credibility ranking, zone authority, and the behavior of CNAME records.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc2181" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 2181</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 1995</div>
+      <div class="rfc-title">Incremental Zone Transfer in DNS (IXFR)</div>
+      <div class="rfc-desc">Defines incremental zone transfers, allowing secondary servers to request only the changes since a given serial number, rather than the entire zone.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc1995" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 1995</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 1996</div>
+      <div class="rfc-title">A Mechanism for Prompt Notification of Zone Changes (DNS NOTIFY)</div>
+      <div class="rfc-desc">Allows primary servers to proactively notify secondary servers when a zone has been updated, triggering immediate zone transfers rather than waiting for the SOA refresh interval.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc1996" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 1996</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 2136</div>
+      <div class="rfc-title">Dynamic Updates in the DNS (UPDATE)</div>
+      <div class="rfc-desc">Specifies a mechanism for adding, deleting, and modifying DNS records dynamically without editing zone files. Essential for DHCP integration and automated provisioning.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc2136" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 2136</a>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">DNSSEC Standards</h3>
+  <div class="rfc-grid">
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 4033</div>
+      <div class="rfc-title">DNS Security Introduction and Requirements</div>
+      <div class="rfc-desc">Overview of DNSSEC, threat model, and the security services it provides: origin authentication and data integrity.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc4033" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 4033</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 4034</div>
+      <div class="rfc-title">Resource Records for DNSSEC</div>
+      <div class="rfc-desc">Defines DNSKEY, RRSIG, NSEC, and DS resource record types used by DNSSEC for signing and validation.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc4034" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 4034</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 4035</div>
+      <div class="rfc-title">Protocol Modifications for DNSSEC</div>
+      <div class="rfc-desc">Specifies the DNS protocol modifications needed to support DNSSEC: how signers create signatures, how validators verify them, and the resolution process changes.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc4035" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 4035</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 5155</div>
+      <div class="rfc-title">DNS Security (DNSSEC) Hashed Authenticated Denial of Existence (NSEC3)</div>
+      <div class="rfc-desc">Introduces NSEC3 records that use hashed owner names, preventing zone enumeration while still providing authenticated denial of existence.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc5155" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 5155</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 6781</div>
+      <div class="rfc-title">DNSSEC Operational Practices, Version 2</div>
+      <div class="rfc-desc">Practical guidance on DNSSEC key management, key rollovers (ZSK and KSK), algorithm selection, and operational considerations.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc6781" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 6781</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 8198</div>
+      <div class="rfc-title">Aggressive Use of DNSSEC-Validated Cache</div>
+      <div class="rfc-desc">Allows resolvers to synthesize NXDOMAIN responses from cached NSEC/NSEC3 records, reducing query load on authoritative servers.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc8198" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 8198</a>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:1rem">Modern DNS &amp; Extensions</h3>
+  <div class="rfc-grid">
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 6891</div>
+      <div class="rfc-title">Extension Mechanisms for DNS (EDNS0)</div>
+      <div class="rfc-desc">Extends the DNS protocol beyond the original 512-byte UDP limit (up to 4096 bytes) and adds support for new flags and options. Essential for DNSSEC.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc6891" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 6891</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 7858</div>
+      <div class="rfc-title">Specification for DNS over TLS (DoT)</div>
+      <div class="rfc-desc">Encrypts DNS traffic using TLS on port 853. Provides confidentiality for DNS queries between stub resolvers and recursive resolvers.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc7858" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 7858</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 8484</div>
+      <div class="rfc-title">DNS Queries over HTTPS (DoH)</div>
+      <div class="rfc-desc">Specifies how to send DNS queries and receive responses over HTTPS using standard HTTP methods. Provides both confidentiality and resistance to network-level DNS filtering.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc8484" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 8484</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 9250</div>
+      <div class="rfc-title">DNS over Dedicated QUIC Connections (DoQ)</div>
+      <div class="rfc-desc">DNS transport over QUIC, combining the privacy of encrypted DNS with QUIC's performance benefits: 0-RTT connection resumption, stream multiplexing, and lower latency.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc9250" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 9250</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 9230</div>
+      <div class="rfc-title">Oblivious DNS over HTTPS (ODoH)</div>
+      <div class="rfc-desc">Adds a proxy between client and resolver to ensure the resolver never learns the client's IP and the proxy never learns the query content.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc9230" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 9230</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 8767</div>
+      <div class="rfc-title">Serving Stale Data to Improve DNS Resiliency</div>
+      <div class="rfc-desc">Allows recursive resolvers to serve expired cached records when authoritative servers are unreachable, improving resilience.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc8767" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 8767</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 5936</div>
+      <div class="rfc-title">DNS Zone Transfer Protocol (AXFR)</div>
+      <div class="rfc-desc">Updates the original AXFR mechanism from RFC 1035 with a clearer, more robust specification for full zone transfers over TCP.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc5936" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 5936</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 2845</div>
+      <div class="rfc-title">Secret Key Transaction Authentication for DNS (TSIG)</div>
+      <div class="rfc-desc">Defines TSIG, a mechanism for authenticating DNS messages (especially zone transfers and dynamic updates) using shared secret keys and HMAC signatures.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc2845" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 2845</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 9432</div>
+      <div class="rfc-title">DNS Catalog Zones</div>
+      <div class="rfc-desc">Defines catalog zones for automated provisioning of DNS zones on secondary name servers using a specially formatted DNS zone.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc9432" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 9432</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 9460</div>
+      <div class="rfc-title">Service Binding and Parameter Specification via the DNS (SVCB and HTTPS)</div>
+      <div class="rfc-desc">Defines SVCB and HTTPS record types for advertising service parameters (ALPN, ECH, port, IP hints) directly in DNS, enabling faster connection setup.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc9460" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 9460</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 8659</div>
+      <div class="rfc-title">DNS Certification Authority Authorization (CAA)</div>
+      <div class="rfc-desc">Allows domain owners to specify which CAs are permitted to issue certificates for their domain, reducing the risk of mis-issuance.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc8659" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 8659</a>
+    </div>
+    <div class="rfc-card">
+      <div class="rfc-num">RFC 7871</div>
+      <div class="rfc-title">Client Subnet in DNS Queries (ECS)</div>
+      <div class="rfc-desc">Allows recursive resolvers to forward partial client subnet information to authoritative servers, enabling geographically optimized responses from CDNs.</div>
+      <a href="https://www.rfc-editor.org/rfc/rfc7871" target="_blank" rel="noopener" class="rfc-link"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Read RFC 7871</a>
+    </div>
+  </div>
+
+  <div class="info-box green" style="margin-top:2rem">
+    <span class="info-icon">&#x1F4DA;</span>
+    <div><strong>Further Reading:</strong> The complete list of DNS-related RFCs is maintained by IANA. Key resources include the <a href="https://www.isc.org/bind/" style="color:var(--green2)">ISC BIND documentation</a>, the <a href="https://www.iana.org/domains" style="color:var(--green2)">IANA Root Zone Database</a>, and the <a href="https://www.dns-oarc.net/" style="color:var(--green2)">DNS-OARC</a> community for operational best practices.</div>
+  </div>
+</section>
+
+</div>
+
+<!-- Footer -->
+<footer>
+  <p style="font-size:1.1rem;font-weight:700;margin-bottom:.5rem;color:var(--text)">DNS &amp; BIND Guide</p>
+  <p>A comprehensive reference for DNS administrators and network engineers.</p>
+  <p style="margin-top:.5rem">Built with semantic HTML &amp; CSS. No external dependencies.</p>
+  <p style="margin-top:1rem;font-size:.75rem;color:var(--text3)">RFC documents are published by the IETF and are freely available at <a href="https://www.rfc-editor.org/">rfc-editor.org</a></p>
+</footer>
+
+<script>
+// Smooth scroll for nav links
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    const t=document.querySelector(a.getAttribute('href'));
+    if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth'});
+    document.querySelector('.nav-links')?.classList.remove('open')}
+  })
+});
+
+// Nav background on scroll
+const nav=document.querySelector('.nav');
+window.addEventListener('scroll',()=>{
+  nav.style.borderBottomColor=window.scrollY>50?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.04)';
+});
+
+// Copy command to clipboard
+function copyCmd(btn){
+  const row=btn.closest('.cmd-row');
+  const cmdEl=row.querySelector('.cmd-text');
+  // Get only the command text, not the comment
+  const text=cmdEl.childNodes[0]?.textContent?.trim()||cmdEl.textContent.trim();
+  navigator.clipboard.writeText(text).then(()=>{
+    btn.classList.add('copied');
+    btn.innerHTML='<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg>';
+    setTimeout(()=>{
+      btn.classList.remove('copied');
+      btn.innerHTML='<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+    },1500);
+  });
+}
+</script>
+</body>
+</html>
