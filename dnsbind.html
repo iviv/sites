@@ -180,6 +180,37 @@ section[id]{scroll-margin-top:5rem}
 .rfc-card a.rfc-link{display:inline-flex;align-items:center;gap:.35rem;margin-top:.5rem;font-size:.75rem;font-weight:600;color:var(--accent2);opacity:.7;transition:opacity .2s}
 .rfc-card a.rfc-link:hover{opacity:1;color:var(--cyan)}
 .rfc-card a.rfc-link svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2}
+
+/* Annotated output */
+.annotated-output{background:#0d1117;border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);overflow:hidden;margin:1.5rem 0}
+.annotated-output .code-header{display:flex;align-items:center;justify-content:space-between;padding:.6rem 1.25rem;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.06)}
+.annotated-output .code-header .lang{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)}
+.annotated-output .code-header .run-cmd{font-family:var(--font-mono);font-size:.8rem;color:var(--accent2);opacity:.7}
+.ao-body{display:flex;flex-direction:column}
+.ao-line-group{display:flex;border-top:1px solid rgba(255,255,255,.03)}
+.ao-line-group:first-child{border-top:none}
+.ao-line-group:hover{background:rgba(59,130,246,.04)}
+.ao-line-group.highlight{background:rgba(59,130,246,.06);border-left:3px solid var(--accent)}
+.ao-line-group.highlight-green{background:rgba(16,185,129,.05);border-left:3px solid var(--green)}
+.ao-line-group.highlight-orange{background:rgba(245,158,11,.05);border-left:3px solid var(--orange)}
+.ao-line-group.highlight-purple{background:rgba(139,92,246,.05);border-left:3px solid var(--purple)}
+.ao-line-group.highlight-cyan{background:rgba(6,182,212,.05);border-left:3px solid var(--cyan)}
+.ao-code{flex:1;padding:.5rem 1.25rem;font-family:var(--font-mono);font-size:.78rem;line-height:1.65;color:#c9d1d9;white-space:pre;overflow-x:auto;min-width:0}
+.ao-annotation{flex:0 0 340px;padding:.5rem 1.25rem;font-size:.8rem;color:var(--text2);line-height:1.55;border-left:1px solid rgba(255,255,255,.04);display:flex;align-items:flex-start;gap:.5rem}
+.ao-annotation strong{color:var(--text);font-weight:600}
+.ao-annotation code{font-size:.75rem;padding:.1em .35em}
+.ao-marker{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;margin-top:.1rem}
+.ao-marker.blue{background:rgba(59,130,246,.2);color:var(--accent2)}
+.ao-marker.green{background:rgba(16,185,129,.2);color:var(--green2)}
+.ao-marker.orange{background:rgba(245,158,11,.2);color:var(--orange)}
+.ao-marker.purple{background:rgba(139,92,246,.2);color:var(--purple)}
+.ao-marker.cyan{background:rgba(6,182,212,.2);color:var(--cyan)}
+.ao-marker.red{background:rgba(239,68,68,.2);color:var(--red)}
+.ao-separator{padding:.25rem 1.25rem;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);background:rgba(255,255,255,.02);border-top:1px solid rgba(255,255,255,.05)}
+@media(max-width:900px){
+  .ao-annotation{flex:0 0 auto;width:100%;border-left:none;border-top:1px solid rgba(255,255,255,.04);padding:.4rem 1.25rem .6rem}
+  .ao-line-group{flex-direction:column}
+}
 </style>
 </head>
 <body>
@@ -1093,6 +1124,170 @@ EOF</code></pre>
       <div class="cmd-row"><div class="cmd-text">dig -f domains.txt +short A</div><div class="cmd-comment">Batch lookup from file</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
       <div class="cmd-row"><div class="cmd-text">dig example.com A example.com MX example.com NS</div><div class="cmd-comment">Multiple queries at once</div><button class="copy-btn" onclick="copyCmd(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></div>
     </div>
+  </div>
+
+  <!-- ===== DIG OUTPUT ANATOMY ===== -->
+  <h3 style="margin-top:3rem;margin-bottom:.5rem">Anatomy of dig Output — Debugging a DNSSEC Validation Failure</h3>
+  <p style="color:var(--text3);font-size:.9rem;margin-bottom:.5rem">A domain's HTTPS suddenly stops resolving through your recursive resolver — clients get <code>SERVFAIL</code>. You query the authoritative server directly and it works fine. This is the classic symptom of a DNSSEC validation failure. Here is the full dig session that diagnoses it, with every output field explained.</p>
+
+  <div class="info-box orange" style="margin-top:1rem;margin-bottom:1.5rem">
+    <span class="info-icon">&#x1F4A1;</span>
+    <div><strong>Scenario:</strong> <code>dig app.example.com A</code> returns <code>SERVFAIL</code> from your resolver (<code>10.0.1.1</code>), but <code>dig @ns1.example.com app.example.com A</code> returns the correct IP. This means the record exists but something in the validation chain is broken. We run <code>dig +dnssec +multiline</code> to inspect the raw DNSSEC data from the authoritative server.</div>
+  </div>
+
+  <div class="annotated-output">
+    <div class="code-header">
+      <span class="lang">dig output — full annotated walkthrough</span>
+      <span class="run-cmd">$ dig @ns1.example.com app.example.com A +dnssec +multiline</span>
+    </div>
+    <div class="ao-body">
+
+      <div class="ao-separator">Header Section</div>
+
+      <div class="ao-line-group highlight">
+        <div class="ao-code">; &lt;&lt;&gt;&gt; DiG 9.18.24 &lt;&lt;&gt;&gt; @ns1.example.com app.example.com A +dnssec +multiline
+; (1 server found)</div>
+        <div class="ao-annotation"><span class="ao-marker blue">1</span><div><strong>Version &amp; query echo.</strong> dig prints its version and repeats your full command back. <code>(1 server found)</code> means the <code>@ns1.example.com</code> hostname resolved to one IP. If you see <code>(2 servers found)</code>, dig will try both (IPv4 and IPv6).</div></div>
+      </div>
+
+      <div class="ao-line-group highlight">
+        <div class="ao-code">;; global options: +cmd</div>
+        <div class="ao-annotation"><span class="ao-marker blue">2</span><div><strong>Global options.</strong> <code>+cmd</code> means the command header is printed (default on). Other globals like <code>+all</code> or <code>+noall</code> would appear here. This line confirms which output sections are active.</div></div>
+      </div>
+
+      <div class="ao-line-group highlight-green">
+        <div class="ao-code">;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: <span style="color:#ff7b72;font-weight:700">NOERROR</span>, id: 41562
+;; flags: <span style="color:#79c0ff;font-weight:700">qr aa</span> rd; QUERY: 1, ANSWER: 2, AUTHORITY: 2, ADDITIONAL: 5</div>
+        <div class="ao-annotation"><span class="ao-marker green">3</span><div><strong>Response header — the most important block.</strong><br>
+<code>opcode: QUERY</code> — standard query (vs. IQUERY, STATUS, NOTIFY, UPDATE).<br>
+<code>status: NOERROR</code> — the authoritative server returned success (RCODE 0). Other values: <code>NXDOMAIN</code> (3), <code>SERVFAIL</code> (2), <code>REFUSED</code> (5), <code>FORMERR</code> (1).<br>
+<code>id: 41562</code> — 16-bit transaction ID matching query to response (RFC 1035 §4.1.1). Mismatches indicate spoofed responses.<br>
+<strong>Flags:</strong><br>
+<code>qr</code> = Query Response (this is a response, not a query)<br>
+<code>aa</code> = <strong>Authoritative Answer</strong> — the server is authoritative for this zone. This is key: it proves we're getting data from the source, not a cache.<br>
+<code>rd</code> = Recursion Desired — we asked for recursion (our side), but there's no <code>ra</code> flag because this authoritative server doesn't offer recursion.<br>
+<strong>Missing flags to watch for:</strong> no <code>ad</code> (Authenticated Data) means DNSSEC was NOT validated by this server. No <code>tc</code> (Truncated) means the response fit in one UDP packet.<br>
+<strong>Section counts:</strong> 1 question, 2 answers (A + RRSIG), 2 authority (NS records), 5 additional (glue A/AAAA + OPT).</div></div>
+      </div>
+
+      <div class="ao-separator">OPT Pseudosection (EDNS)</div>
+
+      <div class="ao-line-group highlight-purple">
+        <div class="ao-code">;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags: <span style="color:#d2a8ff;font-weight:700">do</span>; udp: 1232</div>
+        <div class="ao-annotation"><span class="ao-marker purple">4</span><div><strong>EDNS0 (RFC 6891) metadata.</strong><br>
+<code>version: 0</code> — EDNS version (always 0 currently).<br>
+<code>flags: do</code> — <strong>DNSSEC OK</strong> bit is set. This means we asked the server to include DNSSEC records (RRSIG, NSEC, etc.) in its response. Set by our <code>+dnssec</code> flag.<br>
+<code>udp: 1232</code> — the server's advertised UDP payload size. 1232 bytes is the current recommended maximum (RFC 8085, DNS Flag Day 2020) to avoid IP fragmentation. If the response exceeds this, the server sets the <code>tc</code> (truncated) flag and the client retries over TCP.</div></div>
+      </div>
+
+      <div class="ao-separator">Question Section</div>
+
+      <div class="ao-line-group">
+        <div class="ao-code">;; QUESTION SECTION:
+;app.example.com.       IN A</div>
+        <div class="ao-annotation"><span class="ao-marker blue">5</span><div><strong>The question we asked.</strong> Echoed back verbatim. Format: <code>QNAME  QCLASS  QTYPE</code>. Note the trailing dot — this is the FQDN. <code>IN</code> = Internet class (virtually always). <code>A</code> = IPv4 address record. If this doesn't match your query, something intercepted or rewrote it.</div></div>
+      </div>
+
+      <div class="ao-separator">Answer Section — The Records</div>
+
+      <div class="ao-line-group highlight-green">
+        <div class="ao-code">app.example.com.        300 IN A 203.0.113.50</div>
+        <div class="ao-annotation"><span class="ao-marker green">6</span><div><strong>The A record itself.</strong> Format: <code>NAME  TTL  CLASS  TYPE  RDATA</code>.<br>
+<code>300</code> = TTL in seconds (5 minutes). This is the <em>remaining</em> TTL at query time — it counts down from the zone's configured value. If you query your caching resolver, this number decreases on each query until the record expires and is re-fetched.<br>
+<code>203.0.113.50</code> = the IPv4 address (RDATA). This is the actual answer.</div></div>
+      </div>
+
+      <div class="ao-line-group highlight-orange">
+        <div class="ao-code">app.example.com.        300 IN RRSIG A 13 3 300 (
+                20250315120000 20250213120000 <span style="color:#ff7b72;font-weight:700">12345</span> example.com.
+                oG7Tz+kPVmRqSE1J5xkN3ZcYg... )</div>
+        <div class="ao-annotation"><span class="ao-marker orange">7</span><div><strong>RRSIG — the DNSSEC signature over the A record.</strong> This is where the bug is. Field by field:<br>
+<code>A</code> — type covered (this signature signs the A RRset).<br>
+<code>13</code> — algorithm: ECDSAP256SHA256 (modern, good). Common values: 8=RSA/SHA-256, 13=ECDSA/P-256, 15=Ed25519.<br>
+<code>3</code> — labels: number of labels in the owner name (<code>app.example.com</code> = 3). Used to detect wildcard expansion (if actual labels &gt; this count, it was a wildcard match).<br>
+<code>300</code> — original TTL the zone was signed with.<br>
+<code>20250315120000</code> — <strong>signature expiration</strong> (March 15, 2025 12:00 UTC).<br>
+<code>20250213120000</code> — signature inception (Feb 13, 2025).<br>
+<code style="color:var(--red)">12345</code> — <strong>key tag</strong> identifying which DNSKEY signed this. A resolver uses this to find the matching public key.<br>
+<code>example.com.</code> — signer's name (the zone that holds the DNSKEY).<br>
+The base64 blob is the actual cryptographic signature.</div></div>
+      </div>
+
+      <div class="ao-separator">Authority Section</div>
+
+      <div class="ao-line-group">
+        <div class="ao-code">example.com.            3600 IN NS ns1.example.com.
+example.com.            3600 IN NS ns2.example.com.</div>
+        <div class="ao-annotation"><span class="ao-marker blue">8</span><div><strong>Authority section.</strong> Lists the NS records for the zone. Included because the server is authoritative (<code>aa</code> flag). If querying a recursive resolver and the answer came from cache, this section would typically be empty. The 3600s TTL (1 hour) controls how long resolvers cache the delegation.</div></div>
+      </div>
+
+      <div class="ao-separator">Additional Section</div>
+
+      <div class="ao-line-group">
+        <div class="ao-code">ns1.example.com.        3600 IN A    93.184.216.1
+ns1.example.com.        3600 IN AAAA 2001:db8::1
+ns2.example.com.        3600 IN A    93.184.216.2
+ns2.example.com.        3600 IN AAAA 2001:db8::2</div>
+        <div class="ao-annotation"><span class="ao-marker blue">9</span><div><strong>Glue records.</strong> The IP addresses of the name servers listed in the authority section. These are "additional" data provided proactively so the resolver doesn't need a separate lookup to reach the NS servers. Critical for in-bailiwick name servers (ns1.example.com within example.com) — without glue, there's a chicken-and-egg problem.</div></div>
+      </div>
+
+      <div class="ao-separator">Footer — Stats</div>
+
+      <div class="ao-line-group highlight-cyan">
+        <div class="ao-code">;; Query time: 24 msec
+;; SERVER: 93.184.216.1#53(ns1.example.com) (UDP)
+;; WHEN: Thu Feb 13 14:32:07 UTC 2025
+;; MSG SIZE  rcvd: 478</div>
+        <div class="ao-annotation"><span class="ao-marker cyan">10</span><div><strong>Query metadata.</strong><br>
+<code>Query time: 24 msec</code> — round-trip time to the server. &gt;100ms suggests network issues or geographic distance. 0ms means it came from local cache.<br>
+<code>SERVER: 93.184.216.1#53</code> — IP and port of the server that replied. <code>(ns1.example.com)</code> is the name we queried. <code>(UDP)</code> confirms the transport protocol used.<br>
+<code>MSG SIZE rcvd: 478</code> — response size in bytes. If this exceeds the EDNS UDP buffer (1232), the response would be truncated and retried over TCP. Responses &gt;512 bytes require EDNS0 support.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;margin-bottom:.5rem">The Diagnosis</h3>
+  <p style="color:var(--text2);font-size:.9rem;margin-bottom:1rem">The authoritative server returns <code>NOERROR</code> with a valid A record. So the data is fine. The problem is in the RRSIG at marker <strong style="color:var(--orange)">7</strong> above. Let's investigate the key tag and check the matching DNSKEY:</p>
+
+  <div class="annotated-output">
+    <div class="code-header">
+      <span class="lang">dig output — checking the DNSKEY</span>
+      <span class="run-cmd">$ dig @ns1.example.com example.com DNSKEY +multiline +dnssec</span>
+    </div>
+    <div class="ao-body">
+      <div class="ao-line-group highlight-orange">
+        <div class="ao-code">example.com.            3600 IN DNSKEY 256 3 13 (
+                k7Lz8vNpQ2mH9xYrT... ) ; ZSK ; alg = ECDSAP256SHA256 ; key id = <span style="color:#ff7b72;font-weight:700">67890</span></div>
+        <div class="ao-annotation"><span class="ao-marker orange">!</span><div><strong>Key tag mismatch found.</strong> The RRSIG references key tag <code style="color:var(--red)">12345</code>, but the only ZSK published in the zone has key tag <code style="color:var(--red)">67890</code>. This means a ZSK rollover happened — the zone was re-signed with a new key, but the <em>old</em> DNSKEY (12345) was already removed from the zone before the old RRSIG expired.<br><br>
+<strong>DNSKEY flags field:</strong><br>
+<code>256</code> = Zone Signing Key (ZSK). Bit 7 set (Zone Key) + bit 15 clear.<br>
+<code>257</code> = Key Signing Key (KSK). Bit 7 set + bit 15 set (Secure Entry Point).<br>
+<code>3</code> = protocol (always 3 for DNSSEC, per RFC 4034 §2.1.2).<br>
+<code>13</code> = algorithm number (same as the RRSIG).</div></div>
+      </div>
+
+      <div class="ao-line-group highlight-green">
+        <div class="ao-code">example.com.            3600 IN DNSKEY 257 3 13 (
+                r9Xk2wPqJ4nF7aYsU... ) ; KSK ; alg = ECDSAP256SHA256 ; key id = 11111</div>
+        <div class="ao-annotation"><span class="ao-marker green">&check;</span><div><strong>KSK is fine.</strong> The Key Signing Key (flag 257) is present and its key tag (11111) matches the DS record in the parent zone. The chain of trust from the root through .com to example.com is intact. Only the ZSK link is broken.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-box red" style="margin-top:1.5rem">
+    <span class="info-icon">&#x1F6A8;</span>
+    <div><strong>Root cause:</strong> During a ZSK rollover, the old DNSKEY (tag 12345) was removed from the zone before all RRSIGs signed by it had expired. The RRSIG over <code>app.example.com A</code> still references key 12345, but resolvers can no longer find that key in the DNSKEY RRset — so signature verification fails and they return <code>SERVFAIL</code>.<br><br>
+    <strong>Fix:</strong> Re-sign the zone with the current ZSK (67890): run <code>rndc sign example.com</code> or wait for inline-signing to catch up. To prevent this in the future, always follow the <strong>pre-publish</strong> or <strong>double-signature</strong> rollover method (RFC 6781 §4.1) — keep the old DNSKEY published until all its RRSIGs have expired.</div>
+  </div>
+
+  <div class="info-box blue" style="margin-top:1rem;margin-bottom:2rem">
+    <span class="info-icon">&#x1F50D;</span>
+    <div><strong>Quick verification commands for this scenario:</strong><br>
+    <code>dig +cd @10.0.1.1 app.example.com A</code> — bypasses DNSSEC validation on your resolver. If this returns <code>NOERROR</code> while the normal query returns <code>SERVFAIL</code>, the problem is definitively DNSSEC.<br>
+    <code>delv @ns1.example.com app.example.com A +vtrace</code> — walks the full chain of trust and reports exactly where validation fails.<br>
+    <code>dig example.com DNSKEY +short</code> — list all published keys to compare against RRSIG key tags.</div>
   </div>
 
   <!-- ===== NSLOOKUP ===== -->
