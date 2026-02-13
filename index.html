@@ -3,105 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Backend Infrastructure Engineer</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>Ivaliy Ivanov - Infrastructure Engineer</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #0f172a;
-            --bg-darker: #0a0f1e;
-            --card-bg: #1e293b;
-            --card-secondary: #334155;
-            --accent-primary: #38bdf8;
-            --accent-glow: rgba(56, 189, 248, 0.3);
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-tertiary: #64748b;
-            --border-color: rgba(56, 189, 248, 0.15);
-            --code-font: 'JetBrains Mono', monospace;
-            --success: #22c55e;
-            --fail: #c5225e;
+            --bg: #0c1222;
+            --card-bg: #151d2e;
+            --card-elevated: #1a2438;
+            --accent: #60a5fa;
+            --accent-dim: rgba(96, 165, 250, 0.12);
+            --accent-glow: rgba(96, 165, 250, 0.25);
+            --text-primary: #e8edf5;
+            --text-secondary: #8896ab;
+            --text-muted: #576275;
+            --border: rgba(96, 165, 250, 0.08);
+            --border-hover: rgba(96, 165, 250, 0.2);
+            --green: #34d399;
+            --red: #f87171;
+            --mono: 'JetBrains Mono', monospace;
         }
 
         [data-theme="light"] {
-            --bg-dark: #f1f5f9;
-            --bg-darker: #e2e8f0;
+            --bg: #f0f2f5;
             --card-bg: #ffffff;
-            --card-secondary: #f8fafc;
-            --accent-primary: #0284c7;
-            --accent-glow: rgba(2, 132, 199, 0.2);
-            --text-primary: #0f172a;
-            --text-secondary: #475569;
-            --text-tertiary: #64748b;
-            --border-color: rgba(2, 132, 199, 0.2);
-            --success: #16a34a;
+            --card-elevated: #f7f8fa;
+            --accent: #2563eb;
+            --accent-dim: rgba(37, 99, 235, 0.08);
+            --accent-glow: rgba(37, 99, 235, 0.15);
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --text-muted: #9ca3af;
+            --border: rgba(0, 0, 0, 0.06);
+            --border-hover: rgba(37, 99, 235, 0.25);
+            --green: #059669;
+            --red: #dc2626;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-dark);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
             color: var(--text-primary);
             display: flex;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 20px;
-            transition: background-color 0.3s ease;
-        }
-
-        body::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: radial-gradient(var(--accent-primary) 0.5px, transparent 0.5px);
-            background-size: 30px 30px;
-            opacity: 0.08;
-            z-index: -1;
+            padding: 24px;
+            transition: background 0.3s ease;
         }
 
         .matrix-bg {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             z-index: -2;
             overflow: hidden;
         }
 
         .card {
-            max-width: 520px;
+            max-width: 540px;
             width: 100%;
             background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-            transition: all 0.3s ease;
+            box-shadow:
+                0 0 0 1px var(--border),
+                0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 20px 40px -8px rgba(0, 0, 0, 0.3);
             position: relative;
         }
 
-        .card::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--accent-primary), transparent);
-        }
-
+        /* Header */
         .card-header {
-            padding: 32px 32px 24px;
-            border-bottom: 1px solid var(--border-color);
+            padding: 36px 36px 28px;
             position: relative;
         }
 
@@ -110,295 +85,246 @@
             top: 24px;
             right: 24px;
             display: flex;
-            gap: 8px;
+            gap: 6px;
         }
 
-        .theme-toggle,
-        .matrix-toggle {
-            background: var(--card-secondary);
-            border: 1px solid var(--border-color);
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
+        .ctrl-btn {
+            background: var(--card-elevated);
+            border: 1px solid var(--border);
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1rem;
-            transition: all 0.2s ease;
-        }
-
-        .theme-toggle:hover,
-        .matrix-toggle:hover {
-            background: var(--accent-primary);
-            border-color: var(--accent-primary);
-            transform: scale(1.05);
-        }
-
-        .matrix-toggle.active {
-            background: #ffb000;
-            border-color: #ffb000;
-        }
-
-        .terminal-prompt {
-            font-family: var(--code-font);
-            font-size: 0.75rem;
-            color: var(--accent-primary);
-            margin-bottom: 12px;
-            display: block;
-        }
-
-        .terminal-prompt::before {
-            content: "$ ";
-            color: var(--text-tertiary);
-        }
-
-        h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-            letter-spacing: -0.5px;
-        }
-
-        .role {
-            font-family: var(--code-font);
             font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--card-secondary);
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-            border: 1px solid var(--border-color);
-            margin-top: 16px;
-        }
-
-        .status-dot {
-            width: 6px;
-            height: 6px;
-            background: var(--success);
-            border-radius: 50%;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .status-dot-red {
-            width: 6px;
-            height: 6px;
-            background: var(--fail);
-            border-radius: 50%;
-            animation: pulse-red 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--success); }
-            50% { opacity: 0.6; box-shadow: 0 0 4px var(--success); }
-        }
-
-       @keyframes pulse-red {
-            0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--fail); }
-            50% { opacity: 0.6; box-shadow: 0 0 4px var(--fail); }
-        }
-
-        .card-body {
-            padding: 28px 32px 32px;
-        }
-
-        .bio {
-            font-size: 0.95rem;
-            line-height: 1.7;
-            color: var(--text-secondary);
-            margin-bottom: 28px;
-        }
-
-        .section-title {
-            font-family: var(--code-font);
-            font-size: 0.7rem;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .section-title::before {
-            content: "//";
-            color: var(--accent-primary);
-        }
-
-        .tech-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            margin-bottom: 28px;
-        }
-
-        .tech-item {
-            font-family: var(--code-font);
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            padding: 10px 12px;
-            background: var(--card-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
             transition: all 0.2s ease;
+            color: var(--text-muted);
         }
 
-        .tech-item::before {
-            content: "▸";
-            color: var(--accent-primary);
+        .ctrl-btn:hover {
+            background: var(--accent-dim);
+            border-color: var(--border-hover);
+            color: var(--accent);
+        }
+
+        .ctrl-btn.active {
+            background: rgba(251, 191, 36, 0.15);
+            border-color: rgba(251, 191, 36, 0.3);
+            color: #fbbf24;
+        }
+
+        .prompt {
+            font-family: var(--mono);
             font-size: 0.7rem;
-        }
-
-        .tech-item {
-            cursor: default;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 28px;
-        }
-
-        .stat {
-            text-align: center;
-            padding: 16px 8px;
-            background: var(--card-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            transition: all 0.2s ease;
-        }
-
-        .stat:hover {
-            border-color: var(--accent-primary);
-            transform: translateY(-2px);
-        }
-
-        .stat-value {
-            font-family: var(--code-font);
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--accent-primary);
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .stat-label {
-            font-size: 0.65rem;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 16px;
             letter-spacing: 0.5px;
         }
 
-        .vibe-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
+        .prompt span { color: var(--accent); }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        .badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 20px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            font-family: var(--mono);
+            color: var(--text-secondary);
+            background: var(--card-elevated);
+            border: 1px solid var(--border);
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .dot--green {
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+            animation: pulse 2.5s ease-in-out infinite;
+        }
+
+        .dot--red {
+            background: var(--red);
+            opacity: 0.6;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 0 36px;
+        }
+
+        /* Body */
+        .card-body {
+            padding: 28px 36px 36px;
+        }
+
+        .bio {
+            font-size: 0.9rem;
+            line-height: 1.75;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .bio strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Sections */
+        .section {
             margin-bottom: 28px;
         }
 
-        .vibe-button {
-            padding: 12px 16px;
-            background: var(--card-secondary);
-            border: 1px solid var(--border-color);
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-label {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 14px;
+        }
+
+        /* Tech chips */
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            font-family: var(--mono);
+            font-size: 0.75rem;
             color: var(--text-secondary);
-            font-family: var(--code-font);
-            font-size: 0.8rem;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            padding: 7px 14px;
+            background: var(--card-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: default;
+            transition: border-color 0.2s ease;
+        }
+
+        /* Vibe links */
+        .vibe-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .vibe-link {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            padding: 11px 16px;
+            background: var(--card-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
             text-decoration: none;
-        }
-
-        .vibe-button::before {
-            content: ">";
-            color: var(--accent-primary);
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-
-        .vibe-button:hover {
-            border-color: var(--accent-primary);
-            color: var(--accent-primary);
-            background: var(--accent-glow);
-            transform: translateX(3px);
-        }
-
-        .connect-button {
-            width: 100%;
-            padding: 14px 24px;
-            background: transparent;
-            border: 1px solid var(--accent-primary);
-            color: var(--accent-primary);
-            font-family: var(--code-font);
-            font-size: 0.9rem;
-            font-weight: 600;
-            border-radius: 8px;
-            cursor: pointer;
+            color: var(--text-secondary);
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            font-weight: 500;
             transition: all 0.2s ease;
+        }
+
+        .vibe-link .arrow {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            transition: all 0.2s ease;
+            margin-left: auto;
+        }
+
+        .vibe-link:hover {
+            border-color: var(--border-hover);
+            color: var(--accent);
+            transform: translateX(2px);
+        }
+
+        .vibe-link:hover .arrow {
+            color: var(--accent);
+            transform: translateX(2px);
+        }
+
+        /* Connect */
+        .connect-link {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
+            width: 100%;
+            padding: 13px 24px;
+            border: 1px solid var(--border-hover);
+            border-radius: 12px;
+            background: var(--accent-dim);
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 0.82rem;
+            font-weight: 600;
             text-decoration: none;
+            transition: all 0.2s ease;
         }
 
-        .connect-button::before {
-            content: "$ ssh";
-            opacity: 0.7;
+        .connect-link:hover {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+            box-shadow: 0 4px 20px var(--accent-glow);
+            transform: translateY(-1px);
         }
 
-        .connect-button:hover {
-            background: var(--accent-primary);
-            color: var(--bg-dark);
-            box-shadow: 0 0 20px var(--accent-glow);
-            transform: translateY(-2px);
-        }
-
+        /* Responsive */
         @media (max-width: 480px) {
-            .card-header {
-                padding: 24px 20px 20px;
-            }
+            body { padding: 16px; }
 
-            .card-body {
-                padding: 20px;
-            }
+            .card-header { padding: 28px 24px 22px; }
+            .divider { margin: 0 24px; }
+            .card-body { padding: 22px 24px 28px; }
 
-            h1 {
-                font-size: 1.6rem;
-            }
+            h1 { font-size: 1.5rem; }
 
-            .tech-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-grid {
-                gap: 12px;
-            }
-
-            .stat {
-                padding: 12px 6px;
-            }
-
-            .stat-value {
-                font-size: 1.1rem;
-            }
+            .chips { gap: 6px; }
+            .chip { font-size: 0.7rem; padding: 6px 12px; }
         }
     </style>
 </head>
@@ -407,65 +333,76 @@
     <div class="card">
         <div class="card-header">
             <div class="controls">
-                <button class="matrix-toggle" id="matrixToggle" title="Toggle Matrix effect">
-                    <span>⚡</span>
+                <button class="ctrl-btn" id="matrixToggle" title="Toggle matrix rain">
+                    <span>&#9889;</span>
                 </button>
-                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-                    <span id="themeIcon">☀️</span>
+                <button class="ctrl-btn" id="themeToggle" title="Toggle theme">
+                    <span id="themeIcon">&#9728;</span>
                 </button>
             </div>
-            
-            <span class="terminal-prompt">whoami</span>
+
+            <div class="prompt">$ <span>whoami</span></div>
             <h1>Ivaliy Ivanov</h1>
-            <div class="role">Infrastructure Engineer · Backend Systems</div>
-            <div class="status-badge">
-                <span class="status-dot"></span>
-                salesforce
-            </div>            
-            <div class="status-badge">
-                <span class="status-dot-red"></span>
-                ex-msft
-            </div>
-            <div class="status-badge">
-                <span class="status-dot-red"></span>
-                ex-keysystems
+            <div class="subtitle">Infrastructure Engineer &middot; Backend Systems</div>
+
+            <div class="badges">
+                <div class="badge"><span class="dot dot--green"></span> salesforce</div>
+                <div class="badge"><span class="dot dot--red"></span> ex-msft</div>
+                <div class="badge"><span class="dot dot--red"></span> ex-keysystems</div>
             </div>
         </div>
 
+        <div class="divider"></div>
+
         <div class="card-body">
             <p class="bio">
-                Building <strong>resilient, high-performance backend systems</strong> with focus on scalability, 
-                observability, and distributed architecture. Specialized in cloud-native infrastructure and 
-                event-driven microservices.
+                Building <strong>resilient, high-performance backend systems</strong> with focus on
+                scalability, observability, and distributed architecture. Specialized in cloud-native
+                infrastructure and event-driven microservices.
             </p>
 
-            <div class="section-title">Tech Stack</div>
-            <div class="tech-grid">
-                <div class="tech-item">Kubernetes/Docker</div>
-                <div class="tech-item">PostgreSQL/NoSQL</div>
-                <div class="tech-item">Redis</div>
-                <div class="tech-item">Azure/AWS</div>
-                <div class="tech-item">Kafka</div>
-                <div class="tech-item">C#/Java/Python</div>
-                <div class="tech-item">LLM/FT</div>
+            <div class="section">
+                <div class="section-label">Stack</div>
+                <div class="chips">
+                    <div class="chip">Kubernetes / Docker</div>
+                    <div class="chip">PostgreSQL / NoSQL</div>
+                    <div class="chip">Redis</div>
+                    <div class="chip">Azure / AWS</div>
+                    <div class="chip">Kafka</div>
+                    <div class="chip">C# / Java / Python</div>
+                    <div class="chip">LLM / Fine-tuning</div>
+                </div>
             </div>
 
-            <div class="section-title">Vibes (100% AI Slop)</div>
-            <div class="vibe-grid">
-                <a href="dkimsignaturevalidator.html" class="vibe-button" target="_blank">Email validator</a>
-                <a href="v2_index.html" class="vibe-button" target="_blank">Email validator (WIP)</a>
-                <a href="dnsbind.html" class="vibe-button" target="_blank">DNS & Bind cheat sheet</a>
+            <div class="section">
+                <div class="section-label">Vibes (100% AI Slop)</div>
+                <div class="vibe-list">
+                    <a href="dkimsignaturevalidator.html" class="vibe-link" target="_blank">
+                        Email Validator
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="v2_index.html" class="vibe-link" target="_blank">
+                        Email Validator v2 (WIP)
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="dnsbind.html" class="vibe-link" target="_blank">
+                        DNS &amp; Bind Cheat Sheet
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                </div>
             </div>
 
-            <div class="section-title">Contact</div>
-            <a href="https://www.linkedin.com/in/ivaliy" class="connect-button" target="_blank">
-                ivaliy@linkedin.com
-            </a>
+            <div class="section">
+                <div class="section-label">Connect</div>
+                <a href="https://www.linkedin.com/in/ivaliy" class="connect-link" target="_blank">
+                    linkedin.com/in/ivaliy
+                </a>
+            </div>
         </div>
     </div>
 
     <script>
-        // Matrix rain effect
+        // Matrix rain
         const canvas = document.getElementById('matrixCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -483,10 +420,10 @@
         function drawMatrix() {
             if (!matrixEnabled) return;
 
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.05)';
+            ctx.fillStyle = 'rgba(12, 18, 34, 0.05)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = '#ffb000';
+            ctx.fillStyle = '#fbbf24';
             ctx.font = fontSize + 'px monospace';
 
             for (let i = 0; i < drops.length; i++) {
@@ -509,10 +446,10 @@
 
         // Matrix toggle
         const matrixToggle = document.getElementById('matrixToggle');
-        
+
         matrixToggle.addEventListener('click', () => {
             matrixEnabled = !matrixEnabled;
-            
+
             if (matrixEnabled) {
                 matrixToggle.classList.add('active');
                 drawMatrix();
@@ -535,19 +472,19 @@
             currentTheme = savedTheme;
             if (currentTheme === 'light') {
                 html.setAttribute('data-theme', 'light');
-                themeIcon.textContent = '🌙';
+                themeIcon.innerHTML = '&#9790;';
             }
         }
 
         themeToggle.addEventListener('click', () => {
             if (currentTheme === 'dark') {
                 html.setAttribute('data-theme', 'light');
-                themeIcon.textContent = '🌙';
+                themeIcon.innerHTML = '&#9790;';
                 currentTheme = 'light';
                 localStorage.setItem('theme', 'light');
             } else {
                 html.removeAttribute('data-theme');
-                themeIcon.textContent = '☀️';
+                themeIcon.innerHTML = '&#9728;';
                 currentTheme = 'dark';
                 localStorage.setItem('theme', 'dark');
             }
