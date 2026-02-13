@@ -337,7 +337,7 @@
                     <span>&#9889;</span>
                 </button>
                 <button class="ctrl-btn" id="themeToggle" title="Toggle theme">
-                    <span id="themeIcon">&#9728;</span>
+                    <span id="themeIcon">☀️</span>
                 </button>
             </div>
 
@@ -484,7 +484,7 @@
                 localStorage.setItem('theme', 'light');
             } else {
                 html.removeAttribute('data-theme');
-                themeIcon.innerHTML = '&#9728;';
+                themeIcon.textContent = '☀️';
                 currentTheme = 'dark';
                 localStorage.setItem('theme', 'dark');
             }
