@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DKIM / SPF / DMARC Engineering Reference</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-0: #0a101a;
+      --bg-1: #111b2b;
+      --bg-2: #162338;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-strong: rgba(255, 255, 255, 0.08);
+      --text: #e9f0ff;
+      --text-dim: #a9b8d4;
+      --text-faint: #7f91b5;
+      --border: rgba(180, 202, 245, 0.18);
+      --accent: #66d9ef;
+      --accent-2: #8bffb8;
+      --accent-3: #ffd479;
+      --danger: #ff8b8b;
+      --warn: #ffca75;
+      --ok: #86f4b4;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+      --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+      --sans: "Space Grotesk", "Segoe UI", sans-serif;
+      --max: 1200px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 600px at 0% -10%, rgba(102, 217, 239, 0.14), transparent),
+        radial-gradient(1000px 500px at 100% -10%, rgba(139, 255, 184, 0.12), transparent),
+        linear-gradient(170deg, var(--bg-0), var(--bg-1) 48%, var(--bg-2));
+      color: var(--text);
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    .noise {
+      position: fixed; inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 3px 3px;
+      mix-blend-mode: soft-light; opacity: .2; pointer-events: none; z-index: -1;
+    }
+
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.2rem; }
+
+    /* ---- Topbar ---- */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(14px);
+      background: rgba(10, 16, 26, 0.75);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: var(--max); margin: 0 auto; padding: .8rem 1.2rem;
+      display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+    }
+    .brand {
+      font-weight: 700; letter-spacing: .02em; font-size: .95rem;
+      display: flex; gap: .6rem; align-items: center; white-space: nowrap;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 20px rgba(102, 217, 239, 0.7);
+    }
+    .nav { display: flex; gap: .9rem; flex-wrap: wrap; justify-content: flex-end; }
+    .nav a {
+      color: var(--text-dim); text-decoration: none; font-size: .78rem;
+      font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+      padding: .35rem .55rem; border-radius: 999px; transition: .2s ease;
+    }
+    .nav a:hover { color: var(--text); background: var(--surface); }
+
+    /* ---- Hero ---- */
+    .hero { padding: 4.2rem 0 2.8rem; border-bottom: 1px solid var(--border); margin-bottom: 2.2rem; }
+    .hero-grid { display: grid; gap: 1.2rem; grid-template-columns: 1.6fr 1fr; align-items: end; }
+    h1 { font-size: clamp(2rem, 4.4vw, 3.6rem); line-height: 1.08; letter-spacing: -.02em; }
+    .hero p { margin-top: 1rem; color: var(--text-dim); max-width: 70ch; font-size: 1.02rem; }
+    .tag-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.15rem; }
+    .tag {
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+      padding: .35rem .6rem; border-radius: 999px; font-size: .73rem;
+      letter-spacing: .03em; font-weight: 600;
+    }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow);
+    }
+    .stat h2 { font-size: .95rem; margin-bottom: .3rem; color: var(--text-dim); font-weight: 500; }
+    .stat code { font-family: var(--mono); font-size: .84rem; }
+
+    /* ---- Sections ---- */
+    section { margin: 2rem 0 2.4rem; }
+    .section-title { margin-bottom: .7rem; font-size: 1.55rem; letter-spacing: -.01em; }
+    .lede { color: var(--text-dim); margin-bottom: 1rem; max-width: 86ch; }
+
+    /* ---- Cards ---- */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .9rem; }
+    .card {
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: var(--radius); padding: 1rem 1rem .9rem; box-shadow: var(--shadow);
+    }
+    .card h3 { font-size: 1rem; margin-bottom: .55rem; color: var(--accent); }
+    .card p, .card li { color: var(--text-dim); font-size: .94rem; }
+    .card ul, .card ol { padding-left: 1rem; display: grid; gap: .4rem; }
+
+    /* ---- Timeline ---- */
+    .timeline {
+      font-family: var(--mono); border: 1px solid var(--border); border-radius: var(--radius);
+      background: rgba(0,0,0,.22); overflow: hidden; margin: 1rem 0;
+    }
+    .timeline-row {
+      display: grid; grid-template-columns: 200px 1fr; gap: .8rem;
+      border-top: 1px solid var(--border); padding: .7rem .9rem; align-items: start;
+    }
+    .timeline-row:first-child { border-top: none; }
+    .timeline-row .left { color: var(--accent-2); font-weight: 600; font-size: .82rem; }
+    .timeline-row .right { color: #d2def7; font-size: .83rem; }
+
+    /* ---- Tables ---- */
+    .cmd-table {
+      overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); background: rgba(0,0,0,.18);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    th, td { text-align: left; padding: .72rem .85rem; vertical-align: top; }
+    th {
+      font-size: .76rem; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--accent); background: rgba(102, 217, 239, 0.1);
+    }
+    tr { border-top: 1px solid var(--border); }
+    td { color: var(--text-dim); font-size: .89rem; }
+
+    /* ---- Code ---- */
+    code, pre { font-family: var(--mono); font-size: .84rem; }
+    .snippet {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: #090e17; margin: .9rem 0 1rem; overflow: hidden;
+    }
+    .snippet-head {
+      display: flex; justify-content: space-between; gap: .4rem;
+      padding: .42rem .72rem; border-bottom: 1px solid var(--border);
+      color: var(--text-faint); font-size: .72rem; text-transform: uppercase;
+      letter-spacing: .05em; background: rgba(255,255,255,.02);
+    }
+    pre { overflow-x: auto; padding: .9rem .72rem; color: #d8e8ff; line-height: 1.5; }
+
+    /* ---- Layout helpers ---- */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: .95rem; }
+    .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; }
+    .pill {
+      display: inline-block; border: 1px solid var(--border); border-radius: 6px;
+      padding: .08rem .38rem; font-size: .72rem; color: var(--text-dim);
+      margin-right: .35rem; margin-bottom: .24rem;
+    }
+
+    .status-ok { color: var(--ok); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--danger); }
+
+    .diag {
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      padding: .9rem; background: rgba(255,255,255,.03); overflow-x: auto;
+      font-family: var(--mono); font-size: .82rem; color: #d4e4ff;
+      margin: 1rem 0; white-space: pre;
+    }
+
+    .checklist {
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: var(--radius); padding: 1rem;
+    }
+    .checklist h3 { font-size: 1rem; margin-bottom: .55rem; color: var(--accent); }
+    .checklist li { margin-left: 1.1rem; color: var(--text-dim); margin-bottom: .5rem; font-size: .94rem; }
+
+    .callout {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: .8rem 1rem; margin: 1rem 0;
+    }
+    .callout.warn { border-color: rgba(255, 202, 117, .35); background: rgba(255, 202, 117, .06); }
+    .callout.danger { border-color: rgba(255, 139, 139, .35); background: rgba(255, 139, 139, .06); }
+    .callout.ok { border-color: rgba(134, 244, 180, .35); background: rgba(134, 244, 180, .06); }
+    .callout p { color: var(--text-dim); font-size: .9rem; margin: 0; }
+    .callout strong { color: var(--text); }
+
+    footer {
+      margin-top: 2rem; padding: 1.2rem 0 2.2rem; color: var(--text-faint);
+      border-top: 1px solid var(--border); font-size: .84rem;
+    }
+
+    @media (max-width: 960px) {
+      .hero-grid, .two-col, .three-col { grid-template-columns: 1fr; }
+      .timeline-row { grid-template-columns: 1fr; }
+      .topbar-inner { align-items: flex-start; }
+      .nav { justify-content: flex-start; }
+      .hero { padding-top: 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="dot"></span> DKIM / SPF / DMARC Reference</div>
+      <nav class="nav">
+        <a href="#overview">Overview</a>
+        <a href="#spf">SPF</a>
+        <a href="#dkim">DKIM</a>
+        <a href="#dmarc">DMARC</a>
+        <a href="#arc">ARC</a>
+        <a href="#bimi">BIMI</a>
+        <a href="#mta-sts">MTA-STS</a>
+        <a href="#validation">Validation</a>
+        <a href="#failures">Failures</a>
+        <a href="#runbooks">Runbooks</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- ======== HERO ======== -->
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>Email Authentication &amp; Domain Policy Engineering</h1>
+          <p>
+            A protocol-level reference for engineers operating production mail infrastructure.
+            Covers SPF, DKIM, DMARC, ARC, BIMI, MTA-STS, and DANE &mdash; from DNS record syntax
+            to verification logic, alignment semantics, failure taxonomy, and operational runbooks.
+          </p>
+          <div class="tag-row">
+            <span class="tag">RFC 7208 SPF</span>
+            <span class="tag">RFC 6376 DKIM</span>
+            <span class="tag">RFC 7489 DMARC</span>
+            <span class="tag">RFC 8617 ARC</span>
+            <span class="tag">RFC 8461 MTA-STS</span>
+            <span class="tag">RFC 8460 TLSRPT</span>
+          </div>
+        </div>
+        <aside class="stat">
+          <h2>Authentication Decision Chain</h2>
+          <code>Receive &rarr; SPF check (envelope) &rarr; DKIM verify (headers+body) &rarr; DMARC alignment (policy) &rarr; ARC (if forwarded) &rarr; Disposition</code>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======== 1. OVERVIEW ======== -->
+    <section id="overview">
+      <h2 class="section-title">1. How the Pieces Fit Together</h2>
+      <p class="lede">
+        SPF, DKIM, and DMARC are independent protocols that combine into a layered authentication framework.
+        Each solves a different piece of the sender-identity problem. DMARC is the policy layer that ties SPF and DKIM
+        to the human-visible <code>From:</code> header domain.
+      </p>
+
+      <div class="diag" role="img" aria-label="authentication flow">
+Incoming message
+  |
+  +---> SPF check
+  |       Input:  MAIL FROM (envelope sender) + connecting IP
+  |       Output: pass / fail / softfail / neutral / none / temperror / permerror
+  |
+  +---> DKIM check
+  |       Input:  DKIM-Signature header + DNS public key (selector._domainkey.domain)
+  |       Output: pass / fail / none / temperror / permerror
+  |
+  +---> DMARC evaluation
+  |       Input:  RFC5322.From domain + SPF result + DKIM result
+  |       Tests:  Identifier alignment (SPF domain or DKIM d= must match From: domain)
+  |       Output: pass / fail  +  policy action (none / quarantine / reject)
+  |
+  +---> ARC evaluation (if message was forwarded / relayed)
+  |       Input:  ARC-* header chain from intermediate handlers
+  |       Output: trust / distrust chain  (informs local policy override)
+  |
+  +---> Final disposition: accept / quarantine (spam folder) / reject (5xx)
+      </div>
+
+      <div class="three-col">
+        <article class="card">
+          <h3>SPF</h3>
+          <p>Answers: <strong>"Is this IP authorized to send for this envelope domain?"</strong></p>
+          <ul>
+            <li>Operates on the envelope <code>MAIL FROM</code> (return-path), not the <code>From:</code> header.</li>
+            <li>DNS TXT record on the domain, checked at the receiving MTA.</li>
+            <li>Breaks on forwarding (new sending IP not in original SPF).</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>DKIM</h3>
+          <p>Answers: <strong>"Was this message actually sent by the claimed signing domain, unmodified?"</strong></p>
+          <ul>
+            <li>Cryptographic signature over selected headers and body.</li>
+            <li>Survives forwarding as long as signed content is not modified.</li>
+            <li>Key published as DNS TXT record under <code>selector._domainkey.domain</code>.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>DMARC</h3>
+          <p>Answers: <strong>"What should receivers do if SPF and DKIM both fail to align with the From: domain?"</strong></p>
+          <ul>
+            <li>Policy record at <code>_dmarc.domain</code>.</li>
+            <li>Requires <em>alignment</em>: SPF domain or DKIM <code>d=</code> must match <code>From:</code>.</li>
+            <li>Provides aggregate (rua) and forensic (ruf) reporting.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- ======== 2. SPF ======== -->
+    <section id="spf">
+      <h2 class="section-title">2. SPF &mdash; Sender Policy Framework</h2>
+      <p class="lede">
+        SPF is a DNS-based authorization list for sending IPs. The receiving MTA checks the <code>MAIL FROM</code> domain's
+        TXT record against the connecting IP. Simple concept, subtle operational pitfalls.
+      </p>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Record Syntax</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>SPF record anatomy</span><span>DNS TXT on domain apex</span></div>
+<pre><code>example.com. IN TXT "v=spf1 ip4:203.0.113.0/24 ip6:2001:db8::/32 include:_spf.google.com include:spf.protection.outlook.com mx a:relay.example.com -all"
+                     │      │                  │                 │                       │                                  │  │                   │
+                     │      │                  │                 │                       │                                  │  │                   └─ hard fail everything else
+                     │      │                  │                 │                       │                                  │  └─ allow A record of relay.example.com
+                     │      │                  │                 │                       │                                  └─ allow domain's MX hosts
+                     │      │                  │                 │                       └─ include O365 SPF
+                     │      │                  │                 └─ include Google Workspace SPF
+                     │      │                  └─ allow this IPv6 block
+                     │      └─ allow this IPv4 CIDR
+                     └─ version (required, must be first)</code></pre>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Mechanisms</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Mechanism</th><th>Syntax</th><th>What It Matches</th><th>DNS Lookups</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>ip4</code></td><td><code>ip4:203.0.113.0/24</code></td><td>Connecting IP in CIDR range</td><td>0</td></tr>
+            <tr><td><code>ip6</code></td><td><code>ip6:2001:db8::/32</code></td><td>Connecting IPv6 in range</td><td>0</td></tr>
+            <tr><td><code>a</code></td><td><code>a</code> or <code>a:host.example.com</code></td><td>IP matches A/AAAA record of domain</td><td>1</td></tr>
+            <tr><td><code>mx</code></td><td><code>mx</code> or <code>mx:example.com</code></td><td>IP matches an MX host of domain</td><td>1 + 1 per MX</td></tr>
+            <tr><td><code>include</code></td><td><code>include:_spf.google.com</code></td><td>Delegate to another SPF record</td><td>1 + recursive</td></tr>
+            <tr><td><code>redirect</code></td><td><code>redirect=_spf.example.com</code></td><td>Replace entire policy with another record</td><td>1 + recursive</td></tr>
+            <tr><td><code>exists</code></td><td><code>exists:%{i}._spf.example.com</code></td><td>True if A record exists for macro-expanded name</td><td>1</td></tr>
+            <tr><td><code>all</code></td><td><code>-all</code> / <code>~all</code> / <code>?all</code></td><td>Match everything (catch-all at end)</td><td>0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Qualifiers</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Qualifier</th><th>Meaning</th><th>DMARC Effect</th><th>Recommendation</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>+</code> (Pass)</td><td>Authorized (default if omitted)</td><td>SPF pass</td><td>Implicit on mechanisms</td></tr>
+            <tr><td><code>-</code> (Fail)</td><td>Explicitly unauthorized</td><td>SPF fail</td><td><strong>Use for production <code>-all</code></strong></td></tr>
+            <tr><td><code>~</code> (SoftFail)</td><td>Unauthorized but transitional</td><td>SPF fail for DMARC</td><td>Only during rollout / testing</td></tr>
+            <tr><td><code>?</code> (Neutral)</td><td>No assertion</td><td>SPF fail for DMARC</td><td>Rarely useful</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>The 10-lookup limit is real and ruthless.</strong> SPF evaluation must not cause more than 10 DNS lookups
+        (includes <code>include</code>, <code>a</code>, <code>mx</code>, <code>redirect</code>, <code>exists</code> &mdash;
+        but NOT <code>ip4</code>/<code>ip6</code>). Exceeding it returns <code>permerror</code>, which DMARC treats as a fail.
+        Nested <code>include</code> chains from SaaS providers are the #1 cause.</p>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">SPF Flattening</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>before flattening (6 lookups from includes alone)</span><span>danger zone</span></div>
+<pre><code>v=spf1 include:_spf.google.com include:spf.protection.outlook.com include:sendgrid.net include:spf.brevo.com mx -all
+# _spf.google.com itself chains 3 more includes = total ~9-10 lookups</code></pre>
+      </div>
+      <div class="snippet">
+        <div class="snippet-head"><span>after flattening (0 lookups, all resolved to CIDRs)</span><span>safe but requires maintenance</span></div>
+<pre><code>v=spf1 ip4:209.85.128.0/17 ip4:74.125.0.0/16 ip4:64.233.160.0/19 ip4:108.177.8.0/21
+       ip4:172.217.0.0/16 ip4:40.92.0.0/15 ip4:40.107.0.0/16 ip4:52.100.0.0/14
+       ip4:167.89.0.0/17 ip4:149.72.0.0/16 -all
+# WARNING: Provider IPs change. Automate re-flattening on a schedule or use a dedicated subdomain per provider.</code></pre>
+      </div>
+
+      <div class="callout ok">
+        <p><strong>Better approach: subdomain delegation.</strong> Instead of flattening, send via subdomains with isolated SPF:
+        <code>marketing.example.com</code> &rarr; <code>v=spf1 include:sendgrid.net -all</code>,
+        <code>transactional.example.com</code> &rarr; <code>v=spf1 include:_spf.google.com -all</code>.
+        Each subdomain stays well under 10 lookups and DMARC alignment still works with relaxed mode.</p>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">SPF and Forwarding</h3>
+      <div class="diag" role="img" aria-label="SPF forwarding failure">
+Original:   sender@example.com  -->  mx.recipient.com
+              SPF pass: sending IP is in example.com SPF record  ✓
+
+Forwarded:  sender@example.com  -->  forwarder.net  -->  mx.final-dest.com
+              SPF fail: forwarder.net IP is NOT in example.com SPF record  ✗
+              Envelope MAIL FROM still says example.com, but IP is forwarder.net
+
+Mitigation options:
+  1. SRS (Sender Rewriting Scheme): forwarder rewrites envelope to forwarder.net domain
+  2. ARC (Authenticated Received Chain): forwarder adds ARC headers preserving original auth
+  3. DKIM survives if body/headers untouched — DMARC can pass via DKIM alignment alone
+      </div>
+    </section>
+
+    <!-- ======== 3. DKIM ======== -->
+    <section id="dkim">
+      <h2 class="section-title">3. DKIM &mdash; DomainKeys Identified Mail</h2>
+      <p class="lede">
+        DKIM adds a cryptographic signature to outbound messages. The receiving MTA retrieves the public key from DNS
+        and verifies the signature over the specified headers and body hash. Unlike SPF, DKIM survives forwarding
+        as long as the signed content is not modified.
+      </p>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">DKIM-Signature Header Anatomy</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>DKIM-Signature header</span><span>each tag explained</span></div>
+<pre><code>DKIM-Signature: v=1;                          # Version (always 1)
+    a=rsa-sha256;                              # Algorithm (rsa-sha256 or ed25519-sha256)
+    d=example.com;                             # Signing domain (DMARC aligns against this)
+    s=s2026;                                   # Selector (DNS lookup: s2026._domainkey.example.com)
+    c=relaxed/relaxed;                         # Canonicalization: header/body
+    q=dns/txt;                                 # Query method
+    t=1739620800;                              # Timestamp (Unix epoch, signing time)
+    x=1740225600;                              # Expiration (optional, 7 days later here)
+    h=from:to:subject:date:message-id:         # Signed headers (order matters)
+      mime-version:content-type;
+    bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;  # Body hash (SHA-256)
+    b=LjIGMtqFkFqJCZ9sdoMcyBPuv...               # Signature (Base64)</code></pre>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">DNS Key Record</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>DKIM DNS TXT record</span><span>at selector._domainkey.domain</span></div>
+<pre><code># RSA 2048-bit key
+s2026._domainkey.example.com. 3600 IN TXT "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2K4PavXoNY8eGK2u..."
+
+# Ed25519 key (much shorter, gaining adoption)
+s2026ed._domainkey.example.com. 3600 IN TXT "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+
+# Key with testing flag (t=y means verifiers should treat failures leniently)
+stest._domainkey.example.com. 3600 IN TXT "v=DKIM1; k=rsa; t=y; p=MIIBIjAN..."
+
+# Revoked key (empty p= signals key is no longer valid)
+sold._domainkey.example.com. 3600 IN TXT "v=DKIM1; p="</code></pre>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Canonicalization Modes</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Headers</th><th>Body</th><th>Recommendation</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>simple/simple</code></td>
+              <td>No changes allowed</td>
+              <td>Only trailing empty lines ignored</td>
+              <td>Strictest, breaks on any modification</td>
+            </tr>
+            <tr>
+              <td><code>relaxed/relaxed</code></td>
+              <td>Lowercased, whitespace folded</td>
+              <td>Whitespace normalized, trailing lines removed</td>
+              <td><strong>Use this. Tolerates common MTA reformatting</strong></td>
+            </tr>
+            <tr>
+              <td><code>relaxed/simple</code></td>
+              <td>Relaxed</td>
+              <td>Strict</td>
+              <td>Compromise; rarely needed</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Which Headers to Sign</h3>
+      <div class="two-col">
+        <article class="card">
+          <h3>Must Sign</h3>
+          <ul>
+            <li><code>From</code> &mdash; required by RFC 6376, DMARC alignment key</li>
+            <li><code>To</code>, <code>Subject</code>, <code>Date</code> &mdash; core identity/content</li>
+            <li><code>Message-ID</code> &mdash; traceability</li>
+            <li><code>MIME-Version</code>, <code>Content-Type</code> &mdash; body interpretation</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Should Sign</h3>
+          <ul>
+            <li><code>Reply-To</code>, <code>Cc</code> &mdash; prevents tampering</li>
+            <li><code>In-Reply-To</code>, <code>References</code> &mdash; threading integrity</li>
+            <li><code>List-Unsubscribe</code> &mdash; anti-phishing</li>
+            <li>Do <strong>not</strong> sign <code>Received</code> or relay-added headers &mdash; they change in transit</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Key Rotation Strategy</h3>
+      <div class="timeline">
+        <div class="timeline-row">
+          <div class="left">Week 0: Publish new</div>
+          <div class="right">Add <code>s2026b._domainkey</code> TXT record with new public key. Old key still active.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Week 1: Dual-sign</div>
+          <div class="right">Configure MTA to sign with both selectors. Receivers cache DNS; dual-sign bridges propagation.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Week 2: Switch primary</div>
+          <div class="right">Change MTA to sign only with new selector <code>s2026b</code>. Old signatures still verify against old DNS key.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Week 4: Revoke old</div>
+          <div class="right">Set old key record to <code>p=</code> (empty). Messages with stale cached old key now fail DKIM (which is fine &mdash; they're old).</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Week 6+: Cleanup</div>
+          <div class="right">Optionally remove old selector record entirely. Document rotation in ops calendar.</div>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>RSA key size matters.</strong> 1024-bit RSA keys are considered weak and will be rejected by some receivers.
+        Use 2048-bit minimum. Note: 2048-bit keys exceed the 255-byte TXT string limit &mdash; split across multiple strings
+        in the TXT record (most DNS providers handle this automatically).</p>
+      </div>
+
+      <div class="callout ok">
+        <p><strong>Ed25519 is the future.</strong> Much smaller keys (~44 bytes vs ~400 for RSA-2048), no TXT splitting needed,
+        faster to sign/verify. Support is growing but not universal. Consider dual-signing with both RSA and Ed25519 during transition.</p>
+      </div>
+    </section>
+
+    <!-- ======== 4. DMARC ======== -->
+    <section id="dmarc">
+      <h2 class="section-title">4. DMARC &mdash; Domain-based Message Authentication, Reporting &amp; Conformance</h2>
+      <p class="lede">
+        DMARC is the policy and reporting layer. It checks whether SPF or DKIM results <em>align</em> with the
+        <code>From:</code> header domain, and tells receivers what to do on failure. Without DMARC, SPF and DKIM results
+        are advisory &mdash; receivers decide independently what to do.
+      </p>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Record Syntax</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>DMARC DNS TXT record</span><span>at _dmarc.domain</span></div>
+<pre><code># Monitoring only (start here)
+_dmarc.example.com. IN TXT "v=DMARC1; p=none; rua=mailto:dmarc-agg@example.com; ruf=mailto:dmarc-forensic@example.com"
+
+# Quarantine policy with strict DKIM, relaxed SPF
+_dmarc.example.com. IN TXT "v=DMARC1; p=quarantine; sp=quarantine; adkim=s; aspf=r; pct=100; rua=mailto:dmarc-agg@example.com; fo=1"
+
+# Full reject (target state for mature domains)
+_dmarc.example.com. IN TXT "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:dmarc-agg@example.com; ruf=mailto:dmarc-forensic@example.com; fo=1"</code></pre>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Tag Reference</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Tag</th><th>Values</th><th>Default</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>v</code></td><td><code>DMARC1</code></td><td>required</td><td>Version identifier (must be first tag)</td></tr>
+            <tr><td><code>p</code></td><td><code>none</code> / <code>quarantine</code> / <code>reject</code></td><td>required</td><td>Policy for domain</td></tr>
+            <tr><td><code>sp</code></td><td><code>none</code> / <code>quarantine</code> / <code>reject</code></td><td>falls back to <code>p</code></td><td>Policy for subdomains</td></tr>
+            <tr><td><code>adkim</code></td><td><code>r</code> (relaxed) / <code>s</code> (strict)</td><td><code>r</code></td><td>DKIM alignment mode</td></tr>
+            <tr><td><code>aspf</code></td><td><code>r</code> (relaxed) / <code>s</code> (strict)</td><td><code>r</code></td><td>SPF alignment mode</td></tr>
+            <tr><td><code>pct</code></td><td><code>0</code>&ndash;<code>100</code></td><td><code>100</code></td><td>% of messages subject to policy (for gradual rollout)</td></tr>
+            <tr><td><code>rua</code></td><td><code>mailto:addr</code></td><td>none</td><td>Aggregate report destination (daily XML)</td></tr>
+            <tr><td><code>ruf</code></td><td><code>mailto:addr</code></td><td>none</td><td>Forensic/failure report destination (per-message)</td></tr>
+            <tr><td><code>fo</code></td><td><code>0</code> / <code>1</code> / <code>d</code> / <code>s</code></td><td><code>0</code></td><td>Failure reporting options: 0=both fail, 1=either fails, d=DKIM fail, s=SPF fail</td></tr>
+            <tr><td><code>ri</code></td><td>seconds</td><td><code>86400</code></td><td>Aggregate report interval (most receivers ignore this)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Alignment: Relaxed vs Strict</h3>
+      <div class="two-col">
+        <article class="card">
+          <h3>Relaxed (default)</h3>
+          <p>Organizational domain match. Subdomains of the <code>From:</code> domain are accepted.</p>
+          <ul>
+            <li><code>From: user@mail.example.com</code></li>
+            <li>DKIM <code>d=example.com</code> &rarr; <span class="status-ok">aligned</span></li>
+            <li>SPF pass on <code>bounce.example.com</code> &rarr; <span class="status-ok">aligned</span></li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Strict</h3>
+          <p>Exact domain match required. No subdomain tolerance.</p>
+          <ul>
+            <li><code>From: user@mail.example.com</code></li>
+            <li>DKIM <code>d=example.com</code> &rarr; <span class="status-bad">not aligned</span></li>
+            <li>DKIM <code>d=mail.example.com</code> &rarr; <span class="status-ok">aligned</span></li>
+            <li>Use strict when you need precise subdomain control.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">DMARC Rollout Path</h3>
+      <div class="timeline">
+        <div class="timeline-row">
+          <div class="left">Phase 1: Monitor</div>
+          <div class="right"><code>p=none; rua=mailto:...</code> &mdash; Collect reports for 2-4 weeks. Identify all legitimate senders.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Phase 2: Soft enforce</div>
+          <div class="right"><code>p=quarantine; pct=10</code> &mdash; Quarantine 10% of failures. Monitor rua reports for false positives.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Phase 3: Ramp up</div>
+          <div class="right"><code>p=quarantine; pct=50</code> then <code>pct=100</code> &mdash; Gradually increase enforcement. Fix remaining senders.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Phase 4: Reject</div>
+          <div class="right"><code>p=reject; pct=25</code> then <code>pct=100</code> &mdash; Hard reject unauthorized messages. Final target state.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Ongoing</div>
+          <div class="right">Ingest aggregate reports continuously. Alert on unexpected source IPs or alignment failures. Audit on provider changes.</div>
+        </div>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin-bottom: .6rem;">Aggregate Report (rua) Structure</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>DMARC aggregate report XML</span><span>daily, from each receiver</span></div>
+<pre><code>&lt;feedback&gt;
+  &lt;report_metadata&gt;
+    &lt;org_name&gt;google.com&lt;/org_name&gt;
+    &lt;date_range&gt;&lt;begin&gt;1739577600&lt;/begin&gt;&lt;end&gt;1739664000&lt;/end&gt;&lt;/date_range&gt;
+  &lt;/report_metadata&gt;
+  &lt;policy_published&gt;
+    &lt;domain&gt;example.com&lt;/domain&gt;
+    &lt;p&gt;quarantine&lt;/p&gt;
+    &lt;sp&gt;quarantine&lt;/sp&gt;
+    &lt;adkim&gt;s&lt;/adkim&gt;
+    &lt;aspf&gt;r&lt;/aspf&gt;
+    &lt;pct&gt;100&lt;/pct&gt;
+  &lt;/policy_published&gt;
+  &lt;record&gt;
+    &lt;row&gt;
+      &lt;source_ip&gt;203.0.113.45&lt;/source_ip&gt;
+      &lt;count&gt;1482&lt;/count&gt;
+      &lt;policy_evaluated&gt;
+        &lt;disposition&gt;none&lt;/disposition&gt;
+        &lt;dkim&gt;pass&lt;/dkim&gt;
+        &lt;spf&gt;pass&lt;/spf&gt;
+      &lt;/policy_evaluated&gt;
+    &lt;/row&gt;
+    &lt;row&gt;
+      &lt;source_ip&gt;198.51.100.99&lt;/source_ip&gt;
+      &lt;count&gt;23&lt;/count&gt;
+      &lt;policy_evaluated&gt;
+        &lt;disposition&gt;quarantine&lt;/disposition&gt;
+        &lt;dkim&gt;fail&lt;/dkim&gt;
+        &lt;spf&gt;fail&lt;/spf&gt;
+      &lt;/policy_evaluated&gt;
+    &lt;/row&gt;
+  &lt;/record&gt;
+&lt;/feedback&gt;</code></pre>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>Cross-domain rua reporting requires authorization.</strong> If your DMARC record sends reports to a different domain
+        (<code>rua=mailto:reports@monitoring.net</code>), the target domain must publish a TXT record:
+        <code>example.com._report._dmarc.monitoring.net. IN TXT "v=DMARC1"</code></p>
+      </div>
+    </section>
+
+    <!-- ======== 5. ARC ======== -->
+    <section id="arc">
+      <h2 class="section-title">5. ARC &mdash; Authenticated Received Chain</h2>
+      <p class="lede">
+        ARC preserves authentication results across forwarding hops where SPF and DKIM would otherwise break.
+        Each intermediary adds a set of three headers forming a verifiable chain of custody.
+      </p>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>ARC Header Set (per hop)</h3>
+          <ul>
+            <li><code>ARC-Authentication-Results</code> (AAR) &mdash; snapshot of auth results at this hop</li>
+            <li><code>ARC-Message-Signature</code> (AMS) &mdash; DKIM-like signature of the message at this hop</li>
+            <li><code>ARC-Seal</code> (AS) &mdash; signature over the chain of all previous ARC sets + this AAR</li>
+          </ul>
+          <p>Each set is numbered (<code>i=1</code>, <code>i=2</code>, ...) forming an ordered chain.</p>
+        </article>
+        <article class="card">
+          <h3>When ARC Helps</h3>
+          <ul>
+            <li>Mailing list servers that modify <code>Subject</code> or body (breaks DKIM)</li>
+            <li>Email forwarding services (<code>.forward</code>, alias expansion)</li>
+            <li>Security gateways that re-wrap or add disclaimers</li>
+            <li>Receivers can trust ARC from known intermediaries to override DMARC failure</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>ARC headers after one forwarding hop</span><span>i=1 chain</span></div>
+<pre><code>ARC-Seal: i=1; a=rsa-sha256; cv=none; d=forwarder.net; s=arc2026;
+    b=dOdFEyhrk/...
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=forwarder.net; s=arc2026;
+    h=from:to:subject:date:message-id;
+    bh=2jUSOH9NhtVGCQWNr9BrI...;
+    b=Kf8mMGUa7/...
+ARC-Authentication-Results: i=1; forwarder.net;
+    dkim=pass header.d=example.com header.s=s2026;
+    spf=pass smtp.mailfrom=example.com;
+    dmarc=pass header.from=example.com
+
+# cv= values: "none" (first hop), "pass" (chain valid), "fail" (chain broken)</code></pre>
+      </div>
+    </section>
+
+    <!-- ======== 6. BIMI ======== -->
+    <section id="bimi">
+      <h2 class="section-title">6. BIMI &mdash; Brand Indicators for Message Identification</h2>
+      <p class="lede">
+        BIMI displays a brand logo next to authenticated messages in supporting email clients.
+        It requires DMARC <code>p=quarantine</code> or <code>p=reject</code> as a prerequisite.
+      </p>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>BIMI DNS record</span><span>TXT at default._bimi.domain</span></div>
+<pre><code># Basic (logo only, some providers require VMC)
+default._bimi.example.com. IN TXT "v=BIMI1; l=https://example.com/brand/logo.svg"
+
+# With Verified Mark Certificate (required by Gmail, Apple Mail)
+default._bimi.example.com. IN TXT "v=BIMI1; l=https://example.com/brand/logo.svg; a=https://example.com/brand/vmc.pem"</code></pre>
+      </div>
+
+      <div class="card-grid">
+        <article class="card">
+          <h3>Requirements</h3>
+          <ul>
+            <li>DMARC policy of <code>quarantine</code> or <code>reject</code> (not <code>none</code>)</li>
+            <li>Logo must be SVG Tiny PS format (specific profile)</li>
+            <li>Logo hosted on HTTPS with valid certificate</li>
+            <li>VMC (Verified Mark Certificate) required by Gmail &mdash; issued by DigiCert or Entrust</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Supported Clients</h3>
+          <ul>
+            <li><span class="status-ok">Gmail</span> &mdash; requires VMC</li>
+            <li><span class="status-ok">Apple Mail</span> &mdash; requires VMC (iOS 16+, macOS Ventura+)</li>
+            <li><span class="status-ok">Yahoo/AOL</span> &mdash; VMC optional</li>
+            <li><span class="status-warn">Outlook</span> &mdash; limited/pilot support</li>
+            <li><span class="status-bad">Thunderbird</span> &mdash; not yet supported</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- ======== 7. MTA-STS + DANE ======== -->
+    <section id="mta-sts">
+      <h2 class="section-title">7. MTA-STS &amp; DANE &mdash; Transport Security</h2>
+      <p class="lede">
+        SPF/DKIM/DMARC authenticate the <em>sender</em>. MTA-STS and DANE authenticate the <em>transport channel</em>,
+        preventing TLS downgrade and man-in-the-middle attacks on SMTP connections.
+      </p>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>MTA-STS (RFC 8461)</h3>
+          <p>HTTPS-based policy that tells senders: "only deliver to my MX hosts over verified TLS."</p>
+          <ul>
+            <li>DNS: <code>_mta-sts.example.com. IN TXT "v=STSv1; id=20260215"</code></li>
+            <li>HTTPS: <code>https://mta-sts.example.com/.well-known/mta-sts.txt</code></li>
+            <li>Policy specifies valid MX hostnames and mode (<code>enforce</code>/<code>testing</code>/<code>none</code>)</li>
+            <li>Change the <code>id</code> value whenever you update the HTTPS policy file</li>
+          </ul>
+          <div class="snippet">
+            <div class="snippet-head"><span>mta-sts.txt policy file</span><span>hosted at well-known URL</span></div>
+<pre><code>version: STSv1
+mode: enforce
+mx: mx1.example.com
+mx: mx2.example.com
+mx: *.example.com
+max_age: 604800</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <h3>DANE / TLSA (RFC 7672)</h3>
+          <p>DNSSEC-based certificate pinning for SMTP. Stronger than MTA-STS but requires DNSSEC.</p>
+          <ul>
+            <li>Publishes certificate fingerprint or CA constraint as TLSA record</li>
+            <li>Requires full DNSSEC chain on the MX domain</li>
+            <li>No HTTPS dependency (unlike MTA-STS)</li>
+            <li>Used by Postfix, Exim, and other DANE-aware MTAs</li>
+          </ul>
+          <div class="snippet">
+            <div class="snippet-head"><span>TLSA record example</span><span>pins leaf certificate</span></div>
+<pre><code># Usage=3 (DANE-EE), Selector=1 (SubjectPublicKeyInfo), Matching=1 (SHA-256)
+_25._tcp.mx1.example.com. IN TLSA 3 1 1 (
+    2bb183af2b1c057d0f256891c...
+)</code></pre>
+          </div>
+        </article>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>TLS-RPT record</span><span>receive TLS failure reports</span></div>
+<pre><code>_smtp._tls.example.com. IN TXT "v=TLSRPTv1; rua=mailto:tlsrpt@example.com"
+
+# Reports include:
+# - Negotiation failures (certificate errors, protocol mismatches)
+# - MTA-STS policy validation failures
+# - DANE/TLSA validation failures</code></pre>
+      </div>
+    </section>
+
+    <!-- ======== 8. VALIDATION ======== -->
+    <section id="validation">
+      <h2 class="section-title">8. Validation &amp; Debugging Toolkit</h2>
+      <p class="lede">
+        Always validate DNS records before and after changes. A single typo in an SPF record
+        can cause permerror for your entire domain. These commands should be muscle memory.
+      </p>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>DNS query toolkit</span><span>dig-based validation</span></div>
+<pre><code># SPF record
+dig +short TXT example.com | grep spf
+
+# DKIM public key (replace selector)
+dig +short TXT s2026._domainkey.example.com
+
+# DMARC policy
+dig +short TXT _dmarc.example.com
+
+# BIMI record
+dig +short TXT default._bimi.example.com
+
+# MTA-STS policy indicator
+dig +short TXT _mta-sts.example.com
+
+# TLS-RPT
+dig +short TXT _smtp._tls.example.com
+
+# MX records (for SPF mx mechanism validation)
+dig +short MX example.com
+
+# DANE/TLSA
+dig +short TLSA _25._tcp.mx1.example.com
+
+# Check for multiple TXT records (common misconfiguration)
+dig TXT example.com +noall +answer | grep -c "v=spf1"
+# Should return 1. Multiple SPF records = permerror.</code></pre>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>reading authentication-results headers</span><span>in received messages</span></div>
+<pre><code>Authentication-Results: mx.google.com;
+    dkim=pass header.i=@example.com header.s=s2026 header.b=LjIGMt;
+    spf=pass (google.com: domain of bounce@example.com designates 203.0.113.45 as permitted sender) smtp.mailfrom=bounce@example.com;
+    dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=example.com
+
+# Key fields to check:
+# dkim=pass/fail    + header.d= (signing domain) + header.s= (selector)
+# spf=pass/fail     + smtp.mailfrom= (envelope sender)
+# dmarc=pass/fail   + header.from= (RFC5322 From) + dis= (disposition applied)</code></pre>
+      </div>
+
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Tool / Service</th><th>Purpose</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>dig</code> / <code>drill</code></td><td>Raw DNS queries</td><td>Essential. Check TXT, MX, TLSA records directly.</td></tr>
+            <tr><td><code>opendkim-testkey</code></td><td>Validate DKIM key publication</td><td><code>opendkim-testkey -d example.com -s s2026 -vvv</code></td></tr>
+            <tr><td><code>spfquery</code> / <code>pyspf</code></td><td>SPF record evaluation</td><td>Test specific IP against domain's SPF policy</td></tr>
+            <tr><td>Mail-tester.com</td><td>Send a test email, get full report</td><td>Quick deliverability and auth check</td></tr>
+            <tr><td>MXToolbox</td><td>Online DNS/SPF/DKIM/DMARC checker</td><td>Good for quick validation, shows lookup count</td></tr>
+            <tr><td>dmarcian / Valimail</td><td>DMARC aggregate report analysis</td><td>Parses rua XML into dashboards</td></tr>
+            <tr><td><code>swaks</code></td><td>Swiss Army Knife for SMTP</td><td><code>swaks --to test@example.com --from me@example.com --server mx.example.com</code></td></tr>
+            <tr><td>Google Postmaster Tools</td><td>Reputation and auth metrics for Gmail</td><td>Domain-level DKIM/SPF/DMARC pass rates</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ======== 9. FAILURES ======== -->
+    <section id="failures">
+      <h2 class="section-title">9. Common Failure Patterns &amp; Root Causes</h2>
+      <p class="lede">
+        Most email authentication failures come from a small set of misconfigurations. Learn to recognize these patterns
+        in aggregate reports and <code>Authentication-Results</code> headers.
+      </p>
+
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Symptom</th><th>Auth-Results</th><th>Root Cause</th><th>Fix</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>SPF permerror</td>
+              <td><code>spf=permerror</code></td>
+              <td>&gt;10 DNS lookups, syntax error, or multiple SPF TXT records</td>
+              <td>Flatten includes, remove duplicates, use subdomain delegation</td>
+            </tr>
+            <tr>
+              <td>SPF fail on forwarded mail</td>
+              <td><code>spf=fail</code></td>
+              <td>Forwarding server IP not in sender's SPF</td>
+              <td>Implement SRS on forwarder, rely on DKIM + ARC for DMARC</td>
+            </tr>
+            <tr>
+              <td>DKIM fail: body hash mismatch</td>
+              <td><code>dkim=fail (body hash did not verify)</code></td>
+              <td>Message body modified in transit (footer added, encoding changed)</td>
+              <td>Fix intermediary, use <code>l=</code> body length tag (risky), or ARC</td>
+            </tr>
+            <tr>
+              <td>DKIM fail: key not found</td>
+              <td><code>dkim=fail (no key for signature)</code></td>
+              <td>DNS key record missing, wrong selector, or propagation delay</td>
+              <td>Verify <code>dig TXT selector._domainkey.domain</code>, wait for TTL</td>
+            </tr>
+            <tr>
+              <td>DMARC fail: alignment</td>
+              <td><code>dmarc=fail</code>, but <code>spf=pass</code> and/or <code>dkim=pass</code></td>
+              <td>SPF domain or DKIM <code>d=</code> doesn't match <code>From:</code> domain</td>
+              <td>Sign with <code>d=</code> matching <code>From:</code> domain, or use relaxed alignment</td>
+            </tr>
+            <tr>
+              <td>DMARC fail: third-party sender</td>
+              <td><code>dmarc=fail</code></td>
+              <td>SaaS sends with your <code>From:</code> but no DKIM delegation</td>
+              <td>Have vendor sign with your domain via CNAME'd DKIM selector</td>
+            </tr>
+            <tr>
+              <td>Sporadic DKIM temperror</td>
+              <td><code>dkim=temperror</code></td>
+              <td>DNS timeout for key lookup, often under receiver load</td>
+              <td>Low TTL on key record, ensure nameserver reliability, add redundancy</td>
+            </tr>
+            <tr>
+              <td>SaaS SPF include bloat</td>
+              <td><code>spf=permerror</code></td>
+              <td>5+ SaaS vendors each adding <code>include:</code> chains</td>
+              <td>Dedicate subdomains per vendor, or flatten with automated tooling</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="diag" role="img" aria-label="troubleshooting decision tree">
+Message rejected / going to spam
+  |
+  +---> Check Authentication-Results header in received copy
+  |       |
+  |       +---> dmarc=pass? --> Problem is elsewhere (content, reputation, IP blocklist)
+  |       |
+  |       +---> dmarc=fail?
+  |               |
+  |               +---> spf=pass + dkim=pass? --> Alignment issue (domain mismatch)
+  |               |       Fix: sign DKIM with d=From-domain, or use relaxed alignment
+  |               |
+  |               +---> spf=fail + dkim=fail? --> No auth at all
+  |               |       Fix: verify SPF record + check DKIM signing + DNS propagation
+  |               |
+  |               +---> spf=fail + dkim=pass? --> DKIM aligned? If yes, should pass DMARC
+  |               |       Check: dkim d= matches From: domain (relaxed or strict per policy)
+  |               |
+  |               +---> spf=pass + dkim=fail? --> SPF aligned? If yes, should pass DMARC
+  |                       Check: MAIL FROM domain matches From: domain
+      </div>
+    </section>
+
+    <!-- ======== 10. RUNBOOKS ======== -->
+    <section id="runbooks">
+      <h2 class="section-title">10. Operational Runbooks &amp; Hardening Checklists</h2>
+      <p class="lede">
+        Predefined runbooks for the most common authentication incidents. Separate immediate mitigation
+        from root cause investigation.
+      </p>
+
+      <div class="card-grid">
+        <article class="checklist">
+          <h3>Runbook: DMARC Reject Spike</h3>
+          <ol>
+            <li>Pull latest DMARC aggregate reports (rua). Identify source IPs causing failures.</li>
+            <li>Classify: is the failing source legitimate (SaaS vendor, internal system) or spoofing?</li>
+            <li>If legitimate: add to SPF or configure DKIM delegation via vendor's CNAME setup.</li>
+            <li>If spoofing: the policy is working correctly. No action needed. Monitor volume.</li>
+            <li>If accidental policy change: revert DMARC/SPF/DKIM DNS records from version control.</li>
+            <li>Temporarily set <code>pct=0</code> if widespread legitimate breakage while fixing.</li>
+          </ol>
+        </article>
+        <article class="checklist">
+          <h3>Runbook: DKIM Key Rotation</h3>
+          <ol>
+            <li>Generate new keypair. Publish new selector DNS record with TTL=300.</li>
+            <li>Wait for DNS propagation (2x TTL of old record).</li>
+            <li>Configure MTA to dual-sign (old + new selector).</li>
+            <li>Monitor DKIM pass rates in DMARC reports for 48-72h.</li>
+            <li>Switch to new selector only. Keep old key published for 7 more days.</li>
+            <li>Revoke old key: set <code>p=</code> (empty). Remove record after 30 days.</li>
+          </ol>
+        </article>
+        <article class="checklist">
+          <h3>Runbook: New SaaS Email Vendor</h3>
+          <ol>
+            <li>Assign a dedicated subdomain (e.g., <code>mail.example.com</code>) for the vendor.</li>
+            <li>Add vendor's SPF include to the subdomain's SPF record (not the apex).</li>
+            <li>Set up DKIM: create CNAME for vendor's selector under your <code>_domainkey</code> namespace.</li>
+            <li>Publish DMARC on the subdomain (inherits from apex, or set explicitly).</li>
+            <li>Send test messages and verify <code>Authentication-Results</code> shows all-pass.</li>
+            <li>Monitor DMARC reports for 1 week before going live with production volume.</li>
+          </ol>
+        </article>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin: 1.2rem 0 .6rem;">Hardening Checklist</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>domain authentication hardening baseline</span><span>operator reference</span></div>
+<pre><code>[ ] SPF record published with -all (hard fail), lookup count verified &lt; 10
+[ ] No duplicate SPF TXT records on same domain
+[ ] DKIM signing enabled on all outbound paths with 2048-bit+ RSA or Ed25519
+[ ] DKIM key rotation schedule documented (quarterly or on compromise)
+[ ] All DKIM selectors verified via dig + opendkim-testkey
+[ ] DMARC record at p=reject (or quarantine minimum) with rua configured
+[ ] DMARC aggregate reports ingested and monitored (not just collected)
+[ ] Subdomain policy (sp=) explicitly set, not relying on inheritance assumptions
+[ ] SaaS vendors sending as your domain have DKIM CNAME delegation, not just SPF
+[ ] ARC signing enabled on any forwarding/relay infrastructure you operate
+[ ] MTA-STS policy published and mode=enforce for receiving domains
+[ ] TLS-RPT record configured to receive transport failure reports
+[ ] BIMI record published (if DMARC at reject and VMC obtained)
+[ ] Null SPF on domains that don't send email: "v=spf1 -all"
+[ ] Null DMARC on non-sending domains: "v=DMARC1; p=reject; sp=reject"
+[ ] DNS records version-controlled with automated deployment</code></pre>
+      </div>
+
+      <div class="callout danger">
+        <p><strong>Don't forget non-sending domains.</strong> Every domain you own that does <em>not</em> send email should still have
+        <code>v=spf1 -all</code> and <code>v=DMARC1; p=reject</code> to prevent spoofing. Attackers specifically target
+        unprotected parked and legacy domains.</p>
+      </div>
+
+      <h3 style="color: var(--accent); font-size: 1.1rem; margin: 1.2rem 0 .6rem;">Complete DNS Record Set Example</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>production domain: example.com</span><span>all authentication records</span></div>
+<pre><code>; === SPF ===
+example.com.                      IN TXT "v=spf1 ip4:203.0.113.0/24 include:_spf.google.com -all"
+
+; === DKIM ===
+s2026._domainkey.example.com.     IN TXT "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQE..."
+s2026ed._domainkey.example.com.   IN TXT "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQH..."
+
+; === DMARC ===
+_dmarc.example.com.               IN TXT "v=DMARC1; p=reject; sp=reject; adkim=s; aspf=r; fo=1; rua=mailto:dmarc-agg@example.com; ruf=mailto:dmarc-forensic@example.com"
+
+; === BIMI ===
+default._bimi.example.com.        IN TXT "v=BIMI1; l=https://example.com/.well-known/logo.svg; a=https://example.com/.well-known/vmc.pem"
+
+; === MTA-STS ===
+_mta-sts.example.com.             IN TXT "v=STSv1; id=20260215t1"
+
+; === TLS-RPT ===
+_smtp._tls.example.com.           IN TXT "v=TLSRPTv1; rua=mailto:tlsrpt@example.com"
+
+; === Non-sending subdomain protection ===
+parked.example.com.               IN TXT "v=spf1 -all"
+_dmarc.parked.example.com.        IN TXT "v=DMARC1; p=reject"</code></pre>
+      </div>
+    </section>
+
+    <footer>
+      DKIM / SPF / DMARC Engineering Reference &mdash; built for production mail infrastructure operators.
+    </footer>
+  </main>
+</body>
+</html>
