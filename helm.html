@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Helm Engineering Reference</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-0: #0a101a;
+      --bg-1: #111b2b;
+      --bg-2: #162338;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-strong: rgba(255, 255, 255, 0.08);
+      --text: #e9f0ff;
+      --text-dim: #a9b8d4;
+      --text-faint: #7f91b5;
+      --border: rgba(180, 202, 245, 0.18);
+      --accent: #66d9ef;
+      --accent-2: #8bffb8;
+      --accent-3: #ffd479;
+      --danger: #ff8b8b;
+      --warn: #ffca75;
+      --ok: #86f4b4;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+      --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+      --sans: "Space Grotesk", "Segoe UI", sans-serif;
+      --max: 1200px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 600px at 0% -10%, rgba(102, 217, 239, 0.14), transparent),
+        radial-gradient(1000px 500px at 100% -10%, rgba(139, 255, 184, 0.12), transparent),
+        linear-gradient(170deg, var(--bg-0), var(--bg-1) 48%, var(--bg-2));
+      color: var(--text);
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    .noise {
+      position: fixed; inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 3px 3px;
+      mix-blend-mode: soft-light; opacity: .2; pointer-events: none; z-index: -1;
+    }
+
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.2rem; }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(14px);
+      background: rgba(10, 16, 26, 0.75);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: var(--max); margin: 0 auto; padding: .8rem 1.2rem;
+      display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+    }
+    .brand {
+      font-weight: 700; letter-spacing: .02em; font-size: .95rem;
+      display: flex; gap: .6rem; align-items: center; white-space: nowrap;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 20px rgba(102, 217, 239, 0.7);
+    }
+    .nav { display: flex; gap: .9rem; flex-wrap: wrap; justify-content: flex-end; }
+    .nav a {
+      color: var(--text-dim); text-decoration: none; font-size: .78rem;
+      font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+      padding: .35rem .55rem; border-radius: 999px; transition: .2s ease;
+    }
+    .nav a:hover { color: var(--text); background: var(--surface); }
+
+    .hero { padding: 4.2rem 0 2.8rem; border-bottom: 1px solid var(--border); margin-bottom: 2.2rem; }
+    .hero-grid { display: grid; gap: 1.2rem; grid-template-columns: 1.6fr 1fr; align-items: end; }
+    h1 { font-size: clamp(2rem, 4.4vw, 3.6rem); line-height: 1.08; letter-spacing: -.02em; }
+    .hero p { margin-top: 1rem; color: var(--text-dim); max-width: 70ch; font-size: 1.02rem; }
+    .tag-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.15rem; }
+    .tag {
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+      padding: .35rem .6rem; border-radius: 999px; font-size: .73rem;
+      letter-spacing: .03em; font-weight: 600;
+    }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow);
+    }
+    .stat h2 { font-size: .95rem; margin-bottom: .3rem; color: var(--text-dim); font-weight: 500; }
+    .stat code { font-family: var(--mono); font-size: .84rem; }
+
+    section { margin: 2rem 0 2.4rem; }
+    .section-title { margin-bottom: .7rem; font-size: 1.55rem; letter-spacing: -.01em; }
+    .lede { color: var(--text-dim); margin-bottom: 1rem; max-width: 86ch; }
+    .sub { color: var(--accent); font-size: 1.1rem; margin: 1.4rem 0 .6rem; font-weight: 600; }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .9rem; }
+    .card {
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: var(--radius); padding: 1rem 1rem .9rem; box-shadow: var(--shadow);
+    }
+    .card h3 { font-size: 1rem; margin-bottom: .55rem; color: var(--accent); }
+    .card p, .card li { color: var(--text-dim); font-size: .94rem; }
+    .card ul, .card ol { padding-left: 1rem; display: grid; gap: .4rem; }
+
+    .timeline {
+      font-family: var(--mono); border: 1px solid var(--border); border-radius: var(--radius);
+      background: rgba(0,0,0,.22); overflow: hidden; margin: 1rem 0;
+    }
+    .timeline-row {
+      display: grid; grid-template-columns: 200px 1fr; gap: .8rem;
+      border-top: 1px solid var(--border); padding: .7rem .9rem; align-items: start;
+    }
+    .timeline-row:first-child { border-top: none; }
+    .timeline-row .left { color: var(--accent-2); font-weight: 600; font-size: .82rem; }
+    .timeline-row .right { color: #d2def7; font-size: .83rem; }
+
+    .cmd-table {
+      overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); background: rgba(0,0,0,.18);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    th, td { text-align: left; padding: .72rem .85rem; vertical-align: top; }
+    th {
+      font-size: .76rem; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--accent); background: rgba(102, 217, 239, 0.1);
+    }
+    tr { border-top: 1px solid var(--border); }
+    td { color: var(--text-dim); font-size: .89rem; }
+
+    code, pre { font-family: var(--mono); font-size: .84rem; }
+    .snippet {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: #090e17; margin: .9rem 0 1rem; overflow: hidden;
+    }
+    .snippet-head {
+      display: flex; justify-content: space-between; gap: .4rem;
+      padding: .42rem .72rem; border-bottom: 1px solid var(--border);
+      color: var(--text-faint); font-size: .72rem; text-transform: uppercase;
+      letter-spacing: .05em; background: rgba(255,255,255,.02);
+    }
+    pre { overflow-x: auto; padding: .9rem .72rem; color: #d8e8ff; line-height: 1.5; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: .95rem; }
+    .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; }
+    .pill {
+      display: inline-block; border: 1px solid var(--border); border-radius: 6px;
+      padding: .08rem .38rem; font-size: .72rem; color: var(--text-dim);
+      margin-right: .35rem; margin-bottom: .24rem;
+    }
+
+    .status-ok { color: var(--ok); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--danger); }
+
+    .diag {
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      padding: .9rem; background: rgba(255,255,255,.03); overflow-x: auto;
+      font-family: var(--mono); font-size: .82rem; color: #d4e4ff;
+      margin: 1rem 0; white-space: pre;
+    }
+
+    .checklist {
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: var(--radius); padding: 1rem;
+    }
+    .checklist h3 { font-size: 1rem; margin-bottom: .55rem; color: var(--accent); }
+    .checklist li { margin-left: 1.1rem; color: var(--text-dim); margin-bottom: .5rem; font-size: .94rem; }
+
+    .callout {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: .8rem 1rem; margin: 1rem 0;
+    }
+    .callout.warn { border-color: rgba(255, 202, 117, .35); background: rgba(255, 202, 117, .06); }
+    .callout.danger { border-color: rgba(255, 139, 139, .35); background: rgba(255, 139, 139, .06); }
+    .callout.ok { border-color: rgba(134, 244, 180, .35); background: rgba(134, 244, 180, .06); }
+    .callout p { color: var(--text-dim); font-size: .9rem; margin: 0; }
+    .callout strong { color: var(--text); }
+
+    footer {
+      margin-top: 2rem; padding: 1.2rem 0 2.2rem; color: var(--text-faint);
+      border-top: 1px solid var(--border); font-size: .84rem;
+    }
+
+    @media (max-width: 960px) {
+      .hero-grid, .two-col, .three-col { grid-template-columns: 1fr; }
+      .timeline-row { grid-template-columns: 1fr; }
+      .topbar-inner { align-items: flex-start; }
+      .nav { justify-content: flex-start; }
+      .hero { padding-top: 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="dot"></span> Helm Engineering Reference</div>
+      <nav class="nav">
+        <a href="#concepts">Concepts</a>
+        <a href="#chart-anatomy">Charts</a>
+        <a href="#templating">Templating</a>
+        <a href="#values">Values</a>
+        <a href="#deps">Dependencies</a>
+        <a href="#lifecycle">Lifecycle</a>
+        <a href="#hooks">Hooks</a>
+        <a href="#repos">Repos &amp; OCI</a>
+        <a href="#debugging">Debugging</a>
+        <a href="#pitfalls">Pitfalls</a>
+        <a href="#tips">Tips</a>
+        <a href="#helmfile">Helmfile</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- ======== HERO ======== -->
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>Helm: The Kubernetes Package Manager, Demystified</h1>
+          <p>
+            A protocol-level reference for engineers who ship to Kubernetes daily. Covers chart anatomy,
+            Go template mechanics, value resolution order, dependency management, hook semantics,
+            release lifecycle, OCI registries, debugging strategies, common pitfalls, and production hardening.
+          </p>
+          <div class="tag-row">
+            <span class="tag">Helm 3.x</span>
+            <span class="tag">Go Templates</span>
+            <span class="tag">Chart v2 API</span>
+            <span class="tag">OCI Artifacts</span>
+            <span class="tag">Helmfile</span>
+          </div>
+        </div>
+        <aside class="stat">
+          <h2>Core Mental Model</h2>
+          <code>Chart (package) + Values (config) = Release (running instance)</code>
+          <br><br>
+          <code style="color: var(--accent-2);">helm upgrade --install</code>
+          <span style="color: var(--text-faint); font-size: .78rem;"> &mdash; the only command you need</span>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======== 1. CONCEPTS ======== -->
+    <section id="concepts">
+      <h2 class="section-title">1. Core Concepts and Architecture</h2>
+      <p class="lede">
+        Helm 3 is a client-side tool. There is no Tiller, no server component. The Helm binary templates charts locally,
+        sends rendered manifests to the Kubernetes API, and stores release metadata as Secrets in the target namespace.
+      </p>
+
+      <div class="three-col">
+        <article class="card">
+          <h3>Chart</h3>
+          <p>A <strong>package</strong> &mdash; a directory of templates, default values, metadata, and optional dependencies.
+          Charts are versioned independently from the application they deploy.</p>
+          <ul>
+            <li>Defined by <code>Chart.yaml</code></li>
+            <li>Packaged as <code>.tgz</code> archives</li>
+            <li>Stored in chart repos or OCI registries</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Release</h3>
+          <p>A <strong>running instance</strong> of a chart with a specific set of values. Same chart can be installed
+          multiple times, each creating a distinct release.</p>
+          <ul>
+            <li>Named by the user at install time</li>
+            <li>Scoped to a namespace</li>
+            <li>Versioned (each upgrade = new revision)</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Values</h3>
+          <p><strong>Configuration</strong> injected into templates at render time. Values cascade from
+          multiple sources with a defined merge order.</p>
+          <ul>
+            <li><code>values.yaml</code> (chart defaults)</li>
+            <li><code>-f file.yaml</code> (user overrides)</li>
+            <li><code>--set key=val</code> (CLI overrides)</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="diag" role="img" aria-label="Helm architecture">
+Developer workstation                          Kubernetes cluster
+┌──────────────────────┐                      ┌───────────────────────────────┐
+│  helm upgrade        │                      │  Namespace: production        │
+│   --install myapp    │  rendered manifests   │  ┌─────────────────────────┐  │
+│   ./chart            │ ────────────────────► │  │ Deployment, Service,    │  │
+│   -f prod.yaml       │    kubectl apply      │  │ Ingress, ConfigMap ...  │  │
+│   --atomic           │                      │  └─────────────────────────┘  │
+└──────────────────────┘                      │                               │
+        │                                     │  Secret: sh.helm.release.v1.  │
+        │  release metadata                   │    myapp.v7                   │
+        └────────────────────────────────────►│  (gzipped + base64 manifest  │
+                                              │   + values + chart metadata)  │
+                                              └───────────────────────────────┘
+      </div>
+
+      <div class="callout ok">
+        <p><strong>No server component.</strong> Helm 3 removed Tiller entirely. Release state is stored as Kubernetes Secrets
+        (type <code>helm.sh/release.v1</code>) in the release's namespace. This means RBAC on the namespace controls who
+        can manage releases &mdash; no special Helm RBAC needed.</p>
+      </div>
+    </section>
+
+    <!-- ======== 2. CHART ANATOMY ======== -->
+    <section id="chart-anatomy">
+      <h2 class="section-title">2. Chart Anatomy</h2>
+      <p class="lede">
+        A chart is a directory tree following a strict convention. Helm ignores files outside this structure.
+        Understanding the layout is essential for authoring, debugging, and reviewing charts.
+      </p>
+
+      <div class="diag" role="img" aria-label="chart directory structure">
+mychart/
+├── Chart.yaml              # Required. Chart metadata (name, version, appVersion, deps)
+├── Chart.lock              # Generated. Pinned dependency versions (committed to Git)
+├── values.yaml             # Default configuration values
+├── values.schema.json      # Optional. JSON Schema to validate values
+├── .helmignore             # Patterns to exclude from packaging (like .gitignore)
+├── README.md               # Chart documentation
+├── LICENSE                 # License file
+├── templates/              # Kubernetes manifest templates (Go templates)
+│   ├── _helpers.tpl        # Named template definitions (partials)
+│   ├── NOTES.txt           # Post-install/upgrade user-facing message template
+│   ├── deployment.yaml     # Deployment manifest
+│   ├── service.yaml        # Service manifest
+│   ├── ingress.yaml        # Ingress manifest
+│   ├── configmap.yaml      # ConfigMap manifest
+│   ├── hpa.yaml            # HorizontalPodAutoscaler
+│   ├── pdb.yaml            # PodDisruptionBudget
+│   ├── serviceaccount.yaml # ServiceAccount
+│   └── tests/              # Test pod definitions (run via helm test)
+│       └── test-connection.yaml
+├── charts/                 # Dependency charts (populated by helm dependency update)
+│   ├── redis-17.3.0.tgz
+│   └── postgresql/         # Or unpacked subchart directory
+└── crds/                   # CRD YAML files (installed before templates, never upgraded)
+    └── mycrd.yaml
+      </div>
+
+      <h3 class="sub">Chart.yaml</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>Chart.yaml</span><span>required fields + common optional</span></div>
+<pre><code>apiVersion: v2                 # v2 = Helm 3 (v1 = Helm 2, do not use)
+name: myapp
+description: Production deployment chart for myapp
+type: application              # "application" (default) or "library"
+version: 1.4.2                 # Chart version (semver, bump on any chart change)
+appVersion: "3.8.1"            # App version (informational, shown in helm list)
+
+# Kubernetes version constraint
+kubeVersion: "&gt;= 1.25.0-0"
+
+# Dependencies (replaces requirements.yaml from Helm 2)
+dependencies:
+  - name: redis
+    version: "17.x"           # Semver range
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled   # Toggle via values
+  - name: postgresql
+    version: "12.5.9"
+    repository: "oci://registry-1.docker.io/bitnamicharts"
+    alias: db                  # Reference as .Values.db in templates
+
+maintainers:
+  - name: Platform Team
+    email: platform@company.com</code></pre>
+      </div>
+
+      <div class="callout warn">
+        <p><strong><code>version</code> vs <code>appVersion</code>:</strong> These are independent. <code>version</code> is the chart's own semver &mdash;
+        bump it whenever you change templates, values, or dependencies. <code>appVersion</code> is the version of the
+        application inside the chart (e.g., your Docker image tag). Helm uses <code>version</code> for dependency resolution
+        and upgrade diffing. <code>appVersion</code> is purely informational.</p>
+      </div>
+
+      <h3 class="sub">values.schema.json</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>values.schema.json</span><span>validates values before rendering</span></div>
+<pre><code>{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "replicaCount"],
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    }
+  }
+}</code></pre>
+      </div>
+
+      <div class="callout ok">
+        <p><strong>Use JSON Schema.</strong> It catches misconfigured values <em>before</em> they reach the Kubernetes API. Helm runs
+        schema validation during <code>install</code>, <code>upgrade</code>, <code>lint</code>, and <code>template</code>. This is
+        the single most underused Helm feature for preventing production incidents.</p>
+      </div>
+    </section>
+
+    <!-- ======== 3. TEMPLATING ======== -->
+    <section id="templating">
+      <h2 class="section-title">3. Go Template Language</h2>
+      <p class="lede">
+        Helm templates use Go's <code>text/template</code> package extended with Sprig functions and Helm-specific builtins.
+        The syntax is powerful but unforgiving &mdash; whitespace, scoping, and type coercion cause most template bugs.
+      </p>
+
+      <h3 class="sub">Syntax Fundamentals</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Syntax</th><th>Purpose</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>{{ .Values.key }}</code></td><td>Access a value</td><td><code>{{ .Values.image.tag }}</code></td></tr>
+            <tr><td><code>{{- ... -}}</code></td><td>Trim whitespace (left/right)</td><td><code>{{- if .Values.ingress.enabled }}</code></td></tr>
+            <tr><td><code>{{ include "name" . }}</code></td><td>Call a named template</td><td><code>{{ include "mychart.labels" . | nindent 4 }}</code></td></tr>
+            <tr><td><code>{{ toYaml .Values.x }}</code></td><td>Render value as YAML</td><td><code>{{ toYaml .Values.resources | nindent 12 }}</code></td></tr>
+            <tr><td><code>{{ tpl .Values.x . }}</code></td><td>Render a value <em>as a template</em></td><td><code>{{ tpl .Values.config.template . }}</code></td></tr>
+            <tr><td><code>{{ required "msg" .Values.x }}</code></td><td>Fail if value is empty</td><td><code>{{ required "image.tag is required" .Values.image.tag }}</code></td></tr>
+            <tr><td><code>{{ default "val" .Values.x }}</code></td><td>Default if nil/empty</td><td><code>{{ default "IfNotPresent" .Values.image.pullPolicy }}</code></td></tr>
+            <tr><td><code>{{ .Release.Name }}</code></td><td>Built-in release object</td><td>Release name, namespace, revision, etc.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub">Built-in Objects</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Object</th><th>Fields</th><th>Common Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>.Release</code></td><td><code>.Name</code>, <code>.Namespace</code>, <code>.Revision</code>, <code>.IsUpgrade</code>, <code>.IsInstall</code></td><td>Resource naming, conditional logic</td></tr>
+            <tr><td><code>.Chart</code></td><td><code>.Name</code>, <code>.Version</code>, <code>.AppVersion</code></td><td>Labels, annotations</td></tr>
+            <tr><td><code>.Values</code></td><td>Merged values from all sources</td><td>Everything user-configurable</td></tr>
+            <tr><td><code>.Capabilities</code></td><td><code>.KubeVersion</code>, <code>.APIVersions</code></td><td>Conditional API version selection</td></tr>
+            <tr><td><code>.Template</code></td><td><code>.Name</code>, <code>.BasePath</code></td><td>ConfigMap checksum annotations</td></tr>
+            <tr><td><code>.Files</code></td><td><code>.Get</code>, <code>.GetBytes</code>, <code>.Glob</code>, <code>.AsConfig</code>, <code>.AsSecrets</code></td><td>Embed config files from chart</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub">Flow Control</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>conditionals, loops, and with blocks</span><span>Go template patterns</span></div>
+<pre><code># if / else if / else
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+...
+{{- end }}
+
+# Negation
+{{- if not .Values.autoscaling.enabled }}
+replicas: {{ .Values.replicaCount }}
+{{- end }}
+
+# Boolean AND / OR
+{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+...
+{{- end }}
+
+# range (loop over list)
+{{- range .Values.ingress.hosts }}
+- host: {{ .host | quote }}
+  http:
+    paths:
+      {{- range .paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType }}
+      {{- end }}
+{{- end }}
+
+# range (loop over map with $key, $value)
+{{- range $key, $value := .Values.env }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+{{- end }}
+
+# with (change scope — BEWARE: . is rebound)
+{{- with .Values.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+
+# Access parent scope inside with/range using $
+{{- with .Values.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
+# Still need release name? Use $.Release.Name ($ = root scope)
+{{- end }}</code></pre>
+      </div>
+
+      <div class="callout danger">
+        <p><strong>The <code>with</code> scope trap.</strong> Inside a <code>with</code> block, <code>.</code> is rebound to the value
+        passed to <code>with</code>. You <em>cannot</em> access <code>.Values</code>, <code>.Release</code>, etc. via <code>.</code> anymore.
+        Use <code>$</code> (the root scope) instead: <code>$.Release.Name</code>, <code>$.Values.image.tag</code>.</p>
+      </div>
+
+      <h3 class="sub">Named Templates (_helpers.tpl)</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>_helpers.tpl</span><span>reusable template definitions</span></div>
+<pre><code>{{/* Generate standard labels */}}
+{{- define "mychart.labels" -}}
+helm.sh/chart: {{ include "mychart.chart" . }}
+app.kubernetes.io/name: {{ include "mychart.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/* Generate selector labels (subset of above — must be immutable) */}}
+{{- define "mychart.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "mychart.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/* Chart name + version for chart label */}}
+{{- define "mychart.chart" -}}
+{{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/* Fullname: release-chart, truncated to 63 chars */}}
+{{- define "mychart.fullname" -}}
+{{- if .Values.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}</code></pre>
+      </div>
+
+      <div class="two-col">
+        <article class="card">
+          <h3><code>include</code> vs <code>template</code></h3>
+          <ul>
+            <li><code>{{ template "name" . }}</code> injects output directly &mdash; cannot be piped.</li>
+            <li><code>{{ include "name" . }}</code> returns a string &mdash; <strong>can be piped</strong> to <code>nindent</code>, <code>quote</code>, etc.</li>
+            <li><strong>Always use <code>include</code>.</strong> There is no reason to use <code>template</code> in Helm charts.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Whitespace Control</h3>
+          <ul>
+            <li><code>{{-</code> trims whitespace <em>before</em> the tag (left chomp)</li>
+            <li><code>-}}</code> trims whitespace <em>after</em> the tag (right chomp)</li>
+            <li><code>nindent N</code> adds a newline then N spaces (use with <code>include</code>)</li>
+            <li><code>indent N</code> indents without leading newline (rarely what you want)</li>
+            <li>Most YAML rendering bugs are whitespace bugs. Use <code>helm template</code> to verify output.</li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 class="sub">Useful Sprig Functions</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Function</th><th>Example</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>quote</code></td><td><code>{{ .Values.name | quote }}</code></td><td><code>"myapp"</code></td></tr>
+            <tr><td><code>upper</code> / <code>lower</code></td><td><code>{{ .Values.env | upper }}</code></td><td><code>PRODUCTION</code></td></tr>
+            <tr><td><code>replace</code></td><td><code>{{ .Values.x | replace "." "-" }}</code></td><td><code>my-app</code></td></tr>
+            <tr><td><code>trunc</code></td><td><code>{{ .Values.name | trunc 63 }}</code></td><td>First 63 characters</td></tr>
+            <tr><td><code>b64enc</code> / <code>b64dec</code></td><td><code>{{ .Values.secret | b64enc }}</code></td><td>Base64 encode</td></tr>
+            <tr><td><code>sha256sum</code></td><td><code>{{ include "..." . | sha256sum }}</code></td><td>Checksum for rollout trigger</td></tr>
+            <tr><td><code>toJson</code> / <code>fromJson</code></td><td><code>{{ .Values.config | toJson }}</code></td><td>JSON serialization</td></tr>
+            <tr><td><code>ternary</code></td><td><code>{{ ternary "a" "b" .Values.flag }}</code></td><td><code>"a"</code> if true, <code>"b"</code> if false</td></tr>
+            <tr><td><code>hasKey</code></td><td><code>{{ if hasKey .Values "extra" }}</code></td><td>Check if map key exists</td></tr>
+            <tr><td><code>merge</code> / <code>mustMergeOverwrite</code></td><td><code>{{ merge .Values.defaults .Values.overrides }}</code></td><td>Deep merge maps</td></tr>
+            <tr><td><code>lookup</code></td><td><code>{{ lookup "v1" "Secret" "ns" "name" }}</code></td><td>Query live cluster (empty on <code>template</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ======== 4. VALUES ======== -->
+    <section id="values">
+      <h2 class="section-title">4. Values: Resolution Order and Merge Semantics</h2>
+      <p class="lede">
+        Values come from multiple sources and are deep-merged. Later sources override earlier ones.
+        Understanding the merge order prevents the most common class of "why isn't my value taking effect" bugs.
+      </p>
+
+      <h3 class="sub">Value Precedence (lowest to highest)</h3>
+      <div class="timeline">
+        <div class="timeline-row">
+          <div class="left">1. Chart defaults</div>
+          <div class="right"><code>values.yaml</code> in the chart directory. Lowest priority.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">2. Parent chart values</div>
+          <div class="right">If this is a subchart, parent's <code>values.yaml</code> can override subchart values under the subchart's key.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">3. User values files</div>
+          <div class="right"><code>-f values-prod.yaml</code> &mdash; multiple <code>-f</code> flags are merged left to right (rightmost wins).</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">4. --set / --set-string</div>
+          <div class="right"><code>--set image.tag=v2.1.0</code> &mdash; highest priority. Overrides everything above.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">5. --set-json</div>
+          <div class="right"><code>--set-json 'resources={"limits":{"cpu":"2"}}'</code> &mdash; same priority as --set, parsed as JSON.</div>
+        </div>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>value override examples</span><span>CLI precedence</span></div>
+<pre><code># Multiple value files (later files override earlier)
+helm upgrade --install myapp ./chart \
+  -f values.yaml \
+  -f values-prod.yaml \
+  -f values-secrets.yaml
+
+# --set overrides everything (careful with complex values)
+helm upgrade --install myapp ./chart \
+  -f values-prod.yaml \
+  --set image.tag=abc123 \
+  --set replicaCount=5
+
+# --set with special characters
+--set ingress.hosts[0].host=api.example.com       # Array index
+--set nodeSelector."kubernetes\.io/os"=linux       # Escaped dots in keys
+--set config.data="line1\nline2"                   # Newlines
+
+# --set-string forces string type (avoids YAML type coercion)
+--set-string image.tag=1.0                         # "1.0" not 1.0 (float)
+--set-string enabled=true                          # "true" not true (bool)
+
+# --set-json for complex structures
+--set-json 'tolerations=[{"key":"dedicated","operator":"Equal","value":"gpu"}]'
+
+# View final merged values for a deployed release
+helm get values myapp -n production
+helm get values myapp -n production --all           # Include defaults</code></pre>
+      </div>
+
+      <div class="callout danger">
+        <p><strong>YAML type coercion gotcha.</strong> <code>--set image.tag=1.0</code> produces the float <code>1</code>, not the string <code>"1.0"</code>.
+        <code>--set enabled=true</code> produces a boolean, not a string. Use <code>--set-string</code> when the value must remain a string.
+        In templates, always <code>| quote</code> values that must be strings in YAML output.</p>
+      </div>
+    </section>
+
+    <!-- ======== 5. DEPENDENCIES ======== -->
+    <section id="deps">
+      <h2 class="section-title">5. Dependencies and Subcharts</h2>
+      <p class="lede">
+        Charts can depend on other charts. Dependencies are declared in <code>Chart.yaml</code>, resolved from repositories,
+        and stored in the <code>charts/</code> directory. Understanding how values flow between parent and child is critical.
+      </p>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>dependency management commands</span><span>Chart.lock workflow</span></div>
+<pre><code># Download dependencies into charts/ based on Chart.yaml
+helm dependency update ./mychart
+
+# Rebuild charts/ from Chart.lock (for CI reproducibility)
+helm dependency build ./mychart
+
+# List current dependency state
+helm dependency list ./mychart
+
+# Typical CI workflow:
+# 1. Developer runs: helm dependency update (updates Chart.lock)
+# 2. Commit both Chart.yaml and Chart.lock
+# 3. CI runs: helm dependency build (uses locked versions)</code></pre>
+      </div>
+
+      <h3 class="sub">Passing Values to Subcharts</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>parent values.yaml</span><span>subchart value injection</span></div>
+<pre><code># Values for this chart
+replicaCount: 3
+image:
+  repository: myapp
+  tag: "2.0.0"
+
+# Values for the "redis" dependency (key matches dependency name)
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: "override-me-with-secret"
+  master:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+# Values for the "postgresql" dependency (using alias "db")
+db:
+  enabled: true
+  auth:
+    postgresPassword: "override-me"
+    database: myapp
+
+# Global values (accessible to ALL charts and subcharts as .Values.global)
+global:
+  imagePullSecrets:
+    - name: regcred
+  storageClass: gp3-encrypted</code></pre>
+      </div>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>Condition &amp; Tags</h3>
+          <ul>
+            <li><code>condition: redis.enabled</code> &mdash; boolean in parent values toggles the entire subchart on/off</li>
+            <li><code>tags: [backend]</code> &mdash; group dependencies; <code>--set tags.backend=false</code> disables all tagged deps</li>
+            <li>Condition takes precedence over tags if both are set</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Global Values</h3>
+          <ul>
+            <li><code>.Values.global.*</code> is accessible from <em>every</em> chart and subchart</li>
+            <li>Use for cross-cutting concerns: image pull secrets, storage class, domain name</li>
+            <li>Subchart values under their key are <em>not</em> accessible from the parent &mdash; only globals are shared</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>Commit <code>Chart.lock</code>.</strong> Like <code>package-lock.json</code> or <code>go.sum</code>, <code>Chart.lock</code> pins exact dependency versions.
+        Without it, <code>helm dependency update</code> resolves ranges fresh each time, potentially pulling breaking changes.
+        CI should run <code>helm dependency build</code> (which uses the lock file), not <code>update</code>.</p>
+      </div>
+    </section>
+
+    <!-- ======== 6. LIFECYCLE ======== -->
+    <section id="lifecycle">
+      <h2 class="section-title">6. Release Lifecycle</h2>
+      <p class="lede">
+        Every Helm operation modifies release state. Understanding the exact sequence of events during install,
+        upgrade, and rollback prevents surprises in production.
+      </p>
+
+      <h3 class="sub">Command Reference</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Command</th><th>Purpose</th><th>Key Flags</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>helm install</code></td>
+              <td>Create a new release</td>
+              <td><code>--wait</code>, <code>--timeout</code>, <code>--create-namespace</code>, <code>--dry-run</code></td>
+            </tr>
+            <tr>
+              <td><code>helm upgrade</code></td>
+              <td>Update an existing release</td>
+              <td><code>--install</code>, <code>--atomic</code>, <code>--cleanup-on-fail</code>, <code>--reuse-values</code>, <code>--reset-values</code></td>
+            </tr>
+            <tr>
+              <td><code>helm upgrade --install</code></td>
+              <td>Install if absent, upgrade if present</td>
+              <td>Idempotent &mdash; <strong>prefer this for CI/CD</strong></td>
+            </tr>
+            <tr>
+              <td><code>helm rollback</code></td>
+              <td>Revert to a previous revision</td>
+              <td><code>helm rollback myapp 3</code> (to revision 3)</td>
+            </tr>
+            <tr>
+              <td><code>helm uninstall</code></td>
+              <td>Delete release and all its resources</td>
+              <td><code>--keep-history</code> retains release metadata for audit</td>
+            </tr>
+            <tr>
+              <td><code>helm template</code></td>
+              <td>Render manifests locally (no cluster needed)</td>
+              <td><code>--debug</code>, <code>--show-only templates/x.yaml</code></td>
+            </tr>
+            <tr>
+              <td><code>helm lint</code></td>
+              <td>Check chart for errors and warnings</td>
+              <td><code>--strict</code> (treat warnings as errors)</td>
+            </tr>
+            <tr>
+              <td><code>helm test</code></td>
+              <td>Run test pods defined in templates/tests/</td>
+              <td><code>--logs</code> to display test pod output</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub">Upgrade Sequence (what happens internally)</h3>
+      <div class="timeline">
+        <div class="timeline-row">
+          <div class="left">1. Merge values</div>
+          <div class="right">Chart defaults &larr; user files &larr; --set overrides. Validate against <code>values.schema.json</code> if present.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">2. Render templates</div>
+          <div class="right">Execute Go templates with merged values. Produce Kubernetes YAML manifests.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">3. Run pre-upgrade hooks</div>
+          <div class="right">Create hook resources, wait for completion, delete (per hook deletion policy).</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">4. Apply manifests</div>
+          <div class="right">Three-way strategic merge patch: live state &harr; old manifest &harr; new manifest. Creates, updates, deletes resources.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">5. Wait (if --wait)</div>
+          <div class="right">Poll until Deployments, StatefulSets, and Jobs reach ready state, or timeout.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">6. Run post-upgrade hooks</div>
+          <div class="right">Execute post-upgrade hooks, wait for completion.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">7. Store release</div>
+          <div class="right">Persist new release revision as a Secret in the namespace. Previous revision retained for rollback.</div>
+        </div>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>production deploy pattern</span><span>safe, idempotent, observable</span></div>
+<pre><code># The canonical production upgrade command
+helm upgrade --install myapp ./chart \
+  --namespace production \
+  --create-namespace \
+  --values values-prod.yaml \
+  --set image.tag=${GIT_SHA} \
+  --atomic \                    # Auto-rollback on failure
+  --timeout 10m \               # Max wait for readiness
+  --wait                        # Wait for all resources ready
+
+# --atomic implies --wait and --cleanup-on-fail:
+#   - If upgrade fails → rollback to previous revision
+#   - If install fails → delete the failed release entirely
+#   - This is the single most important flag for CI/CD safety</code></pre>
+      </div>
+
+      <div class="callout danger">
+        <p><strong><code>--reuse-values</code> is a footgun.</strong> It merges the <em>previous release's</em> values with
+        any new <code>--set</code> overrides, but ignores new defaults added to <code>values.yaml</code>.
+        If you add a new key to your chart's <code>values.yaml</code>, <code>--reuse-values</code> will not pick it up.
+        Prefer <code>--reset-values</code> (the default) and always pass the full values file explicitly.</p>
+      </div>
+
+      <h3 class="sub">Inspect Release State</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>release inspection commands</span><span>debugging deployed state</span></div>
+<pre><code># List all releases across namespaces
+helm list -A
+helm list -A --filter 'myapp'
+
+# Release history (revisions, status, timestamps)
+helm history myapp -n production
+
+# Get the values used for the current release
+helm get values myapp -n production
+helm get values myapp -n production --all        # Including defaults
+helm get values myapp -n production --revision 5  # Specific revision
+
+# Get the rendered manifests from a deployed release
+helm get manifest myapp -n production
+
+# Get everything (values + manifest + notes + hooks)
+helm get all myapp -n production
+
+# Compare two revisions (requires helm-diff plugin)
+helm diff revision myapp 6 7 -n production</code></pre>
+      </div>
+    </section>
+
+    <!-- ======== 7. HOOKS ======== -->
+    <section id="hooks">
+      <h2 class="section-title">7. Hooks</h2>
+      <p class="lede">
+        Hooks are templated resources with special annotations that run at specific points in the release lifecycle.
+        Common uses: database migrations, cache warming, cleanup jobs, notifications.
+      </p>
+
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Hook</th><th>Fires When</th><th>Typical Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>pre-install</code></td><td>After templates render, before any resources created</td><td>Validate prerequisites, create secrets</td></tr>
+            <tr><td><code>post-install</code></td><td>After all resources are loaded</td><td>Database seeding, notification</td></tr>
+            <tr><td><code>pre-upgrade</code></td><td>After templates render, before upgrade applied</td><td><strong>Database migrations</strong>, backups</td></tr>
+            <tr><td><code>post-upgrade</code></td><td>After upgrade completes</td><td>Cache invalidation, smoke tests</td></tr>
+            <tr><td><code>pre-delete</code></td><td>Before any resources are deleted</td><td>Final backup, drain connections</td></tr>
+            <tr><td><code>post-delete</code></td><td>After all resources deleted</td><td>Cleanup external resources</td></tr>
+            <tr><td><code>pre-rollback</code></td><td>Before rollback applied</td><td>Notify, snapshot state</td></tr>
+            <tr><td><code>post-rollback</code></td><td>After rollback completes</td><td>Restore migrations</td></tr>
+            <tr><td><code>test</code></td><td>When <code>helm test</code> is invoked</td><td>Integration / smoke tests</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>pre-upgrade hook: database migration job</span><span>common production pattern</span></div>
+<pre><code>apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mychart.fullname" . }}-migrate
+  labels:
+    {{- include "mychart.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"            # Lower weight runs first
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: migrate
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command: ["./migrate", "--target", "latest"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: url</code></pre>
+      </div>
+
+      <h3 class="sub">Hook Delete Policies</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Policy</th><th>Behavior</th><th>When to Use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>before-hook-creation</code></td><td>Delete previous hook resource before creating new one</td><td><strong>Most common. Use for Jobs</strong> (avoids name conflicts)</td></tr>
+            <tr><td><code>hook-succeeded</code></td><td>Delete after hook succeeds</td><td>Clean up on success, keep on failure for debugging</td></tr>
+            <tr><td><code>hook-failed</code></td><td>Delete after hook fails</td><td>Rarely useful alone</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>Hook ordering.</strong> Hooks with the same lifecycle event are sorted by <code>hook-weight</code> (ascending, default 0).
+        Hooks with equal weight have no guaranteed order. Always set explicit weights when order matters.
+        <code>--wait</code> applies to hooks: Helm waits for each hook to reach ready/complete before proceeding.</p>
+      </div>
+    </section>
+
+    <!-- ======== 8. REPOS & OCI ======== -->
+    <section id="repos">
+      <h2 class="section-title">8. Repositories &amp; OCI Registries</h2>
+      <p class="lede">
+        Charts can be distributed via traditional Helm repositories (index.yaml + HTTP) or OCI-compliant registries.
+        OCI is the future &mdash; it uses the same infrastructure as container images.
+      </p>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>Traditional Repositories</h3>
+          <div class="snippet">
+            <div class="snippet-head"><span>repo management</span><span>index.yaml based</span></div>
+<pre><code># Add a repo
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add jetstack https://charts.jetstack.io
+
+# Update all repos (fetches latest index.yaml)
+helm repo update
+
+# Search for charts
+helm search repo nginx --versions
+helm search repo redis --version "17.x"
+
+# Show default values for a chart
+helm show values bitnami/redis --version 17.15.0
+
+# Install from repo
+helm install myredis bitnami/redis \
+  --version 17.15.0 -f redis-values.yaml</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <h3>OCI Registries</h3>
+          <div class="snippet">
+            <div class="snippet-head"><span>OCI workflow</span><span>container registry for charts</span></div>
+<pre><code># Login to OCI registry
+helm registry login registry.example.com
+
+# Package chart
+helm package ./mychart
+
+# Push to OCI registry
+helm push mychart-1.4.2.tgz \
+  oci://registry.example.com/charts
+
+# Pull from OCI
+helm pull oci://registry.example.com/charts/mychart \
+  --version 1.4.2
+
+# Install directly from OCI
+helm install myapp \
+  oci://registry.example.com/charts/mychart \
+  --version 1.4.2
+
+# Use in Chart.yaml dependencies
+# repository: "oci://registry.example.com/charts"</code></pre>
+          </div>
+        </article>
+      </div>
+
+      <div class="callout ok">
+        <p><strong>OCI advantages.</strong> No <code>index.yaml</code> to maintain. Native to ECR, GCR, ACR, GHCR, Harbor, Docker Hub.
+        Same auth as container images. Same signing/scanning tools (Cosign, Notation). Immutable tags.
+        Use OCI for new projects; traditional repos for backwards compatibility.</p>
+      </div>
+    </section>
+
+    <!-- ======== 9. DEBUGGING ======== -->
+    <section id="debugging">
+      <h2 class="section-title">9. Debugging &amp; Troubleshooting</h2>
+      <p class="lede">
+        Most Helm issues fall into three categories: template rendering errors, value merge confusion,
+        and Kubernetes apply failures. This section covers the diagnostic toolkit for each.
+      </p>
+
+      <h3 class="sub">Template Debugging</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>render and inspect templates</span><span>local debugging without a cluster</span></div>
+<pre><code># Render all templates locally (no cluster required)
+helm template myapp ./chart -f values-prod.yaml
+
+# Render a single template
+helm template myapp ./chart --show-only templates/deployment.yaml
+
+# Render with debug output (shows computed values + template errors)
+helm template myapp ./chart -f values-prod.yaml --debug
+
+# Dry run against the cluster (validates API server side)
+helm upgrade --install myapp ./chart -f values-prod.yaml --dry-run
+
+# Dry-run with server-side validation (catches more errors)
+helm upgrade --install myapp ./chart -f values-prod.yaml --dry-run=server
+
+# Lint the chart (catches structure + template issues)
+helm lint ./chart -f values-prod.yaml --strict
+
+# Compare current vs new (requires helm-diff plugin)
+helm diff upgrade myapp ./chart -f values-prod.yaml -n production</code></pre>
+      </div>
+
+      <h3 class="sub">Release Debugging</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>inspect a broken release</span><span>what went wrong?</span></div>
+<pre><code># Check release status
+helm status myapp -n production
+
+# View history — look for FAILED or PENDING_UPGRADE
+helm history myapp -n production
+# REVISION  STATUS          DESCRIPTION
+# 5         deployed        Upgrade complete
+# 6         failed          Upgrade "myapp" failed: timed out
+# 7         deployed        Rollback to 5
+
+# Get the manifest that was applied
+helm get manifest myapp -n production --revision 6
+
+# Get the values that were used for the failed revision
+helm get values myapp -n production --revision 6
+
+# Compare values between revisions
+diff &lt;(helm get values myapp -n prod --revision 5) \
+     &lt;(helm get values myapp -n prod --revision 6)
+
+# Check Kubernetes events for the namespace
+kubectl get events -n production --sort-by='.lastTimestamp' | tail -30
+
+# Check pod status
+kubectl get pods -n production -l app.kubernetes.io/instance=myapp</code></pre>
+      </div>
+
+      <h3 class="sub">Common Error Messages</h3>
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>UPGRADE FAILED: another operation is in progress</code></td>
+              <td>Previous install/upgrade did not complete cleanly</td>
+              <td><code>helm rollback myapp 0</code> or delete the pending release secret manually</td>
+            </tr>
+            <tr>
+              <td><code>Error: rendered manifests contain a resource that already exists</code></td>
+              <td>Resource was created outside Helm, or release name mismatch</td>
+              <td>Adopt with <code>kubectl annotate</code> + <code>kubectl label</code> Helm metadata, or delete and reinstall</td>
+            </tr>
+            <tr>
+              <td><code>Error: INSTALLATION FAILED: unable to build kubernetes objects</code></td>
+              <td>Invalid YAML in rendered templates</td>
+              <td><code>helm template --debug</code> to find the malformed output</td>
+            </tr>
+            <tr>
+              <td><code>Error: timed out waiting for the condition</code></td>
+              <td>Pods didn't reach Ready in time</td>
+              <td>Check pod logs, events, resource limits, image pull. Increase <code>--timeout</code></td>
+            </tr>
+            <tr>
+              <td><code>cannot patch "X" with kind Deployment: ... field is immutable</code></td>
+              <td>Trying to change an immutable field (label selectors, etc.)</td>
+              <td>Delete the resource first or use a different release name</td>
+            </tr>
+            <tr>
+              <td><code>Error: YAML parse error on templates/x.yaml: error converting YAML to JSON</code></td>
+              <td>Template produced invalid YAML (usually bad indentation)</td>
+              <td><code>helm template --show-only templates/x.yaml --debug</code></td>
+            </tr>
+            <tr>
+              <td><code>nil pointer evaluating interface {}.key</code></td>
+              <td>Accessing a value path that doesn't exist</td>
+              <td>Guard with <code>{{ if .Values.x }}</code> or use <code>{{ default "" .Values.x }}</code></td>
+            </tr>
+            <tr>
+              <td><code>Release "x" in namespace "y" failed and has been rolled back</code></td>
+              <td><code>--atomic</code> detected failure and auto-rolled back</td>
+              <td>Check the event log and pod status for the root cause. This is --atomic working correctly.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub">Stuck Release Recovery</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>fixing "another operation in progress"</span><span>manual release state surgery</span></div>
+<pre><code># Option 1: Rollback to last good revision
+helm rollback myapp 0 -n production        # 0 = previous revision
+
+# Option 2: If rollback also fails, manually patch the release secret
+# Find the stuck release secret
+kubectl get secrets -n production -l owner=helm,name=myapp
+
+# The latest secret will have status "pending-upgrade" or "pending-install"
+# Patch it to "failed" so Helm can proceed
+kubectl patch secret sh.helm.release.v1.myapp.v8 -n production \
+  --type=merge -p '{"metadata":{"labels":{"status":"failed"}}}'
+
+# Then retry the upgrade
+helm upgrade --install myapp ./chart -f values.yaml -n production --atomic
+
+# Option 3: Nuclear — uninstall and reinstall (loses history)
+helm uninstall myapp -n production
+helm install myapp ./chart -f values.yaml -n production</code></pre>
+      </div>
+    </section>
+
+    <!-- ======== 10. PITFALLS ======== -->
+    <section id="pitfalls">
+      <h2 class="section-title">10. Common Pitfalls and Anti-Patterns</h2>
+      <p class="lede">
+        These are the mistakes that cause production incidents. Every item on this list has been learned the hard way.
+      </p>
+
+      <div class="card-grid">
+        <article class="card">
+          <h3>Selector Label Mutation</h3>
+          <p>Kubernetes Deployment <code>matchLabels</code> are <strong>immutable after creation</strong>.
+          If your <code>_helpers.tpl</code> selector template includes <code>app.kubernetes.io/version</code>
+          and you bump it, the next upgrade fails.</p>
+          <ul>
+            <li>Selector labels must be stable across upgrades</li>
+            <li>Only use <code>name</code> + <code>instance</code> in selectors</li>
+            <li>Put version in metadata labels and annotations, never selectors</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Forgetting <code>quote</code></h3>
+          <p>YAML values like <code>true</code>, <code>1.0</code>, <code>null</code>, <code>yes</code> are interpreted as
+          booleans, floats, nulls. Without quoting, annotations and env values get silently mangled.</p>
+          <ul>
+            <li>Always <code>{{ .Values.x | quote }}</code> for annotations</li>
+            <li>Always quote env var <code>value:</code> fields</li>
+            <li><code>"true"</code> != <code>true</code> in YAML</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>ConfigMap Rollout Blindness</h3>
+          <p>Updating a ConfigMap doesn't trigger a Deployment rollout. Pods keep running with the old config
+          until they're restarted.</p>
+          <ul>
+            <li>Add a checksum annotation to force rollout:</li>
+            <li><code>checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}</code></li>
+            <li>Or use <code>Reloader</code> controller for automatic restarts</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3><code>--reuse-values</code> Drift</h3>
+          <p>This flag carries forward the previous release's values, ignoring any new defaults added to the chart.
+          Over time, releases drift from chart defaults.</p>
+          <ul>
+            <li>New values.yaml keys are silently missing</li>
+            <li>Always use <code>--reset-values</code> (default) + explicit <code>-f</code> files</li>
+            <li>Store your values files in Git, not in Helm release state</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>CRD Lifecycle Trap</h3>
+          <p>CRDs in the <code>crds/</code> directory are installed on <code>helm install</code> but <strong>never
+          upgraded or deleted</strong> by Helm. This is by design (CRDs are cluster-scoped and dangerous to modify).</p>
+          <ul>
+            <li>For CRD upgrades, apply them manually or via a separate process</li>
+            <li>Don't put CRDs in <code>templates/</code> either &mdash; ordering issues</li>
+            <li>Many operators use a separate CRD-only chart</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Resource Deletion on Uninstall</h3>
+          <p><code>helm uninstall</code> deletes <strong>everything</strong> it manages, including PVCs
+          if they were created by the chart (not by StatefulSet volumeClaimTemplates).</p>
+          <ul>
+            <li>Add <code>"helm.sh/resource-policy": keep</code> annotation to PVCs and critical resources</li>
+            <li>StatefulSet PVCs created via <code>volumeClaimTemplates</code> are NOT managed by Helm and survive uninstall</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="callout danger">
+        <p><strong>The <code>nil</code> map trap.</strong> In Go templates, accessing a nested key on a nil map panics:
+        <code>{{ .Values.foo.bar.baz }}</code> fails if <code>foo</code> is nil. Always guard with
+        <code>{{ if .Values.foo }}{{ .Values.foo.bar }}{{ end }}</code> or provide defaults in <code>values.yaml</code>
+        so the parent key always exists as an empty map.</p>
+      </div>
+    </section>
+
+    <!-- ======== 11. TIPS ======== -->
+    <section id="tips">
+      <h2 class="section-title">11. Tips, Tricks, and Production Patterns</h2>
+      <p class="lede">
+        Hard-won patterns from operating Helm at scale.
+      </p>
+
+      <h3 class="sub">Force Rollout on Config Change</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>checksum annotation pattern</span><span>triggers rollout when configmap/secret changes</span></div>
+<pre><code>spec:
+  template:
+    metadata:
+      annotations:
+        # Rollout when ConfigMap changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        # Rollout when Secret changes
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}</code></pre>
+      </div>
+
+      <h3 class="sub">Fail Fast with <code>required</code></h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>required values pattern</span><span>catch missing values at render time</span></div>
+<pre><code># Fail at render time, not at deploy time
+image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+
+# Useful error message in helm template output:
+# Error: execution error at (mychart/templates/deployment.yaml:25):
+#   image.tag is required</code></pre>
+      </div>
+
+      <h3 class="sub">Embed Files from Chart</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>.Files object</span><span>embed config files, scripts, etc.</span></div>
+<pre><code># Embed a config file as ConfigMap data
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mychart.fullname" . }}-config
+data:
+  # Single file
+  nginx.conf: |-
+    {{ .Files.Get "files/nginx.conf" | nindent 4 }}
+  # All files matching a glob
+  {{- range $path, $_ := .Files.Glob "files/configs/*.yaml" }}
+  {{ base $path }}: |-
+    {{ $.Files.Get $path | nindent 4 }}
+  {{- end }}
+
+# Embed as a Secret (auto base64 encoded)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "mychart.fullname" . }}-certs
+type: Opaque
+data:
+  {{- (.Files.Glob "certs/*").AsSecrets | nindent 2 }}</code></pre>
+      </div>
+
+      <h3 class="sub">Conditional API Version</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>capabilities check</span><span>support multiple K8s versions</span></div>
+<pre><code># Use the right API version based on cluster capabilities
+{{- if .Capabilities.APIVersions.Has "autoscaling/v2" }}
+apiVersion: autoscaling/v2
+{{- else }}
+apiVersion: autoscaling/v2beta2
+{{- end }}
+kind: HorizontalPodAutoscaler
+
+# Check minimum Kubernetes version
+{{- if semverCompare "&gt;= 1.25-0" .Capabilities.KubeVersion.GitVersion }}
+# Use PodDisruptionBudget policy/v1
+{{- end }}</code></pre>
+      </div>
+
+      <h3 class="sub">Protect Resources from Deletion</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>resource-policy: keep</span><span>survive helm uninstall</span></div>
+<pre><code>apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mychart.fullname" . }}-data
+  annotations:
+    "helm.sh/resource-policy": keep      # Helm will NOT delete this on uninstall
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 100Gi</code></pre>
+      </div>
+
+      <h3 class="sub">Library Charts</h3>
+      <div class="snippet">
+        <div class="snippet-head"><span>shared templates via library charts</span><span>DRY across multiple charts</span></div>
+<pre><code># Chart.yaml of the library chart
+apiVersion: v2
+name: common-templates
+type: library                  # Cannot be installed directly
+version: 1.0.0
+
+# Chart.yaml of the consuming chart
+dependencies:
+  - name: common-templates
+    version: "1.x"
+    repository: "oci://registry.example.com/charts"
+
+# Use in templates:
+{{- include "common-templates.labels" . | nindent 4 }}
+{{- include "common-templates.deployment" . }}</code></pre>
+      </div>
+    </section>
+
+    <!-- ======== 12. HELMFILE ======== -->
+    <section id="helmfile">
+      <h2 class="section-title">12. Helmfile &mdash; Declarative Multi-Release Management</h2>
+      <p class="lede">
+        Helmfile is to Helm what Terraform is to cloud APIs: a declarative layer that manages multiple releases,
+        environments, and value layering in a single config file. Essential for clusters with 10+ Helm releases.
+      </p>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>helmfile.yaml</span><span>complete multi-environment example</span></div>
+<pre><code>repositories:
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+  - name: prometheus
+    url: https://prometheus-community.github.io/helm-charts
+
+# Environment-specific values
+environments:
+  dev:
+    values:
+      - env/defaults.yaml
+      - env/dev.yaml
+  staging:
+    values:
+      - env/defaults.yaml
+      - env/staging.yaml
+  production:
+    values:
+      - env/defaults.yaml
+      - env/production.yaml
+
+# Helm defaults applied to all releases
+helmDefaults:
+  atomic: true
+  timeout: 600
+  wait: true
+  createNamespace: true
+
+# Release definitions
+releases:
+  - name: ingress-nginx
+    namespace: ingress
+    chart: ingress-nginx/ingress-nginx
+    version: 4.8.3
+    values:
+      - values/ingress.yaml
+
+  - name: prometheus
+    namespace: monitoring
+    chart: prometheus/kube-prometheus-stack
+    version: 55.5.0
+    values:
+      - values/prometheus.yaml
+      - values/prometheus-{{ .Environment.Name }}.yaml
+
+  - name: myapp
+    namespace: {{ .Environment.Name }}
+    chart: ./charts/myapp
+    values:
+      - values/myapp.yaml
+      - values/myapp-{{ .Environment.Name }}.yaml
+    set:
+      - name: image.tag
+        value: {{ env "IMAGE_TAG" | default "latest" }}
+    needs:                          # Dependency ordering
+      - ingress/ingress-nginx</code></pre>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>helmfile commands</span><span>daily workflow</span></div>
+<pre><code># Diff all releases against live cluster
+helmfile -e production diff
+
+# Apply all releases (install/upgrade)
+helmfile -e production apply
+
+# Apply only specific releases
+helmfile -e production -l name=myapp apply
+
+# Sync (apply without diff confirmation)
+helmfile -e production sync
+
+# Destroy all releases
+helmfile -e staging destroy
+
+# Template locally (no cluster)
+helmfile -e production template
+
+# Lint all charts
+helmfile -e production lint</code></pre>
+      </div>
+
+      <div class="callout ok">
+        <p><strong>Helmfile + GitOps.</strong> Store <code>helmfile.yaml</code> and all values in Git.
+        CI runs <code>helmfile -e production diff</code> on PRs for review, then <code>helmfile -e production apply</code>
+        on merge. This gives you declarative, auditable, reviewable Kubernetes deployments without ArgoCD/Flux complexity.</p>
+      </div>
+    </section>
+
+    <!-- ======== HARDENING ======== -->
+    <section id="hardening">
+      <h2 class="section-title">13. Hardening Checklist</h2>
+
+      <div class="card-grid">
+        <article class="checklist">
+          <h3>Chart Authoring</h3>
+          <ol>
+            <li>Include <code>values.schema.json</code> with required fields and type constraints</li>
+            <li>Use <code>required</code> for critical values that must be provided</li>
+            <li>Use <code>quote</code> on all annotation values, env values, and string fields</li>
+            <li>Include <code>.helmignore</code> to exclude secrets, IDE files, test data from packaged chart</li>
+            <li>Keep selector labels immutable (<code>name</code> + <code>instance</code> only)</li>
+            <li>Set <code>"helm.sh/resource-policy": keep</code> on PVCs and critical stateful resources</li>
+            <li>Add checksum annotations for ConfigMap/Secret rollout triggers</li>
+            <li>Set <code>kubeVersion</code> constraint in Chart.yaml</li>
+            <li>Include <code>NOTES.txt</code> with post-deploy instructions and access info</li>
+            <li>Write test pods in <code>templates/tests/</code> for <code>helm test</code></li>
+          </ol>
+        </article>
+        <article class="checklist">
+          <h3>Deployment Operations</h3>
+          <ol>
+            <li><strong>Always use <code>--atomic</code></strong> in CI/CD &mdash; auto-rollback on failure</li>
+            <li>Always pass values via <code>-f file.yaml</code>, never rely on <code>--reuse-values</code></li>
+            <li>Store all values files in Git alongside the chart or in a deploy repo</li>
+            <li>Pin chart versions in Helmfile or CI scripts (no <code>latest</code>)</li>
+            <li>Commit <code>Chart.lock</code> for reproducible dependency resolution</li>
+            <li>Run <code>helm diff</code> before every production upgrade</li>
+            <li>Set appropriate <code>--timeout</code> based on pod startup time</li>
+            <li>Use <code>helm template --dry-run=server</code> in CI to catch API validation errors</li>
+            <li>Configure <code>revisionHistoryLimit</code> on Deployments (default 10 is fine)</li>
+            <li>Monitor release secret count &mdash; Helm stores one Secret per revision per release</li>
+          </ol>
+        </article>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>operator reference</span><span>daily commands cheatsheet</span></div>
+<pre><code># ---- Deploy ----
+helm upgrade --install NAME CHART -f values.yaml -n NS --atomic --timeout 10m
+
+# ---- Inspect ----
+helm list -A                          # All releases
+helm status NAME -n NS                # Release status
+helm get values NAME -n NS --all      # Effective values
+helm get manifest NAME -n NS          # Rendered manifests
+helm history NAME -n NS               # Revision history
+
+# ---- Debug ----
+helm template NAME CHART -f values.yaml --debug     # Render locally
+helm lint CHART -f values.yaml --strict              # Validate chart
+helm diff upgrade NAME CHART -f values.yaml -n NS   # Preview changes
+
+# ---- Recover ----
+helm rollback NAME REVISION -n NS    # Rollback
+helm rollback NAME 0 -n NS           # Rollback to previous
+
+# ---- Clean ----
+helm uninstall NAME -n NS            # Delete release
+helm uninstall NAME -n NS --keep-history  # Delete but keep history</code></pre>
+      </div>
+    </section>
+
+    <footer>
+      Helm Engineering Reference &mdash; built for engineers who ship to Kubernetes and want to understand the tool, not just use it.
+    </footer>
+  </main>
+</body>
+</html>
