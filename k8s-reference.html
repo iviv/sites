@@ -1,0 +1,1998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kubernetes Advanced Reference</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+  --text:#e6edf3;--text-muted:#8b949e;--accent:#58a6ff;--accent2:#3fb950;
+  --warn:#d29922;--err:#f85149;--purple:#bc8cff;--cyan:#76e3ea;
+  --code-bg:#0d1117;--font-mono:'JetBrains Mono','Fira Code','Cascadia Code',monospace;
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-height:1.7}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Layout */
+.wrapper{display:flex;min-height:100vh}
+nav.sidebar{
+  position:fixed;top:0;left:0;width:280px;height:100vh;overflow-y:auto;
+  background:var(--surface);border-right:1px solid var(--border);padding:1.5rem 0;z-index:100;
+  transition:transform .3s ease;
+}
+nav.sidebar .logo{padding:0 1.5rem 1.5rem;font-size:1.3rem;font-weight:700;color:var(--accent);border-bottom:1px solid var(--border);margin-bottom:1rem}
+nav.sidebar .logo span{color:var(--text-muted);font-weight:400;font-size:.85rem;display:block;margin-top:.25rem}
+nav.sidebar ul{list-style:none}
+nav.sidebar ul li a{
+  display:block;padding:.45rem 1.5rem;font-size:.875rem;color:var(--text-muted);
+  border-left:3px solid transparent;transition:all .15s;
+}
+nav.sidebar ul li a:hover,nav.sidebar ul li a.active{color:var(--accent);background:var(--surface2);border-left-color:var(--accent);text-decoration:none}
+nav.sidebar ul li.section-label{padding:.8rem 1.5rem .3rem;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);font-weight:600}
+
+main.content{margin-left:280px;flex:1;padding:2.5rem 3rem;max-width:960px}
+main.content section{margin-bottom:3.5rem}
+h1{font-size:2.2rem;font-weight:700;margin-bottom:.5rem}
+h2{font-size:1.6rem;font-weight:600;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);color:var(--accent)}
+h3{font-size:1.15rem;font-weight:600;margin:1.5rem 0 .75rem;color:var(--purple)}
+h4{font-size:1rem;font-weight:600;margin:1rem 0 .5rem;color:var(--cyan)}
+p{margin-bottom:1rem;color:var(--text-muted)}
+ul,ol{margin:0 0 1rem 1.5rem;color:var(--text-muted)}
+li{margin-bottom:.3rem}
+strong{color:var(--text)}
+code{font-family:var(--font-mono);font-size:.85em;background:var(--surface2);padding:.15em .4em;border-radius:4px;color:var(--cyan)}
+
+/* Code blocks */
+pre{
+  background:var(--code-bg);border:1px solid var(--border);border-radius:8px;
+  padding:1.25rem 1.5rem;overflow-x:auto;margin:0 0 1.5rem;position:relative;
+  font-family:var(--font-mono);font-size:.82rem;line-height:1.65;color:var(--text);
+}
+pre .comment{color:#8b949e;font-style:italic}
+pre .keyword{color:var(--accent)}
+pre .string{color:var(--accent2)}
+pre .label{color:var(--warn)}
+
+.tag{
+  display:inline-block;font-size:.7rem;padding:.15em .5em;border-radius:3px;
+  font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-right:.5rem;
+}
+.tag.tip{background:#3fb95022;color:var(--accent2);border:1px solid #3fb95044}
+.tag.warn{background:#d2992222;color:var(--warn);border:1px solid #d2992244}
+.tag.danger{background:#f8514922;color:var(--err);border:1px solid #f8514944}
+
+.callout{
+  padding:1rem 1.25rem;border-radius:6px;margin:1rem 0 1.5rem;border-left:4px solid;
+}
+.callout.tip{background:#3fb95010;border-color:var(--accent2);color:var(--accent2)}
+.callout.warn{background:#d2992210;border-color:var(--warn);color:var(--warn)}
+.callout.danger{background:#f8514910;border-color:var(--err);color:var(--err)}
+.callout strong{color:inherit}
+.callout p{color:inherit;margin:0}
+
+table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:.875rem}
+th{text-align:left;padding:.6rem .75rem;background:var(--surface2);color:var(--text);border:1px solid var(--border);font-weight:600}
+td{padding:.6rem .75rem;border:1px solid var(--border);color:var(--text-muted)}
+
+.hamburger{
+  display:none;position:fixed;top:1rem;left:1rem;z-index:200;background:var(--surface);
+  border:1px solid var(--border);border-radius:6px;padding:.5rem .7rem;cursor:pointer;color:var(--text);font-size:1.2rem;
+}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50}
+
+@media(max-width:800px){
+  nav.sidebar{transform:translateX(-100%)}
+  nav.sidebar.open{transform:translateX(0)}
+  main.content{margin-left:0;padding:1.5rem 1.25rem}
+  .hamburger{display:block}
+  .overlay.show{display:block}
+  h1{font-size:1.6rem}h2{font-size:1.3rem}
+}
+
+/* Scroll progress */
+.progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:300;transition:width .1s}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<button class="hamburger" id="hamburger">&#9776;</button>
+<div class="overlay" id="overlay"></div>
+
+<div class="wrapper">
+<nav class="sidebar" id="sidebar">
+  <div class="logo">K8s Reference <span>Advanced DevOps Guide</span></div>
+  <ul>
+    <li class="section-label">Core Concepts</li>
+    <li><a href="#pods">Pods &amp; Containers</a></li>
+    <li><a href="#deployments">Deployments &amp; Rollouts</a></li>
+    <li><a href="#services">Services &amp; Endpoints</a></li>
+    <li class="section-label">Networking</li>
+    <li><a href="#ingress">Ingress</a></li>
+    <li><a href="#egress">Egress &amp; Network Policies</a></li>
+    <li><a href="#dns">DNS &amp; Service Discovery</a></li>
+    <li class="section-label">Storage</li>
+    <li><a href="#pv-pvc">PV &amp; PVC</a></li>
+    <li><a href="#storageclasses">StorageClasses</a></li>
+    <li class="section-label">Configuration</li>
+    <li><a href="#configmaps">ConfigMaps</a></li>
+    <li><a href="#secrets">Secrets</a></li>
+    <li class="section-label">Workloads</li>
+    <li><a href="#statefulsets">StatefulSets</a></li>
+    <li><a href="#daemonsets">DaemonSets</a></li>
+    <li><a href="#jobs">Jobs &amp; CronJobs</a></li>
+    <li class="section-label">Scaling &amp; Resources</li>
+    <li><a href="#hpa">HPA &amp; VPA</a></li>
+    <li><a href="#resources">Resource Mgmt</a></li>
+    <li><a href="#limits">LimitRanges &amp; Quotas</a></li>
+    <li class="section-label">Security</li>
+    <li><a href="#rbac">RBAC</a></li>
+    <li><a href="#security-contexts">Security Contexts</a></li>
+    <li><a href="#pod-security">Pod Security</a></li>
+    <li><a href="#service-accounts">Service Accounts</a></li>
+    <li class="section-label">Operations</li>
+    <li><a href="#helm">Helm</a></li>
+    <li><a href="#debugging">Debugging</a></li>
+    <li><a href="#maintenance">Node Maintenance</a></li>
+    <li><a href="#affinity">Affinity &amp; Scheduling</a></li>
+  </ul>
+</nav>
+
+<main class="content">
+
+<!-- ============================================================ -->
+<section id="pods">
+<h2>Pods &amp; Containers</h2>
+
+<h3>Multi-Container Pod Patterns</h3>
+
+<h4>Sidecar Pattern</h4>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-log-sidecar
+spec:
+  containers:
+  - name: app
+    image: myapp:3.2.1
+    ports:
+    - containerPort: 8080
+    volumeMounts:
+    - name: logs
+      mountPath: /var/log/app
+
+  - name: log-shipper
+    image: fluentd:v1.16
+    volumeMounts:
+    - name: logs
+      mountPath: /var/log/app
+      readOnly: true
+    env:
+    - name: FLUENTD_CONF
+      value: fluent.conf
+
+  volumes:
+  - name: logs
+    emptyDir: {}</pre>
+
+<h4>Init Container (DB migration before app starts)</h4>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-migration
+spec:
+  initContainers:
+  - name: migrate
+    image: myapp:3.2.1
+    command: ["./manage.py", "migrate", "--no-input"]
+    env:
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: db-credentials
+          key: url
+
+  containers:
+  - name: app
+    image: myapp:3.2.1
+    ports:
+    - containerPort: 8080</pre>
+
+<h3>Liveness, Readiness &amp; Startup Probes</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: probed-app
+spec:
+  containers:
+  - name: app
+    image: myapp:3.2.1
+    ports:
+    - containerPort: 8080
+
+    <span class="comment"># Restart container if /healthz fails</span>
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 10
+      failureThreshold: 3
+
+    <span class="comment"># Remove from service endpoints if not ready</span>
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      successThreshold: 2
+
+    <span class="comment"># Protect slow-starting containers</span>
+    startupProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      failureThreshold: 30
+      periodSeconds: 10</pre>
+
+<h3>Ephemeral Containers (Debug)</h3>
+<pre><span class="comment"># Attach a debug container to a running pod</span>
+kubectl debug -it pod/myapp-7d8f9b --image=busybox:1.36 --target=app
+
+<span class="comment"># Debug with a copy of the pod (changes image)</span>
+kubectl debug pod/myapp-7d8f9b -it --copy-to=debug-pod --container=app --image=ubuntu
+
+<span class="comment"># Debug node-level issues</span>
+kubectl debug node/worker-1 -it --image=ubuntu</pre>
+
+<h3>Pod Disruption Budgets</h3>
+<pre>apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app-pdb
+spec:
+  <span class="comment"># At least 2 pods must remain available during voluntary disruptions</span>
+  minAvailable: 2
+  <span class="comment"># OR: maxUnavailable: 1</span>
+  selector:
+    matchLabels:
+      app: myapp</pre>
+
+<h3>Pod Topology Spread</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: spread-pod
+  labels:
+    app: web
+spec:
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: web
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: web
+  containers:
+  - name: web
+    image: nginx:1.25</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="deployments">
+<h2>Deployments &amp; Rollouts</h2>
+
+<h3>Production-Grade Deployment</h3>
+<pre>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+  labels:
+    app: api-server
+    version: v3.2.1
+spec:
+  replicas: 5
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          <span class="comment"># 1 extra pod during rollout</span>
+      maxUnavailable: 0     <span class="comment"># zero-downtime</span>
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+        version: v3.2.1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: api
+        image: registry.example.com/api:3.2.1
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: metrics
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+        env:
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: api-config
+              key: log-level
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 15
+        lifecycle:
+          preStop:
+            exec:
+              <span class="comment"># Allow in-flight requests to drain</span>
+              command: ["/bin/sh", "-c", "sleep 15"]</pre>
+
+<h3>Rollout Operations</h3>
+<pre><span class="comment"># Watch rollout progress</span>
+kubectl rollout status deployment/api-server --timeout=5m
+
+<span class="comment"># View rollout history</span>
+kubectl rollout history deployment/api-server
+kubectl rollout history deployment/api-server --revision=3
+
+<span class="comment"># Rollback to previous</span>
+kubectl rollout undo deployment/api-server
+
+<span class="comment"># Rollback to specific revision</span>
+kubectl rollout undo deployment/api-server --to-revision=7
+
+<span class="comment"># Pause/resume rollout (canary-style)</span>
+kubectl rollout pause deployment/api-server
+<span class="comment"># Inspect the new pods, check metrics...</span>
+kubectl rollout resume deployment/api-server
+
+<span class="comment"># Trigger rollout via annotation change (no image change)</span>
+kubectl patch deployment api-server -p \
+  '{"spec":{"template":{"metadata":{"annotations":{"rollout-trigger":"'$(date +%s)'"}}}}}'</pre>
+
+<h3>Blue-Green via Service Switching</h3>
+<pre><span class="comment"># Deploy "green" alongside existing "blue"</span>
+<span class="comment"># Then switch the Service selector:</span>
+kubectl patch svc api-server -p '{"spec":{"selector":{"version":"v3.3.0"}}}'
+
+<span class="comment"># Verify, then scale down blue</span>
+kubectl scale deployment api-server-blue --replicas=0</pre>
+
+<div class="callout tip"><strong>Tip:</strong><p> Set <code>minReadySeconds: 30</code> on deployments to catch crashlooping pods before they replace healthy ones during a rollout.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="services">
+<h2>Services &amp; Endpoints</h2>
+
+<h3>Service Types Compared</h3>
+<table>
+<tr><th>Type</th><th>Scope</th><th>Use Case</th></tr>
+<tr><td><code>ClusterIP</code></td><td>Cluster-internal</td><td>Internal microservice communication</td></tr>
+<tr><td><code>NodePort</code></td><td>Exposed on each node (30000-32767)</td><td>Dev/test, direct node access</td></tr>
+<tr><td><code>LoadBalancer</code></td><td>Cloud LB provisioned</td><td>Production external traffic</td></tr>
+<tr><td><code>ExternalName</code></td><td>CNAME alias</td><td>Reference external services</td></tr>
+<tr><td>Headless (<code>clusterIP: None</code>)</td><td>DNS-only, no proxy</td><td>StatefulSets, custom discovery</td></tr>
+</table>
+
+<h4>ClusterIP with Session Affinity</h4>
+<pre>apiVersion: v1
+kind: Service
+metadata:
+  name: api-server
+spec:
+  type: ClusterIP
+  selector:
+    app: api-server
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP</pre>
+
+<h4>Headless Service for StatefulSet</h4>
+<pre>apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+<span class="comment"># Each pod gets a DNS record: pod-0.postgres-headless.namespace.svc.cluster.local</span></pre>
+
+<h4>ExternalName (Map internal name to external DNS)</h4>
+<pre>apiVersion: v1
+kind: Service
+metadata:
+  name: external-db
+spec:
+  type: ExternalName
+  externalName: db.prod.example.com
+<span class="comment"># Pods can reach db.prod.example.com via "external-db" service name</span></pre>
+
+<h4>Service Without Selectors (manual endpoints)</h4>
+<pre>apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-api
+spec:
+  ports:
+  - port: 443
+    targetPort: 8443
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: legacy-api      <span class="comment"># Must match Service name</span>
+subsets:
+- addresses:
+  - ip: 10.0.50.12
+  - ip: 10.0.50.13
+  ports:
+  - port: 8443</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="ingress">
+<h2>Ingress</h2>
+
+<h3>NGINX Ingress with TLS, Rate Limiting &amp; Rewrites</h3>
+<pre>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: main-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.example.com
+    - app.example.com
+    secretName: example-com-tls
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: api-v1
+            port:
+              number: 80
+      - path: /v2
+        pathType: Prefix
+        backend:
+          service:
+            name: api-v2
+            port:
+              number: 80
+  - host: app.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80</pre>
+
+<h3>Path Rewriting</h3>
+<pre>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rewrite-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      <span class="comment"># /api/users/123 → forwards to backend as /users/123</span>
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: api-server
+            port:
+              number: 80</pre>
+
+<h3>Gateway API (Modern Replacement)</h3>
+<pre>apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gateway
+  namespace: gateway-infra
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: example-com-tls
+    allowedRoutes:
+      namespaces:
+        from: Selector
+        selector:
+          matchLabels:
+            gateway-access: "true"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: gateway-infra
+  hostnames:
+  - "api.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1
+    backendRefs:
+    - name: api-v1
+      port: 80
+      weight: 90
+    - name: api-v2
+      port: 80
+      weight: 10    <span class="comment"># 10% canary traffic</span></pre>
+
+<div class="callout warn"><strong>Note:</strong><p> Gateway API is the successor to Ingress. It provides more expressive routing, traffic splitting, and cross-namespace references. Prefer it for new clusters running K8s 1.27+.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="egress">
+<h2>Egress &amp; Network Policies</h2>
+
+<h3>Default Deny All (Namespace Isolation)</h3>
+<pre>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: production
+spec:
+  podSelector: {}       <span class="comment"># Applies to ALL pods in namespace</span>
+  policyTypes:
+  - Ingress
+  - Egress</pre>
+
+<div class="callout danger"><strong>Critical:</strong><p> After applying default-deny, pods lose access to DNS (CoreDNS) and cannot resolve service names. Always pair with a DNS egress rule.</p></div>
+
+<h3>Allow DNS + Specific Egress</h3>
+<pre>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-egress
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: api-server
+  policyTypes:
+  - Egress
+  egress:
+  <span class="comment"># Allow DNS resolution</span>
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  <span class="comment"># Allow traffic to postgres in same namespace</span>
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  <span class="comment"># Allow HTTPS to external APIs (CIDR-based)</span>
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 443</pre>
+
+<h3>Ingress Policy: Allow Only from Specific Namespace</h3>
+<pre>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-ingress
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    <span class="comment"># Only pods in namespaces labeled team=backend</span>
+    - namespaceSelector:
+        matchLabels:
+          team: backend
+      podSelector:
+        matchLabels:
+          role: api
+    ports:
+    - protocol: TCP
+      port: 5432</pre>
+
+<div class="callout tip"><strong>Tip:</strong><p> The <code>namespaceSelector</code> + <code>podSelector</code> in a single <code>from</code> entry is AND logic. Separate <code>from</code> entries are OR logic. This is a common source of misconfig.</p></div>
+
+<h3>Cilium: L7 Egress Policy (FQDN-based)</h3>
+<pre>apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-github-api
+spec:
+  endpointSelector:
+    matchLabels:
+      app: ci-runner
+  egress:
+  - toFQDNs:
+    - matchName: "api.github.com"
+    - matchPattern: "*.githubusercontent.com"
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="dns">
+<h2>DNS &amp; Service Discovery</h2>
+
+<h3>DNS Resolution Reference</h3>
+<table>
+<tr><th>Record Type</th><th>Format</th><th>Example</th></tr>
+<tr><td>Service (ClusterIP)</td><td><code>svc.namespace.svc.cluster.local</code></td><td><code>api-server.production.svc.cluster.local</code></td></tr>
+<tr><td>Headless Pod</td><td><code>pod.svc.namespace.svc.cluster.local</code></td><td><code>pg-0.postgres-headless.db.svc.cluster.local</code></td></tr>
+<tr><td>Pod IP-based</td><td><code>a-b-c-d.namespace.pod.cluster.local</code></td><td><code>10-244-1-5.default.pod.cluster.local</code></td></tr>
+</table>
+
+<h3>Custom DNS Policy</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: custom-dns
+spec:
+  dnsPolicy: None
+  dnsConfig:
+    nameservers:
+    - 8.8.8.8
+    - 1.1.1.1
+    searches:
+    - production.svc.cluster.local
+    - svc.cluster.local
+    options:
+    - name: ndots
+      value: "2"       <span class="comment"># Reduce unnecessary search domain lookups</span>
+    - name: single-request-reopen
+  containers:
+  - name: app
+    image: myapp:latest</pre>
+
+<div class="callout tip"><strong>Tip:</strong><p> Setting <code>ndots: 2</code> (default is 5) significantly reduces DNS query volume. Names with 2+ dots resolve directly rather than trying all search domains first.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="pv-pvc">
+<h2>Persistent Volumes &amp; Claims</h2>
+
+<h3>PersistentVolume (Manual Provisioning)</h3>
+<pre>apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-data
+  labels:
+    type: nfs
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""        <span class="comment"># Disable dynamic provisioning</span>
+  nfs:
+    server: nfs.internal.example.com
+    path: /exports/data
+  mountOptions:
+  - nfsvers=4.1
+  - hard
+  - rsize=1048576
+  - wsize=1048576</pre>
+
+<h3>PersistentVolumeClaim</h3>
+<pre>apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-data
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp3-encrypted
+  <span class="comment"># Optionally bind to a specific PV</span>
+  <span class="comment"># volumeName: nfs-data</span></pre>
+
+<h3>Using PVC in a Deployment</h3>
+<pre>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  replicas: 1          <span class="comment"># RWO volumes can only attach to one node</span>
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: app
+        image: myapp:3.2.1
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: cache
+          mountPath: /tmp/cache
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: app-data
+      - name: cache
+        emptyDir:
+          medium: Memory    <span class="comment"># tmpfs-backed, counts against memory limits</span>
+          sizeLimit: 256Mi</pre>
+
+<h3>Volume Expansion</h3>
+<pre><span class="comment"># StorageClass must have allowVolumeExpansion: true</span>
+kubectl patch pvc app-data -p '{"spec":{"resources":{"requests":{"storage":"100Gi"}}}}'
+
+<span class="comment"># Check status (may require pod restart for filesystem resize)</span>
+kubectl get pvc app-data -o jsonpath='{.status.conditions}'</pre>
+
+<h3>Volume Access Modes</h3>
+<table>
+<tr><th>Mode</th><th>Abbrev</th><th>Description</th></tr>
+<tr><td>ReadWriteOnce</td><td>RWO</td><td>Single node read-write</td></tr>
+<tr><td>ReadOnlyMany</td><td>ROX</td><td>Multi-node read-only</td></tr>
+<tr><td>ReadWriteMany</td><td>RWX</td><td>Multi-node read-write (NFS, EFS, CephFS)</td></tr>
+<tr><td>ReadWriteOncePod</td><td>RWOP</td><td>Single pod read-write (K8s 1.27+)</td></tr>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<section id="storageclasses">
+<h2>StorageClasses</h2>
+
+<h3>AWS EBS gp3 with Encryption</h3>
+<pre>apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-encrypted
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+  kmsKeyId: arn:aws:kms:us-east-1:123456789:key/abc-123
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer   <span class="comment"># Bind to AZ of first consumer pod</span></pre>
+
+<h3>GCP SSD with Snapshot</h3>
+<pre>apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ssd-regional
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-ssd
+  replication-type: regional-pd
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer</pre>
+
+<h3>VolumeSnapshotClass + Snapshot</h3>
+<pre>apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: ebs-snapshot-class
+driver: ebs.csi.aws.com
+deletionPolicy: Retain
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: db-snapshot-2024-01-15
+spec:
+  volumeSnapshotClassName: ebs-snapshot-class
+  source:
+    persistentVolumeClaimName: postgres-data
+
+<span class="comment"># Restore from snapshot</span>
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-restored
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: gp3-encrypted
+  resources:
+    requests:
+      storage: 100Gi
+  dataSource:
+    name: db-snapshot-2024-01-15
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="configmaps">
+<h2>ConfigMaps</h2>
+
+<h3>Creating ConfigMaps</h3>
+<pre><span class="comment"># From literal values</span>
+kubectl create configmap app-config \
+  --from-literal=LOG_LEVEL=info \
+  --from-literal=MAX_CONNECTIONS=100
+
+<span class="comment"># From a file</span>
+kubectl create configmap nginx-conf --from-file=nginx.conf
+
+<span class="comment"># From a directory</span>
+kubectl create configmap app-configs --from-file=./configs/
+
+<span class="comment"># From env file</span>
+kubectl create configmap env-config --from-env-file=.env.production</pre>
+
+<h3>ConfigMap Manifest</h3>
+<pre>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  LOG_LEVEL: info
+  MAX_CONNECTIONS: "100"
+  <span class="comment"># Multi-line config file</span>
+  app.properties: |
+    server.port=8080
+    cache.ttl=300
+    feature.dark-mode=true
+    db.pool.size=20</pre>
+
+<h3>Using ConfigMaps</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+  - name: app
+    image: myapp:latest
+    <span class="comment"># Individual keys as env vars</span>
+    env:
+    - name: LOG_LEVEL
+      valueFrom:
+        configMapKeyRef:
+          name: app-config
+          key: LOG_LEVEL
+    <span class="comment"># All keys as env vars</span>
+    envFrom:
+    - configMapRef:
+        name: app-config
+      prefix: APP_     <span class="comment"># Optional prefix: APP_LOG_LEVEL, APP_MAX_CONNECTIONS</span>
+    volumeMounts:
+    <span class="comment"># Mount as files</span>
+    - name: config-vol
+      mountPath: /etc/app
+      readOnly: true
+  volumes:
+  - name: config-vol
+    configMap:
+      name: app-config
+      items:            <span class="comment"># Mount only specific keys</span>
+      - key: app.properties
+        path: application.properties</pre>
+
+<div class="callout tip"><strong>Tip:</strong><p> ConfigMaps mounted as volumes auto-update when the ConfigMap changes (with a propagation delay of ~60s). Environment variables do NOT auto-update &mdash; they require a pod restart.</p></div>
+
+<h3>Immutable ConfigMaps (K8s 1.21+)</h3>
+<pre>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-v3
+immutable: true         <span class="comment"># Cannot be changed after creation, reduces apiserver load</span>
+data:
+  LOG_LEVEL: info</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="secrets">
+<h2>Secrets</h2>
+
+<h3>Secret Types</h3>
+<table>
+<tr><th>Type</th><th>Usage</th></tr>
+<tr><td><code>Opaque</code></td><td>Generic key-value (default)</td></tr>
+<tr><td><code>kubernetes.io/tls</code></td><td>TLS cert + key</td></tr>
+<tr><td><code>kubernetes.io/dockerconfigjson</code></td><td>Private registry credentials</td></tr>
+<tr><td><code>kubernetes.io/basic-auth</code></td><td>Username + password</td></tr>
+<tr><td><code>kubernetes.io/ssh-auth</code></td><td>SSH private key</td></tr>
+</table>
+
+<h3>Creating Secrets</h3>
+<pre><span class="comment"># Generic secret from literals</span>
+kubectl create secret generic db-creds \
+  --from-literal=username=admin \
+  --from-literal=password='s3cUr3!p@ss'
+
+<span class="comment"># TLS secret</span>
+kubectl create secret tls example-tls \
+  --cert=./tls.crt \
+  --key=./tls.key
+
+<span class="comment"># Docker registry secret</span>
+kubectl create secret docker-registry regcred \
+  --docker-server=registry.example.com \
+  --docker-username=deploy \
+  --docker-password=$REGISTRY_TOKEN</pre>
+
+<h3>Secret Manifest (base64-encoded)</h3>
+<pre>apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+data:
+  username: YWRtaW4=          <span class="comment"># echo -n 'admin' | base64</span>
+  password: czNjVXIzIXBAc3M=  <span class="comment"># echo -n 's3cUr3!p@ss' | base64</span>
+  <span class="comment"># OR use stringData for plain text (auto-encoded on apply)</span>
+stringData:
+  connection-string: "postgres://admin:s3cUr3!p@ss@db:5432/mydb?sslmode=require"</pre>
+
+<h3>Using Secrets in Pods</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  containers:
+  - name: app
+    image: myapp:latest
+    env:
+    - name: DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: db-credentials
+          key: password
+    volumeMounts:
+    - name: tls
+      mountPath: /etc/tls
+      readOnly: true
+  volumes:
+  - name: tls
+    secret:
+      secretName: example-tls
+      defaultMode: 0400       <span class="comment"># Restrict file permissions</span>
+  imagePullSecrets:
+  - name: regcred              <span class="comment"># Private registry auth</span></pre>
+
+<div class="callout warn"><strong>Warning:</strong><p> K8s Secrets are base64-encoded, NOT encrypted. Enable <a href="https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/">encryption at rest</a> via <code>EncryptionConfiguration</code>, or use external secret managers (Vault, AWS Secrets Manager) with operators like External Secrets Operator.</p></div>
+
+<h3>External Secrets Operator (ESO)</h3>
+<pre>apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: db-credentials
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: db-credentials
+    creationPolicy: Owner
+  data:
+  - secretKey: password
+    remoteRef:
+      key: production/db-credentials
+      property: password</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="statefulsets">
+<h2>StatefulSets</h2>
+
+<h3>PostgreSQL StatefulSet</h3>
+<pre>apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres-headless
+  replicas: 3
+  podManagementPolicy: OrderedReady    <span class="comment"># Sequential startup (default)</span>
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0       <span class="comment"># Set > 0 for canary: only pods >= partition update</span>
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+      - name: postgres
+        image: postgres:16.1
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pg-credentials
+              key: password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          periodSeconds: 10
+  <span class="comment"># Each replica gets its own PVC (postgres-data-postgres-0, etc.)</span>
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: gp3-encrypted
+      resources:
+        requests:
+          storage: 100Gi</pre>
+
+<div class="callout warn"><strong>Note:</strong><p> Scaling down a StatefulSet does NOT delete its PVCs. This is intentional for data safety but can lead to orphaned volumes. Clean up manually: <code>kubectl delete pvc data-postgres-2</code></p></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="daemonsets">
+<h2>DaemonSets</h2>
+
+<h3>Node Log Collector with Tolerations</h3>
+<pre>apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: logging
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: fluentd
+    spec:
+      serviceAccountName: fluentd
+      <span class="comment"># Run on ALL nodes, including control plane</span>
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: fluentd
+        image: fluent/fluentd:v1.16
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            memory: 500Mi
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: containers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: containers
+        hostPath:
+          path: /var/lib/docker/containers</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="jobs">
+<h2>Jobs &amp; CronJobs</h2>
+
+<h3>Parallel Job with Backoff</h3>
+<pre>apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-migration
+spec:
+  parallelism: 4           <span class="comment"># 4 pods run concurrently</span>
+  completions: 20           <span class="comment"># Total work items to complete</span>
+  backoffLimit: 3           <span class="comment"># Retry failed pods up to 3 times</span>
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 86400   <span class="comment"># Auto-cleanup after 24h</span>
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: migrate
+        image: migration-tool:2.1
+        command: ["./migrate", "--batch"]
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi</pre>
+
+<h3>CronJob with Concurrency Control</h3>
+<pre>apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+spec:
+  schedule: "0 2 * * *"         <span class="comment"># Daily at 2 AM UTC</span>
+  timeZone: "America/New_York"  <span class="comment"># K8s 1.27+ timezone support</span>
+  concurrencyPolicy: Forbid     <span class="comment"># Skip if previous still running</span>
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 600  <span class="comment"># Fail if can't start within 10 min</span>
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: pg-backup:1.5
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-credentials
+                  key: password
+            command:
+            - /bin/sh
+            - -c
+            - |
+              pg_dump -h postgres-0.postgres-headless -U postgres mydb \
+                | gzip | aws s3 cp - s3://backups/db/$(date +%Y%m%d).sql.gz</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="hpa">
+<h2>HPA &amp; VPA</h2>
+
+<h3>HPA with Custom Metrics</h3>
+<pre>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-server
+  minReplicas: 3
+  maxReplicas: 50
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   <span class="comment"># Wait 5 min before scaling down</span>
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0     <span class="comment"># Scale up immediately</span>
+      policies:
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      selectPolicy: Max                 <span class="comment"># Use whichever adds more pods</span>
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  <span class="comment"># Custom Prometheus metric via prometheus-adapter</span>
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"</pre>
+
+<h3>VPA (Vertical Pod Autoscaler)</h3>
+<pre>apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: api-vpa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-server
+  updatePolicy:
+    updateMode: "Auto"       <span class="comment"># Off | Initial | Recreate | Auto</span>
+  resourcePolicy:
+    containerPolicies:
+    - containerName: api
+      minAllowed:
+        cpu: 100m
+        memory: 128Mi
+      maxAllowed:
+        cpu: "4"
+        memory: 8Gi
+      controlledResources: [cpu, memory]</pre>
+
+<div class="callout warn"><strong>Warning:</strong><p> Do NOT use HPA and VPA on the same resource dimension (e.g., both scaling on CPU). They will conflict. Common pattern: HPA on custom metrics + VPA on CPU/memory.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="resources">
+<h2>Resource Management</h2>
+
+<h3>Resource Requests vs Limits</h3>
+<table>
+<tr><th></th><th>Requests</th><th>Limits</th></tr>
+<tr><td><strong>CPU</strong></td><td>Guaranteed minimum, used for scheduling</td><td>Throttled (not killed) if exceeded</td></tr>
+<tr><td><strong>Memory</strong></td><td>Guaranteed minimum, used for scheduling</td><td>OOMKilled if exceeded</td></tr>
+</table>
+
+<h3>QoS Classes</h3>
+<table>
+<tr><th>Class</th><th>Condition</th><th>Eviction Priority</th></tr>
+<tr><td><strong>Guaranteed</strong></td><td>requests == limits for all containers</td><td>Last (safest)</td></tr>
+<tr><td><strong>Burstable</strong></td><td>At least one request or limit set</td><td>Middle</td></tr>
+<tr><td><strong>BestEffort</strong></td><td>No requests or limits</td><td>First (evicted first)</td></tr>
+</table>
+
+<pre><span class="comment"># Guaranteed QoS - production workloads</span>
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+<span class="comment"># Burstable - most common in practice</span>
+resources:
+  requests:
+    cpu: 250m        <span class="comment"># 0.25 cores</span>
+    memory: 256Mi
+  limits:
+    cpu: "2"         <span class="comment"># Can burst to 2 cores</span>
+    memory: 1Gi      <span class="comment"># Hard OOM boundary</span></pre>
+
+<div class="callout tip"><strong>Best Practice:</strong><p> For CPU: set requests based on steady-state usage, limits 2-4x requests (or omit limits entirely &mdash; throttling is often worse than burst). For Memory: always set limits close to requests to avoid OOM surprises.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="limits">
+<h2>LimitRanges &amp; ResourceQuotas</h2>
+
+<h3>LimitRange (Per-Pod Defaults &amp; Constraints)</h3>
+<pre>apiVersion: v1
+kind: LimitRange
+metadata:
+  name: container-limits
+  namespace: production
+spec:
+  limits:
+  - type: Container
+    default:           <span class="comment"># Applied if no limits specified</span>
+      cpu: 500m
+      memory: 512Mi
+    defaultRequest:    <span class="comment"># Applied if no requests specified</span>
+      cpu: 100m
+      memory: 128Mi
+    max:
+      cpu: "4"
+      memory: 8Gi
+    min:
+      cpu: 50m
+      memory: 64Mi
+  - type: PersistentVolumeClaim
+    max:
+      storage: 500Gi
+    min:
+      storage: 1Gi</pre>
+
+<h3>ResourceQuota (Namespace-Level Caps)</h3>
+<pre>apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: team-quota
+  namespace: team-alpha
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    pods: "50"
+    services: "10"
+    persistentvolumeclaims: "20"
+    requests.storage: 500Gi
+    count/deployments.apps: "20"
+    count/secrets: "50"
+  scopeSelector:
+    matchExpressions:
+    - scopeName: PriorityClass
+      operator: In
+      values: ["high"]</pre>
+
+<pre><span class="comment"># Check quota usage</span>
+kubectl describe resourcequota team-quota -n team-alpha</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="rbac">
+<h2>RBAC</h2>
+
+<h3>Role &amp; RoleBinding (Namespace-Scoped)</h3>
+<pre>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer
+  namespace: staging
+rules:
+<span class="comment"># Full access to apps</span>
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+<span class="comment"># Read pods, exec into them, view logs</span>
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log", "pods/exec"]
+  verbs: ["get", "create"]
+<span class="comment"># Read-only on configmaps and secrets</span>
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames: ["app-config"]   <span class="comment"># Restrict to specific secret</span>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-binding
+  namespace: staging
+subjects:
+- kind: User
+  name: alice@example.com
+  apiGroup: rbac.authorization.k8s.io
+- kind: Group
+  name: team-backend
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: developer
+  apiGroup: rbac.authorization.k8s.io</pre>
+
+<h3>ClusterRole &amp; Aggregation</h3>
+<pre>apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoring-reader
+  labels:
+    rbac.example.com/aggregate-to-admin: "true"   <span class="comment"># Auto-aggregate into admin</span>
+rules:
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["prometheuses", "alertmanagers", "servicemonitors"]
+  verbs: ["get", "list", "watch"]
+---
+<span class="comment"># Aggregated ClusterRole (auto-collects matching rules)</span>
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: admin-aggregated
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.example.com/aggregate-to-admin: "true"
+rules: []   <span class="comment"># Auto-populated from matching ClusterRoles</span></pre>
+
+<h3>Audit RBAC Permissions</h3>
+<pre><span class="comment"># Check if a user can perform an action</span>
+kubectl auth can-i create deployments --as=alice@example.com -n staging
+kubectl auth can-i '*' '*' --as=system:serviceaccount:kube-system:default
+
+<span class="comment"># List all permissions for a user</span>
+kubectl auth can-i --list --as=alice@example.com -n staging
+
+<span class="comment"># Who can do what (requires kubectl-who-can plugin)</span>
+kubectl who-can delete pods -n production</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="security-contexts">
+<h2>Security Contexts</h2>
+
+<h3>Hardened Pod Security Context</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: hardened-app
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 3000
+    fsGroup: 2000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: myapp:3.2.1
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+        add: [NET_BIND_SERVICE]   <span class="comment"># Only if binding port &lt; 1024</span>
+    volumeMounts:
+    <span class="comment"># Writable dirs for apps that need them</span>
+    - name: tmp
+      mountPath: /tmp
+    - name: cache
+      mountPath: /var/cache
+  volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: cache
+    emptyDir: {}</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="pod-security">
+<h2>Pod Security Standards (PSS/PSA)</h2>
+
+<h3>Namespace-Level Enforcement</h3>
+<pre>apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    <span class="comment"># Enforce: reject pods that violate</span>
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    <span class="comment"># Audit: log violations</span>
+    pod-security.kubernetes.io/audit: restricted
+    <span class="comment"># Warn: show warnings to users</span>
+    pod-security.kubernetes.io/warn: restricted</pre>
+
+<h3>PSS Levels</h3>
+<table>
+<tr><th>Level</th><th>Description</th></tr>
+<tr><td><code>privileged</code></td><td>Unrestricted (default, no restrictions)</td></tr>
+<tr><td><code>baseline</code></td><td>Minimally restrictive (prevents known privilege escalations)</td></tr>
+<tr><td><code>restricted</code></td><td>Heavily restricted (security best practices)</td></tr>
+</table>
+
+<pre><span class="comment"># Dry-run: check existing pods against restricted</span>
+kubectl label --dry-run=server --overwrite ns production \
+  pod-security.kubernetes.io/enforce=restricted</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="service-accounts">
+<h2>Service Accounts</h2>
+
+<h3>Scoped Service Account</h3>
+<pre>apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: production
+  annotations:
+    <span class="comment"># AWS IRSA (IAM Roles for Service Accounts)</span>
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/app-s3-reader
+    <span class="comment"># GKE Workload Identity</span>
+    <span class="comment"># iam.gke.io/gcp-service-account: app@project.iam.gserviceaccount.com</span>
+automountServiceAccountToken: false   <span class="comment"># Don't mount token unless needed</span>
+---
+<span class="comment"># Bind with least-privilege role</span>
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-sa-binding
+  namespace: production
+subjects:
+- kind: ServiceAccount
+  name: app-sa
+  namespace: production
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io</pre>
+
+<h3>Bound Token (K8s 1.22+ projected)</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+spec:
+  serviceAccountName: app-sa
+  automountServiceAccountToken: false
+  containers:
+  - name: app
+    image: myapp:latest
+    volumeMounts:
+    - name: token
+      mountPath: /var/run/secrets/tokens
+  volumes:
+  - name: token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: vault
+          expirationSeconds: 3600
+          path: vault-token</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="helm">
+<h2>Helm</h2>
+
+<h3>Essential Commands</h3>
+<pre><span class="comment"># Add & update repos</span>
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+<span class="comment"># Search for charts</span>
+helm search repo nginx --versions
+
+<span class="comment"># Show chart details</span>
+helm show values bitnami/nginx > values-defaults.yaml
+
+<span class="comment"># Install with custom values</span>
+helm install my-nginx bitnami/nginx \
+  -f values-prod.yaml \
+  --set service.type=ClusterIP \
+  --namespace ingress --create-namespace \
+  --version 15.4.0 \
+  --wait --timeout 5m
+
+<span class="comment"># Upgrade (or install if not exists)</span>
+helm upgrade --install my-nginx bitnami/nginx \
+  -f values-prod.yaml \
+  --namespace ingress \
+  --atomic           <span class="comment"># Auto-rollback on failure</span>
+  --cleanup-on-fail
+
+<span class="comment"># Rollback</span>
+helm rollback my-nginx 3 -n ingress
+
+<span class="comment"># Diff before upgrade (requires helm-diff plugin)</span>
+helm diff upgrade my-nginx bitnami/nginx -f values-prod.yaml -n ingress
+
+<span class="comment"># Template locally (debug without deploying)</span>
+helm template my-nginx bitnami/nginx -f values-prod.yaml --debug
+
+<span class="comment"># List releases</span>
+helm list -A
+helm history my-nginx -n ingress</pre>
+
+<h3>Helmfile (Declarative Multi-Release)</h3>
+<pre><span class="comment"># helmfile.yaml</span>
+repositories:
+- name: bitnami
+  url: https://charts.bitnami.com/bitnami
+- name: prometheus
+  url: https://prometheus-community.github.io/helm-charts
+
+environments:
+  production:
+    values:
+    - env/production.yaml
+  staging:
+    values:
+    - env/staging.yaml
+
+releases:
+- name: nginx
+  namespace: ingress
+  chart: bitnami/nginx
+  version: 15.4.0
+  values:
+  - values/nginx.yaml
+  - values/nginx-{{ .Environment.Name }}.yaml
+
+- name: prometheus
+  namespace: monitoring
+  chart: prometheus/kube-prometheus-stack
+  version: 55.0.0
+  values:
+  - values/prometheus.yaml</pre>
+</section>
+
+<!-- ============================================================ -->
+<section id="debugging">
+<h2>Debugging</h2>
+
+<h3>Pod Troubleshooting Flow</h3>
+<pre><span class="comment"># 1. Check pod status & events</span>
+kubectl get pods -o wide
+kubectl describe pod &lt;name&gt;
+
+<span class="comment"># 2. Check logs (current + previous crash)</span>
+kubectl logs &lt;pod&gt; -c &lt;container&gt; --tail=100
+kubectl logs &lt;pod&gt; -c &lt;container&gt; --previous
+kubectl logs &lt;pod&gt; --all-containers --since=1h
+
+<span class="comment"># 3. Exec into running pod</span>
+kubectl exec -it &lt;pod&gt; -- /bin/sh
+
+<span class="comment"># 4. Debug with ephemeral container</span>
+kubectl debug -it &lt;pod&gt; --image=nicolaka/netshoot --target=app
+
+<span class="comment"># 5. Check resource usage</span>
+kubectl top pods --sort-by=memory
+kubectl top nodes
+
+<span class="comment"># 6. Check events cluster-wide</span>
+kubectl get events --sort-by='.lastTimestamp' -A | tail -50
+kubectl get events --field-selector reason=OOMKilled -A</pre>
+
+<h3>Network Debugging</h3>
+<pre><span class="comment"># DNS resolution test</span>
+kubectl run dnstest --rm -it --image=busybox:1.36 --restart=Never -- \
+  nslookup kubernetes.default.svc.cluster.local
+
+<span class="comment"># HTTP connectivity test</span>
+kubectl run curlpod --rm -it --image=curlimages/curl --restart=Never -- \
+  curl -sv http://api-server.production.svc.cluster.local/healthz
+
+<span class="comment"># Full network debug toolkit</span>
+kubectl run netshoot --rm -it --image=nicolaka/netshoot --restart=Never -- bash
+<span class="comment"># Inside: tcpdump, dig, nmap, iperf, curl, etc.</span>
+
+<span class="comment"># Check service endpoints</span>
+kubectl get endpoints api-server -o yaml
+kubectl get endpointslices -l kubernetes.io/service-name=api-server</pre>
+
+<h3>Node Debugging</h3>
+<pre><span class="comment"># Check node conditions</span>
+kubectl describe node &lt;node&gt; | grep -A5 Conditions
+
+<span class="comment"># Resource pressure</span>
+kubectl get nodes -o custom-columns=\
+  NAME:.metadata.name,\
+  CPU:.status.allocatable.cpu,\
+  MEM:.status.allocatable.memory,\
+  DISK_PRESSURE:.status.conditions[?(@.type=='DiskPressure')].status
+
+<span class="comment"># Debug node directly</span>
+kubectl debug node/worker-1 -it --image=ubuntu
+<span class="comment"># chroot /host to access node filesystem</span></pre>
+
+<h3>Common Failure Patterns</h3>
+<table>
+<tr><th>Status</th><th>Likely Cause</th><th>Fix</th></tr>
+<tr><td><code>CrashLoopBackOff</code></td><td>App crash on startup</td><td>Check <code>kubectl logs --previous</code>, verify env vars &amp; config</td></tr>
+<tr><td><code>ImagePullBackOff</code></td><td>Wrong image name/tag or missing pull secret</td><td>Verify image exists, check <code>imagePullSecrets</code></td></tr>
+<tr><td><code>Pending</code></td><td>No schedulable node (resources, taints, affinity)</td><td><code>kubectl describe pod</code> → Events section</td></tr>
+<tr><td><code>OOMKilled</code></td><td>Container exceeded memory limit</td><td>Increase limits or fix memory leak</td></tr>
+<tr><td><code>Evicted</code></td><td>Node under resource pressure</td><td>Set proper requests, check node capacity</td></tr>
+<tr><td><code>CreateContainerConfigError</code></td><td>Missing ConfigMap/Secret</td><td>Verify referenced CM/Secret exists</td></tr>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<section id="maintenance">
+<h2>Node Maintenance</h2>
+
+<h3>Safe Node Drain</h3>
+<pre><span class="comment"># Cordon: prevent new pods from scheduling</span>
+kubectl cordon worker-3
+
+<span class="comment"># Drain: evict existing pods gracefully</span>
+kubectl drain worker-3 \
+  --ignore-daemonsets \
+  --delete-emptydir-data \
+  --grace-period=120 \
+  --timeout=5m
+
+<span class="comment"># Perform maintenance...</span>
+
+<span class="comment"># Uncordon: allow scheduling again</span>
+kubectl uncordon worker-3</pre>
+
+<h3>Taints &amp; Tolerations</h3>
+<pre><span class="comment"># Taint a node</span>
+kubectl taint nodes gpu-node-1 nvidia.com/gpu=present:NoSchedule
+
+<span class="comment"># Remove a taint</span>
+kubectl taint nodes gpu-node-1 nvidia.com/gpu=present:NoSchedule-
+
+<span class="comment"># Toleration in pod spec</span>
+tolerations:
+- key: nvidia.com/gpu
+  operator: Equal
+  value: present
+  effect: NoSchedule
+
+<span class="comment"># Tolerate everything (e.g., DaemonSets)</span>
+tolerations:
+- operator: Exists</pre>
+
+<h3>Taint Effects</h3>
+<table>
+<tr><th>Effect</th><th>Behavior</th></tr>
+<tr><td><code>NoSchedule</code></td><td>Don't schedule new pods (existing unaffected)</td></tr>
+<tr><td><code>PreferNoSchedule</code></td><td>Try to avoid, but schedule if necessary</td></tr>
+<tr><td><code>NoExecute</code></td><td>Evict existing pods too (unless tolerated)</td></tr>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<section id="affinity">
+<h2>Affinity &amp; Scheduling</h2>
+
+<h3>Node Affinity</h3>
+<pre>apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-workload
+spec:
+  affinity:
+    nodeAffinity:
+      <span class="comment"># Hard requirement: must match</span>
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node.kubernetes.io/instance-type
+            operator: In
+            values: [p3.2xlarge, p3.8xlarge]
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values: [us-east-1a, us-east-1b]
+      <span class="comment"># Soft preference: try to match</span>
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 80
+        preference:
+          matchExpressions:
+          - key: gpu-memory
+            operator: Gt
+            values: ["16"]
+  containers:
+  - name: training
+    image: ml-training:latest
+    resources:
+      limits:
+        nvidia.com/gpu: 1</pre>
+
+<h3>Pod Anti-Affinity (Spread Replicas)</h3>
+<pre>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      affinity:
+        podAntiAffinity:
+          <span class="comment"># Hard: never on same node as another web pod</span>
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: [web]
+            topologyKey: kubernetes.io/hostname
+          <span class="comment"># Soft: try to spread across zones</span>
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: web
+              topologyKey: topology.kubernetes.io/zone
+      containers:
+      - name: web
+        image: nginx:1.25</pre>
+
+<h3>Pod Affinity (Co-locate with dependency)</h3>
+<pre>affinity:
+  podAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels:
+          app: redis-cache
+      topologyKey: kubernetes.io/hostname
+<span class="comment"># Schedules on the same node as redis-cache for low latency</span></pre>
+
+<h3>Priority Classes</h3>
+<pre>apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: critical-workload
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "Critical production workloads"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch-low
+value: 100
+preemptionPolicy: Never   <span class="comment"># Won't evict other pods</span>
+description: "Low-priority batch jobs"</pre>
+<pre><span class="comment"># Usage in pod spec:</span>
+spec:
+  priorityClassName: critical-workload
+  containers:
+  - name: app
+    image: myapp:latest</pre>
+</section>
+
+<footer style="margin-top:4rem;padding:2rem 0;border-top:1px solid var(--border);color:var(--text-muted);font-size:.8rem;text-align:center">
+  Kubernetes Advanced Reference &mdash; Built for seasoned DevOps engineers. Content applicable to K8s 1.27+.
+</footer>
+
+</main>
+</div>
+
+<script>
+// Sidebar toggle
+const hamburger=document.getElementById('hamburger'),sidebar=document.getElementById('sidebar'),overlay=document.getElementById('overlay');
+hamburger.onclick=()=>{sidebar.classList.toggle('open');overlay.classList.toggle('show')};
+overlay.onclick=()=>{sidebar.classList.remove('open');overlay.classList.remove('show')};
+
+// Scroll progress bar
+window.addEventListener('scroll',()=>{
+  const h=document.documentElement,b=document.body;
+  const pct=(h.scrollTop||b.scrollTop)/((h.scrollHeight||b.scrollHeight)-h.clientHeight)*100;
+  document.getElementById('progress').style.width=pct+'%';
+});
+
+// Active nav link highlighting
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('nav a[href^="#"]');
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      navLinks.forEach(l=>l.classList.remove('active'));
+      const active=document.querySelector(`nav a[href="#${e.target.id}"]`);
+      if(active)active.classList.add('active');
+    }
+  });
+},{rootMargin:'-20% 0px -60% 0px'});
+sections.forEach(s=>observer.observe(s));
+
+// Close sidebar on nav click (mobile)
+navLinks.forEach(l=>l.addEventListener('click',()=>{
+  sidebar.classList.remove('open');overlay.classList.remove('show');
+}));
+</script>
+</body>
+</html>

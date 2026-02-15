@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMTP Engineering Deep Dive</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-0: #0a101a;
+      --bg-1: #111b2b;
+      --bg-2: #162338;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-strong: rgba(255, 255, 255, 0.08);
+      --text: #e9f0ff;
+      --text-dim: #a9b8d4;
+      --text-faint: #7f91b5;
+      --border: rgba(180, 202, 245, 0.18);
+      --accent: #66d9ef;
+      --accent-2: #8bffb8;
+      --accent-3: #ffd479;
+      --danger: #ff8b8b;
+      --warn: #ffca75;
+      --ok: #86f4b4;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+      --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+      --sans: "Space Grotesk", "Segoe UI", sans-serif;
+      --max: 1200px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 600px at 0% -10%, rgba(102, 217, 239, 0.14), transparent),
+        radial-gradient(1000px 500px at 100% -10%, rgba(139, 255, 184, 0.12), transparent),
+        linear-gradient(170deg, var(--bg-0), var(--bg-1) 48%, var(--bg-2));
+      color: var(--text);
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    .noise {
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 3px 3px;
+      mix-blend-mode: soft-light;
+      opacity: .2;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.2rem; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(14px);
+      background: rgba(10, 16, 26, 0.75);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: .8rem 1.2rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: .02em;
+      font-size: .95rem;
+      display: flex;
+      gap: .6rem;
+      align-items: center;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 20px rgba(102, 217, 239, 0.7);
+    }
+
+    .nav {
+      display: flex;
+      gap: .9rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: .78rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: .35rem .55rem;
+      border-radius: 999px;
+      transition: .2s ease;
+    }
+
+    .nav a:hover {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .hero {
+      padding: 4.2rem 0 2.8rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2.2rem;
+    }
+
+    .hero-grid {
+      display: grid;
+      gap: 1.2rem;
+      grid-template-columns: 1.6fr 1fr;
+      align-items: end;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4.4vw, 4rem);
+      line-height: 1.08;
+      letter-spacing: -.02em;
+    }
+
+    .hero p {
+      margin-top: 1rem;
+      color: var(--text-dim);
+      max-width: 70ch;
+      font-size: 1.02rem;
+    }
+
+    .tag-row {
+      display: flex;
+      gap: .6rem;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      margin-top: 1.15rem;
+    }
+
+    .tag {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-dim);
+      padding: .35rem .6rem;
+      border-radius: 999px;
+      font-size: .73rem;
+      letter-spacing: .03em;
+      font-weight: 600;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .stat h2 {
+      font-size: .95rem;
+      margin-bottom: .3rem;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    .stat code { font-family: var(--mono); font-size: .88rem; }
+
+    section { margin: 2rem 0 2.4rem; }
+
+    .section-title {
+      margin-bottom: .7rem;
+      font-size: 1.55rem;
+      letter-spacing: -.01em;
+    }
+
+    .lede {
+      color: var(--text-dim);
+      margin-bottom: 1rem;
+      max-width: 86ch;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: .9rem;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 1rem 1rem .9rem;
+      box-shadow: var(--shadow);
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      margin-bottom: .55rem;
+      color: var(--accent);
+    }
+
+    .card p,
+    .card li { color: var(--text-dim); font-size: .94rem; }
+
+    .card ul { padding-left: 1rem; display: grid; gap: .4rem; }
+
+    .timeline {
+      font-family: var(--mono);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(0,0,0,.22);
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: .8rem;
+      border-top: 1px solid var(--border);
+      padding: .7rem .9rem;
+      align-items: start;
+    }
+
+    .timeline-row:first-child { border-top: none; }
+
+    .timeline-row .left {
+      color: var(--accent-2);
+      font-weight: 600;
+      font-size: .82rem;
+    }
+
+    .timeline-row .right { color: #d2def7; font-size: .83rem; }
+
+    .cmd-table {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      background: rgba(0,0,0,.18);
+    }
+
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { text-align: left; padding: .72rem .85rem; vertical-align: top; }
+    th {
+      font-size: .76rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--accent);
+      background: rgba(102, 217, 239, 0.1);
+    }
+
+    tr { border-top: 1px solid var(--border); }
+    td { color: var(--text-dim); font-size: .89rem; }
+
+    code,
+    pre {
+      font-family: var(--mono);
+      font-size: .84rem;
+    }
+
+    .snippet {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: #090e17;
+      margin: .9rem 0 1rem;
+      overflow: hidden;
+    }
+
+    .snippet-head {
+      display: flex;
+      justify-content: space-between;
+      gap: .4rem;
+      padding: .42rem .72rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-faint);
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      background: rgba(255,255,255,.02);
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: .9rem .72rem;
+      color: #d8e8ff;
+      line-height: 1.5;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .95rem;
+    }
+
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .08rem .38rem;
+      font-size: .72rem;
+      color: var(--text-dim);
+      margin-right: .35rem;
+      margin-bottom: .24rem;
+    }
+
+    .status-ok { color: var(--ok); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--danger); }
+
+    .diag {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: .9rem;
+      background: rgba(255,255,255,.03);
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: #d4e4ff;
+      margin: 1rem 0;
+      white-space: pre;
+    }
+
+    .checklist {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+
+    .checklist li {
+      margin-left: 1.1rem;
+      color: var(--text-dim);
+      margin-bottom: .5rem;
+    }
+
+    footer {
+      margin-top: 2rem;
+      padding: 1.2rem 0 2.2rem;
+      color: var(--text-faint);
+      border-top: 1px solid var(--border);
+      font-size: .84rem;
+    }
+
+    @media (max-width: 960px) {
+      .hero-grid,
+      .two-col { grid-template-columns: 1fr; }
+      .timeline-row { grid-template-columns: 1fr; }
+      .topbar-inner { align-items: flex-start; }
+      .nav { justify-content: flex-start; }
+      .hero { padding-top: 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="dot"></span> SMTP Engineering Deep Dive</div>
+      <nav class="nav">
+        <a href="#model">Model</a>
+        <a href="#commands">Commands</a>
+        <a href="#auth">Auth</a>
+        <a href="#delivery">Delivery</a>
+        <a href="#extensions">Extensions</a>
+        <a href="#transcripts">Transcripts</a>
+        <a href="#mime">MIME/DSN</a>
+        <a href="#debugging">Debugging</a>
+        <a href="#runbooks">Runbooks</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>SMTP, ESMTP, and Message Delivery Internals</h1>
+          <p>
+            This page is a practical, protocol-level reference for senior engineers operating outbound and inbound mail systems.
+            It covers state transitions, command semantics, extension negotiation, authentication, queue behavior, deliverability,
+            and production debugging strategies from socket to message queue to DNS policy alignment.
+          </p>
+          <div class="tag-row">
+            <span class="tag">RFC 5321</span>
+            <span class="tag">RFC 5322</span>
+            <span class="tag">RFC 3207 STARTTLS</span>
+            <span class="tag">RFC 4954 AUTH</span>
+            <span class="tag">SPF / DKIM / DMARC</span>
+          </div>
+        </div>
+        <aside class="stat">
+          <h2>Canonical Transaction Skeleton</h2>
+          <code>220 → EHLO → STARTTLS → EHLO → AUTH → MAIL FROM → RCPT TO → DATA → 250 → QUIT</code>
+        </aside>
+      </div>
+    </section>
+
+    <section id="model">
+      <h2 class="section-title">1. Protocol Model and Session State Machine</h2>
+      <p class="lede">
+        SMTP is line-oriented, request/response, and transaction-scoped. One TCP session may carry multiple transactions,
+        but each transaction has strict envelope boundaries and independent recipient acceptance outcomes.
+      </p>
+
+      <div class="card-grid">
+        <article class="card">
+          <h3>Connection Phases</h3>
+          <ul>
+            <li><strong>Connect:</strong> Server sends <code>220</code> greeting, optionally with capability hints.</li>
+            <li><strong>Session setup:</strong> Client issues <code>EHLO</code> and parses extension list.</li>
+            <li><strong>Security/auth:</strong> <code>STARTTLS</code>, second <code>EHLO</code>, then <code>AUTH</code>.</li>
+            <li><strong>Message transaction:</strong> <code>MAIL FROM</code> + one or more <code>RCPT TO</code> + <code>DATA</code>/<code>BDAT</code>.</li>
+            <li><strong>Finalize:</strong> <code>RSET</code> for abort/reuse, <code>QUIT</code> to close gracefully.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Envelope vs Headers vs Body</h3>
+          <ul>
+            <li><strong>Envelope:</strong> Routing metadata in SMTP commands, not necessarily visible to end users.</li>
+            <li><strong>Headers:</strong> RFC 5322 metadata inside <code>DATA</code>, including <code>From</code>, <code>To</code>, <code>Message-ID</code>.</li>
+            <li><strong>Body:</strong> MIME structure and transfer encodings (<code>quoted-printable</code>, <code>base64</code>, etc).</li>
+            <li>Misalignment between envelope and header identities is common in forwarding and bounce flows.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Key Operational Invariants</h3>
+          <ul>
+            <li>Never pipeline commands unless <code>PIPELINING</code> is advertised.</li>
+            <li>After TLS upgrade, capability set can change; always run <code>EHLO</code> again.</li>
+            <li>Recipient acceptance is per-recipient. A transaction can be partial-success.</li>
+            <li><code>4xx</code> means retry logic; <code>5xx</code> means permanent failure unless policy says otherwise.</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="timeline" aria-label="session timeline">
+        <div class="timeline-row">
+          <div class="left">Session open</div>
+          <div class="right">TCP connect, banner read, timer starts (greeting timeout, inactivity timeout).</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Capability phase</div>
+          <div class="right"><code>EHLO client.example</code> → multiline <code>250-*</code> capabilities.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Negotiation phase</div>
+          <div class="right">Optional <code>STARTTLS</code>, then fresh <code>EHLO</code>, then optional <code>AUTH</code>.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Envelope phase</div>
+          <div class="right"><code>MAIL FROM</code> establishes reverse-path and ESMTP params (SIZE, BODY, SMTPUTF8, RET, ENVID).</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Recipient phase</div>
+          <div class="right">Multiple <code>RCPT TO</code>, each may return distinct status and enhanced code.</div>
+        </div>
+        <div class="timeline-row">
+          <div class="left">Content phase</div>
+          <div class="right"><code>DATA</code> then dot-terminated stream, or <code>BDAT</code> chunks if CHUNKING is used.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="commands">
+      <h2 class="section-title">2. SMTP/ESMTP Command Reference (Practical Semantics)</h2>
+      <p class="lede">
+        Command behavior is heavily context-dependent. The same command can be valid syntactically but invalid in current state.
+        Most field outages are state or policy errors, not parser errors.
+      </p>
+
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Typical Purpose</th>
+              <th>Important Edge Cases</th>
+              <th>Common Failure Signatures</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>EHLO</code></td>
+              <td>Announce client identity and request extensions.</td>
+              <td>Must be repeated after <code>STARTTLS</code>; fallback to <code>HELO</code> for legacy peers.</td>
+              <td><code>500/502</code> on legacy server, <code>501</code> for malformed argument.</td>
+            </tr>
+            <tr>
+              <td><code>STARTTLS</code></td>
+              <td>Upgrade plaintext channel to TLS.</td>
+              <td>Any buffered pipelined commands are invalid once TLS starts.</td>
+              <td><code>454 TLS not available</code>, certificate name mismatch, chain failure.</td>
+            </tr>
+            <tr>
+              <td><code>AUTH PLAIN/LOGIN/XOAUTH2</code></td>
+              <td>Authenticate submission client.</td>
+              <td>Policy often requires TLS first; mechanisms differ across providers.</td>
+              <td><code>535 Authentication failed</code>, <code>534 policy requires TLS</code>.</td>
+            </tr>
+            <tr>
+              <td><code>MAIL FROM:&lt;...&gt;</code></td>
+              <td>Start transaction with reverse-path and sender params.</td>
+              <td>Can carry <code>SIZE</code>, <code>BODY=8BITMIME</code>, <code>SMTPUTF8</code>.</td>
+              <td><code>552 message size exceeds fixed limit</code>, <code>550 sender rejected</code>.</td>
+            </tr>
+            <tr>
+              <td><code>RCPT TO:&lt;...&gt;</code></td>
+              <td>Add recipient to envelope.</td>
+              <td>Different responses per recipient; keep accepted set and continue.</td>
+              <td><code>450/451</code> temporary recipient issue, <code>550/551/553</code> permanent reject.</td>
+            </tr>
+            <tr>
+              <td><code>DATA</code></td>
+              <td>Send RFC 5322 message payload.</td>
+              <td>Dot-stuffing required; server returns final accept/reject only after terminator.</td>
+              <td><code>554 content rejected</code>, <code>451 processing error</code>.</td>
+            </tr>
+            <tr>
+              <td><code>BDAT</code></td>
+              <td>Chunked body transfer with CHUNKING extension.</td>
+              <td>No dot-stuffing semantics; chunk sizes must be exact and final chunk flagged.</td>
+              <td><code>500/503</code> bad chunk sequence, parse mismatch.</td>
+            </tr>
+            <tr>
+              <td><code>NOOP / RSET / QUIT</code></td>
+              <td>Liveness check, transaction reset, graceful session close.</td>
+              <td><code>RSET</code> clears envelope state but keeps session and auth context.</td>
+              <td>Timeout disconnect if peer hung; <code>221</code> expected on QUIT.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>Raw SMTP example</span><span>manual session over 587</span></div>
+<pre><code>$ openssl s_client -starttls smtp -crlf -connect smtp.example.net:587
+220 smtp.example.net ESMTP ready
+EHLO edge01.ops.example
+250-smtp.example.net
+250-PIPELINING
+250-SIZE 52428800
+250-8BITMIME
+250-STARTTLS
+250 AUTH PLAIN LOGIN
+STARTTLS
+220 2.0.0 Ready to start TLS
+... TLS handshake ...
+EHLO edge01.ops.example
+250 AUTH PLAIN LOGIN
+AUTH PLAIN AHVzZXJAZXhhbXBsZS5uZXQAc2VjcmV0
+235 2.7.0 Authentication successful
+MAIL FROM:&lt;bounce+9f2b@ops.example&gt; SIZE=18342
+250 2.1.0 Ok
+RCPT TO:&lt;alice@example.org&gt;
+250 2.1.5 Ok
+DATA
+354 End data with &lt;CR&gt;&lt;LF&gt;.&lt;CR&gt;&lt;LF&gt;
+From: Ops Mailer &lt;mailer@ops.example&gt;
+To: Alice &lt;alice@example.org&gt;
+Subject: Delivery test
+Date: Tue, 11 Feb 2026 20:44:50 +0000
+Message-ID: &lt;debug-9f2b@ops.example&gt;
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+hello from smtp deep dive
+.
+250 2.0.0 queued as 7E51A8E011
+QUIT
+221 2.0.0 Bye</code></pre>
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2 class="section-title">3. Authentication, TLS, and Identity Alignment</h2>
+      <p class="lede">
+        Modern mail acceptance is policy-heavy. Transport encryption, sender authentication, and domain alignment together
+        determine inboxing probability far more than SMTP syntax correctness.
+      </p>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>TLS/STARTTLS Considerations</h3>
+          <p>
+            Use opportunistic TLS for relay by default, enforce required TLS for submission and sensitive destinations.
+            Capture negotiated protocol and cipher in logs for post-incident analysis.
+          </p>
+          <p>
+            <span class="pill">TLS1.2+</span>
+            <span class="pill">SNI</span>
+            <span class="pill">MTA-STS</span>
+            <span class="pill">DANE TLSA</span>
+          </p>
+          <ul>
+            <li>Recompute capabilities after TLS; AUTH sets often differ pre/post-upgrade.</li>
+            <li>Validate certificate SAN against MX target host policy, not RFC5322 header domain.</li>
+            <li>Track downgrade events where STARTTLS advertised previously but absent now.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>SPF, DKIM, DMARC Alignment</h3>
+          <p>
+            SPF validates return-path authorization, DKIM validates signed content+domain, DMARC defines policy and alignment.
+            For high-volume systems, align organizational domain between RFC5322.From and DKIM d= where possible.
+          </p>
+          <ul>
+            <li>SPF breaks on naive forwarding unless SRS/ARC strategy exists.</li>
+            <li>DKIM survives forwarding if signed headers and body remain intact.</li>
+            <li>DMARC relaxed alignment tolerates subdomain mismatch; strict does not.</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>DNS policy examples</span><span>minimal but production-oriented</span></div>
+<pre><code>; SPF
+example.com.     IN TXT "v=spf1 ip4:203.0.113.0/24 include:_spf.mail.example -all"
+
+; DKIM selector
+s2026._domainkey.example.com. IN TXT "v=DKIM1; k=rsa; p=MIIBIjANBgkq..."
+
+; DMARC
+_dmarc.example.com. IN TXT "v=DMARC1; p=quarantine; adkim=s; aspf=r; rua=mailto:dmarc-reports@example.com"
+
+; Optional TLS policy
+_mta-sts.example.com. IN TXT "v=STSv1; id=2026-02-11"
+_smtp._tls.example.com. IN TXT "v=TLSRPTv1; rua=mailto:tlsrpt@example.com"</code></pre>
+      </div>
+    </section>
+
+    <section id="delivery">
+      <h2 class="section-title">4. Queueing, Retry Strategy, and DSN Semantics</h2>
+      <p class="lede">
+        SMTP acceptance does not mean mailbox delivery. It usually means remote MTA accepted responsibility.
+        Robust systems treat queueing and retry policy as first-class reliability logic.
+      </p>
+
+      <div class="card-grid">
+        <article class="card">
+          <h3>Retry Discipline</h3>
+          <ul>
+            <li>Retry only for transient classes (<code>4xx</code> or enhanced <code>4.X.X</code>).</li>
+            <li>Use exponential backoff with jitter and bounded queue lifetime.</li>
+            <li>Separate policy failures from transport failures in metrics.</li>
+            <li>Escalate repeated temp-fails to destination reputation signals.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Delivery Status Notifications</h3>
+          <ul>
+            <li>Map enhanced codes (<code>2.X.X</code>, <code>4.X.X</code>, <code>5.X.X</code>) into canonical app outcomes.</li>
+            <li>Persist envelope-id / queue-id / message-id linkage for postmortems.</li>
+            <li>Honor NOTIFY/RET semantics when DSN extension is enabled.</li>
+            <li>Protect bounce processors against backscatter and parser abuse.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Per-Recipient Outcomes</h3>
+          <ul>
+            <li>Single message can split into delivered + deferred + bounced recipients.</li>
+            <li>Emit recipient-level events, not only transaction-level events.</li>
+            <li>Avoid dropping good recipients because one address hard-failed.</li>
+            <li>For partial success, keep transaction correlation IDs stable.</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="diag" role="img" aria-label="delivery pipeline">
+[App producer] -> [Submission API] -> [MTA queue] -> [DNS MX resolve] -> [Remote MX connect]
+       |                 |                 |                 |                  |
+  idempotency key   auth context     retry schedule     dns cache TTL      tls+policy verdict
+       |                 |                 |                 |                  |
+       +------------------------- observability correlation IDs ----------------+
+      </div>
+    </section>
+
+    <section id="debugging">
+      <h2 class="section-title">5. Debugging Techniques That Work in Production</h2>
+      <p class="lede">
+        Debug mail like distributed systems: identify where state diverged between intent and observed transport behavior.
+        Always collect transcript, DNS evidence, queue metadata, and remote response codes together.
+      </p>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>Command-line Probing Toolkit</h3>
+          <div class="snippet">
+            <div class="snippet-head"><span>transport + DNS probes</span><span>safe read-only diagnostics</span></div>
+<pre><code># Discover MX path
+ dig +short MX example.org
+
+# Inspect SMTP endpoint capabilities
+ openssl s_client -starttls smtp -crlf -connect mx1.example.org:25
+
+# Check MTA-STS and TLS-RPT policy records
+ dig +short TXT _mta-sts.example.org
+ dig +short TXT _smtp._tls.example.org
+
+# Validate DKIM selector publication
+ dig +short TXT s2026._domainkey.example.com</code></pre>
+          </div>
+          <ul>
+            <li>Capture full SMTP transcript including multiline responses.</li>
+            <li>Record peer IP, chosen MX hostname, and TLS peer certificate fingerprint.</li>
+            <li>Repeat against each MX preference to detect inconsistent fleet config.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Failure Pattern Catalog</h3>
+          <ul>
+            <li><span class="status-warn">421 / connection drops:</span> remote throttle, tarpitting, or overloaded listener.</li>
+            <li><span class="status-bad">450/451 with policy text:</span> temporary reputation controls, graylisting, content scanning queue.</li>
+            <li><span class="status-bad">550 5.7.1:</span> auth/alignment fail, relay forbidden, or domain-level blocklist hit.</li>
+            <li><span class="status-warn">454 4.7.0 TLS unavailable:</span> cert deployment issue, STARTTLS disabled, or crypto mismatch.</li>
+            <li><span class="status-ok">250 queued but no inbox:</span> downstream filtering, mailbox rule, silent spam placement.</li>
+          </ul>
+          <p>
+            Enhanced codes are usually more reliable than human-readable text.
+            Build parsers around numeric code families first, text classifiers second.
+          </p>
+        </article>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>message-level forensic checklist</span><span>minimum evidence set</span></div>
+<pre><code>1) Original RFC5322 message (with all Received headers)
+2) Outbound SMTP transcript for each attempt (queue-id, remote mx, timing)
+3) DNS snapshots at send time (MX/SPF/DKIM/DMARC/MTA-STS)
+4) TLS handshake metadata (protocol, cipher, cert chain verdict)
+5) Retry history and final DSN / bounce body
+6) Reputation context (sending IP/domain historical reject rates)</code></pre>
+      </div>
+    </section>
+
+    <section id="extensions">
+      <h2 class="section-title">6. Advanced ESMTP Extensions and Interop Traps</h2>
+      <p class="lede">
+        Extensions improve throughput and correctness, but each one introduces compatibility decisions. High-quality MTAs negotiate
+        capabilities dynamically and degrade gracefully when peers advertise partial or inconsistent support.
+      </p>
+
+      <div class="cmd-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Extension</th>
+              <th>Advertised As</th>
+              <th>Why It Matters</th>
+              <th>Operational Caveats</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>PIPELINING</code></td>
+              <td><code>250-PIPELINING</code></td>
+              <td>Reduces RTT cost by batching SMTP commands.</td>
+              <td>Client must still map responses to the exact command order; avoid with flaky peers.</td>
+            </tr>
+            <tr>
+              <td><code>CHUNKING</code></td>
+              <td><code>250-CHUNKING</code></td>
+              <td>Allows <code>BDAT</code> streaming and avoids dot-stuffing overhead.</td>
+              <td>Many systems parse DATA-path better than BDAT-path; test all downstream appliances.</td>
+            </tr>
+            <tr>
+              <td><code>SMTPUTF8</code></td>
+              <td><code>250-SMTPUTF8</code></td>
+              <td>Permits UTF-8 in local-parts/headers for internationalized addresses.</td>
+              <td>Must not downgrade lossy; route only through UTF8-capable path end-to-end.</td>
+            </tr>
+            <tr>
+              <td><code>DSN</code></td>
+              <td><code>250-DSN</code></td>
+              <td>Enables delivery notification controls per recipient.</td>
+              <td>Prevent mail loops and duplicate notices when combined with internal retries.</td>
+            </tr>
+            <tr>
+              <td><code>8BITMIME</code></td>
+              <td><code>250-8BITMIME</code></td>
+              <td>Allows 8-bit bodies without forced quoted-printable/base64 encoding.</td>
+              <td>Gate on downstream support, or perform canonical re-encoding before relay hops.</td>
+            </tr>
+            <tr>
+              <td><code>REQUIRETLS</code></td>
+              <td>Message header / policy control</td>
+              <td>Signals sender requires TLS-protected transport to destination.</td>
+              <td>Can reduce deliverability if remote path cannot satisfy strong TLS guarantees.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>DSN-enabled envelope example</span><span>per-recipient notification policy</span></div>
+<pre><code>MAIL FROM:&lt;bounce+f31a@mailer.example&gt; ENVID=ord-8472 RET=HDRS
+250 2.1.0 Ok
+RCPT TO:&lt;alice@example.org&gt; NOTIFY=SUCCESS,FAILURE,DELAY ORCPT=rfc822;alice@example.org
+250 2.1.5 Ok
+RCPT TO:&lt;bob@example.net&gt; NOTIFY=FAILURE ORCPT=rfc822;bob@example.net
+250 2.1.5 Ok
+DATA
+354 Start mail input
+...
+.
+250 2.0.0 queued as A1CE8D9137</code></pre>
+      </div>
+    </section>
+
+    <section id="runbooks">
+      <h2 class="section-title">7. Incident Runbooks and Hardening Baseline</h2>
+      <p class="lede">
+        Predefined runbooks reduce time-to-restore. Separate mitigation from diagnosis so throughput recovers while root cause is still under investigation.
+      </p>
+
+      <div class="card-grid">
+        <article class="checklist">
+          <h3>Runbook: Sudden 5.7.1 Spike</h3>
+          <ol>
+            <li>Confirm whether rejects are destination-specific, ASN-specific, or global.</li>
+            <li>Diff recent DNS/auth changes (SPF flattening, DKIM key rotation, DMARC policy).</li>
+            <li>Sample rejected transcripts and cluster by enhanced code.</li>
+            <li>Temporarily shift traffic by IP pool if reputation partitioning exists.</li>
+            <li>Open postmaster escalation with evidence bundle and timestamps.</li>
+          </ol>
+        </article>
+        <article class="checklist">
+          <h3>Runbook: STARTTLS Failures After Deploy</h3>
+          <ol>
+            <li>Validate certificate chain and SAN against all outbound hostnames.</li>
+            <li>Check minimum TLS version/cipher settings for unintended incompatibility.</li>
+            <li>Compare failure rates by remote domain and by MX preference target.</li>
+            <li>Rollback crypto policy if broad interoperability loss is confirmed.</li>
+            <li>Add synthetic probes for TLS handshake and STARTTLS advertisement drift.</li>
+          </ol>
+        </article>
+        <article class="checklist">
+          <h3>Runbook: Queue Backlog Growth</h3>
+          <ol>
+            <li>Measure accept rate, defer rate, connection concurrency, and queue age percentile.</li>
+            <li>Separate local bottleneck (CPU/DNS/TLS) from remote bottleneck (throttling).</li>
+            <li>Tune retry pacing and connection reuse to avoid synchronized retry storms.</li>
+            <li>Protect latency-sensitive transactional streams with queue class isolation.</li>
+            <li>Set abandonment thresholds and explicit operator alerts by SLO tier.</li>
+          </ol>
+        </article>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>hardening baseline</span><span>operator checklist</span></div>
+<pre><code>[ ] Strict envelope/header validation for outbound sender domains
+[ ] DKIM signing at edge with rotating selectors and monitored key expiry
+[ ] SPF records minimized and periodically flattened without exceeding DNS limits
+[ ] DMARC reports ingested and anomaly detection over fail ratios
+[ ] Retry policy documented with bounded lifetime and jittered backoff
+[ ] Full-fidelity transcript logging with privacy-safe redaction
+[ ] Per-domain adaptive throttling and warm-up logic for new IP pools
+[ ] Synthetic SMTP probes for top destinations every 5 minutes
+[ ] Bounce classification pipeline with enhanced status code normalization
+[ ] SLO dashboard: accepted, deferred, bounced, time-to-final-outcome</code></pre>
+      </div>
+    </section>
+
+    <section id="transcripts">
+      <h2 class="section-title">8. Annotated Transcript Scenarios (Success, Partial, Failure)</h2>
+      <p class="lede">
+        These examples model common production outcomes and the interpretation logic expected in mail delivery services.
+        Keep transcript parsing deterministic and preserve raw lines for incident review.
+      </p>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>Scenario A: Partial Recipient Acceptance</span><span>proceed with accepted recipients</span></div>
+<pre><code>220 mx.target.example ESMTP
+EHLO mta01.sender.example
+250-mx.target.example
+250-PIPELINING
+250-SIZE 10485760
+250 8BITMIME
+MAIL FROM:&lt;bounce+9ce1@sender.example&gt;
+250 2.1.0 Ok
+RCPT TO:&lt;valid.user@target.example&gt;
+250 2.1.5 Ok
+RCPT TO:&lt;unknown.user@target.example&gt;
+550 5.1.1 User unknown
+DATA
+354 End data with &lt;CRLF&gt;.&lt;CRLF&gt;
+From: Platform Mailer &lt;notify@sender.example&gt;
+To: valid.user@target.example, unknown.user@target.example
+Subject: Event update
+...
+.
+250 2.0.0 Accepted queue id 21B5A
+QUIT
+221 2.0.0 Bye</code></pre>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>Scenario B: Temporary Deferral with Retry</span><span>4xx should schedule backoff</span></div>
+<pre><code>220 mx.bigmail.example ESMTP
+EHLO mta01.sender.example
+250-mx.bigmail.example
+250-STARTTLS
+250 PIPELINING
+MAIL FROM:&lt;bounce+2fd1@sender.example&gt;
+250 2.1.0 Sender ok
+RCPT TO:&lt;recipient@bigmail.example&gt;
+451 4.7.1 Try again later, rate limited
+RSET
+250 2.0.0 Reset state
+QUIT
+221 2.0.0 Bye
+
+# Queue decision:
+# classify as transient-policy, retry in 12m with jitter, retain same message-id and envelope-id.</code></pre>
+      </div>
+
+      <div class="snippet">
+        <div class="snippet-head"><span>Scenario C: STARTTLS Policy Mismatch</span><span>fail closed for strict routes</span></div>
+<pre><code>220 mx.secure.example ESMTP
+EHLO mta01.sender.example
+250-mx.secure.example
+250 STARTTLS
+STARTTLS
+220 2.0.0 Ready to start TLS
+... handshake fails: certificate verify error (unable to get local issuer cert) ...
+QUIT
+
+# Route policy:
+# - transactional banking stream: permanent fail route (security requirement)
+# - marketing stream: temporary defer and retry via alternate egress path</code></pre>
+      </div>
+    </section>
+
+    <section id="mime">
+      <h2 class="section-title">9. MIME Construction, Encoding, and Bounce Parsing Examples</h2>
+      <p class="lede">
+        Content-layer mistakes often look like transport failures to non-specialized tooling. Validate MIME boundaries, content transfer
+        encodings, and header canonicalization before blaming destination policy systems.
+      </p>
+
+      <div class="two-col">
+        <article class="card">
+          <h3>Multipart/Alternative Example</h3>
+          <div class="snippet">
+            <div class="snippet-head"><span>RFC5322 + MIME</span><span>text and html bodies</span></div>
+<pre><code>From: Alerts &lt;alerts@example.com&gt;
+To: dev@example.org
+Subject: Build pipeline report
+Date: Fri, 13 Feb 2026 23:22:10 +0000
+Message-ID: &lt;build-4822@example.com&gt;
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1_4822"
+
+--b1_4822
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Build complete. 2 warnings. 0 failures.
+
+--b1_4822
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+&lt;html&gt;&lt;body&gt;&lt;p&gt;Build complete.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+--b1_4822--</code></pre>
+          </div>
+          <ul>
+            <li>Boundary must be unique and terminated exactly once.</li>
+            <li>Quoted-printable lines should stay under 76 chars pre-wrap.</li>
+            <li>Ensure <code>Date</code> and <code>Message-ID</code> are always set for traceability.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>DSN/Bounce Body Parsing Example</h3>
+          <div class="snippet">
+            <div class="snippet-head"><span>delivery-status sample</span><span>machine-readable fields</span></div>
+<pre><code>Content-Type: multipart/report; report-type=delivery-status; boundary="dsn_a9"
+
+--dsn_a9
+Content-Type: text/plain; charset=utf-8
+
+Delivery failed for one or more recipients.
+
+--dsn_a9
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; mx.sender.example
+Arrival-Date: Fri, 13 Feb 2026 23:24:12 +0000
+
+Final-Recipient: rfc822; blocked@target.example
+Action: failed
+Status: 5.7.1
+Diagnostic-Code: smtp; 550 5.7.1 Message rejected due to DMARC policy
+
+--dsn_a9--</code></pre>
+          </div>
+          <ul>
+            <li>Use <code>Status</code> and <code>Action</code> for classifier truth, not free-form prose.</li>
+            <li>Map <code>Final-Recipient</code> to internal recipient IDs for precise suppression updates.</li>
+            <li>Persist <code>Diagnostic-Code</code> text for support tooling and trend clustering.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <footer>
+      Built as a stand-alone technical reference page for SMTP operations, protocol debugging, and reliability engineering.
+    </footer>
+  </main>
+</body>
+</html>
