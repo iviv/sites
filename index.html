@@ -57,7 +57,6 @@
             position: fixed;
             inset: 0;
             z-index: -2;
-            overflow: hidden;
         }
 
         .card {
@@ -242,7 +241,6 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             cursor: default;
-            transition: border-color 0.2s ease;
         }
 
         /* Vibe links */
@@ -457,29 +455,24 @@
         const themeIcon = document.getElementById('themeIcon');
         const html = document.documentElement;
 
-        let currentTheme = 'dark';
+        const ICONS = { dark: '☀️', light: '🌙' };
 
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) {
-            currentTheme = savedTheme;
-            if (currentTheme === 'light') {
+        function applyTheme(theme) {
+            if (theme === 'light') {
                 html.setAttribute('data-theme', 'light');
-                themeIcon.innerHTML = '&#9790;';
-            }
-        }
-
-        themeToggle.addEventListener('click', () => {
-            if (currentTheme === 'dark') {
-                html.setAttribute('data-theme', 'light');
-                themeIcon.innerHTML = '&#9790;';
-                currentTheme = 'light';
-                localStorage.setItem('theme', 'light');
             } else {
                 html.removeAttribute('data-theme');
-                themeIcon.textContent = '☀️';
-                currentTheme = 'dark';
-                localStorage.setItem('theme', 'dark');
             }
+            themeIcon.textContent = ICONS[theme];
+        }
+
+        let currentTheme = localStorage.getItem('theme') || 'dark';
+        applyTheme(currentTheme);
+
+        themeToggle.addEventListener('click', () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            applyTheme(currentTheme);
+            localStorage.setItem('theme', currentTheme);
         });
     </script>
 </body>
