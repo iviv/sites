@@ -1,0 +1,1143 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antennas · a working primer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EFF2F5; --card:#FAFBFC; --sunk:#E5EAF0;
+    --ink:#14181F; --ink2:#4B535F; --ink3:#7E8894;
+    --rule:#D1D9E2; --rule2:#E3E8EF;
+    --fwd:#1F4FD8;      /* forward power, signal */
+    --refl:#D6216A;     /* reflected power, loss */
+    --good:#0E8C63;     /* matched, resonant */
+    --warn:#B4700A;
+    --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --sans:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --disp:'Archivo','Source Sans 3',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:96px}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:16.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 26px}
+  @media(max-width:640px){.wrap{padding:0 15px}}
+  p{color:var(--ink2);margin:0 0 1em}
+  .max{max-width:66ch}
+  h3{font-family:var(--disp);font-weight:700;font-size:1.1rem;margin:0 0 .35em;letter-spacing:-.01em;color:var(--ink)}
+  h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+     color:var(--ink3);margin:0 0 .7em;font-weight:500}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.12em .35em;color:var(--ink)}
+  b.n{font-family:var(--mono);font-weight:700;color:var(--ink)}
+
+  /* nav + band bar */
+  nav{position:sticky;top:0;z-index:40;background:rgba(239,242,245,.94);backdrop-filter:blur(9px);
+      border-bottom:1px solid var(--rule)}
+  .navrow{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--rule2)}
+  .navrow::-webkit-scrollbar{display:none}
+  .navrow a{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--ink3);text-decoration:none;padding:12px 13px 10px;white-space:nowrap;border-bottom:2px solid transparent}
+  .navrow a:hover{color:var(--ink)}
+  .navrow a.on{color:var(--fwd);border-bottom-color:var(--fwd)}
+  .navrow a b{font-weight:500;color:var(--rule);margin-right:6px}
+  .bandbar{display:flex;align-items:center;gap:10px;padding:9px 0;flex-wrap:wrap}
+  .bandbar .lab{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3)}
+  .bands{display:flex;border:1px solid var(--rule);flex-wrap:wrap}
+  .bands button{font-family:var(--mono);font-size:11.5px;padding:5px 10px;cursor:pointer;
+    background:var(--card);border:0;border-right:1px solid var(--rule);color:var(--ink2)}
+  .bands button:last-child{border-right:0}
+  .bands button[aria-pressed=true]{background:var(--fwd);color:#fff}
+  .lam{font-family:var(--mono);font-size:12px;color:var(--ink);margin-left:auto;white-space:nowrap}
+  .lam em{font-style:normal;color:var(--ink3)}
+
+  /* masthead */
+  .masthead{padding:60px 0 42px}
+  .masthead h1{font-family:var(--disp);font-weight:800;font-size:clamp(2.6rem,7vw,5rem);
+    line-height:.94;letter-spacing:-.035em;margin:.3em 0 0;max-width:16ch}
+  .masthead h1 em{font-style:normal;color:var(--fwd)}
+  .eyebrow{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.2em;
+           text-transform:uppercase;color:var(--ink3)}
+  .lead{max-width:60ch;margin-top:1.2em;font-size:1.08rem}
+
+  section{padding:64px 0;border-top:1px solid var(--rule)}
+  .shead{display:flex;align-items:baseline;justify-content:space-between;gap:18px;margin-bottom:22px;flex-wrap:wrap}
+  .shead h2{font-family:var(--disp);font-weight:700;letter-spacing:-.026em;
+            font-size:clamp(1.6rem,3.8vw,2.4rem);margin:0}
+  .shead h2 .lyr{font-family:var(--mono);font-size:.46em;color:var(--ink3);letter-spacing:.16em;
+                 display:block;margin-bottom:.55em;font-weight:400;text-transform:uppercase}
+  .shead .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+              color:var(--ink3);border:1px solid var(--rule);padding:3px 9px}
+
+  .panel{background:var(--card);border:1px solid var(--rule)}
+  .panel-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;
+    border-bottom:1px solid var(--rule2);font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.13em;text-transform:uppercase;color:var(--ink3)}
+  .pad{padding:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start}
+  .sidebar{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+  @media(max-width:880px){.grid2,.grid3,.sidebar{grid-template-columns:1fr}}
+  .mt{margin-top:20px}
+
+  .ctrl{padding:14px 16px}
+  .ctrl+.ctrl{border-top:1px solid var(--rule2)}
+  .ctrl label{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--ink3);margin-bottom:7px}
+  select,input[type=text],input[type=number]{width:100%;font-family:var(--mono);font-size:13px;
+    color:var(--ink);background:var(--card);border:1px solid var(--rule);border-radius:0;padding:7px 9px}
+  :focus-visible{outline:2px solid var(--fwd);outline-offset:1px}
+  .seg{display:flex;border:1px solid var(--rule);flex-wrap:wrap}
+  .seg button{flex:1;font-family:var(--mono);font-size:11.5px;padding:7px 4px;cursor:pointer;
+    background:var(--card);border:0;border-right:1px solid var(--rule);color:var(--ink2);min-width:42px}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed=true]{background:var(--fwd);color:#fff}
+  .seg.alt button[aria-pressed=true]{background:var(--ink);color:#fff}
+  .row{display:flex;align-items:center;gap:10px}
+  input[type=range]{flex:1;accent-color:var(--fwd);min-width:0}
+  input[type=range]:disabled{opacity:.35}
+  .num{font-family:var(--mono);font-size:12.5px;min-width:5ch;text-align:right;font-weight:700}
+  button.btn{font-family:var(--mono);font-size:11.5px;padding:7px 12px;cursor:pointer;
+    background:var(--card);border:1px solid var(--rule);color:var(--ink2)}
+  button.btn:hover{border-color:var(--fwd);color:var(--fwd)}
+  button.btn.primary{background:var(--fwd);border-color:var(--fwd);color:#fff}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  svg.viz{display:block;width:100%;height:auto;background:var(--card)}
+  .ax{stroke:var(--rule2);stroke-width:1}
+  .axb{stroke:var(--rule);stroke-width:1}
+  .tk{font-family:var(--mono);font-size:9px;fill:var(--ink3);letter-spacing:.08em}
+  .tkb{font-family:var(--mono);font-size:10px;fill:var(--ink2);letter-spacing:.08em}
+
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);
+     text-align:left;font-weight:500;padding:9px 12px;border-bottom:1px solid var(--rule)}
+  td{padding:9px 12px;border-bottom:1px solid var(--rule2);vertical-align:top;color:var(--ink2)}
+  tr:last-child td{border-bottom:0}
+  td.k{font-family:var(--mono);color:var(--ink);white-space:nowrap}
+  .scroll{overflow-x:auto}
+
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-family:var(--mono);font-size:13px;margin:0}
+  .kv dt{color:var(--ink3);font-size:10px;letter-spacing:.11em;text-transform:uppercase;align-self:center}
+  .kv dd{margin:0;color:var(--ink);font-weight:500}
+  .big{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+
+  .note{font-family:var(--mono);font-size:11.5px;line-height:1.6;padding-left:10px;
+        border-left:2px solid var(--rule);color:var(--ink2);margin-top:12px}
+  .note.bad{border-color:var(--refl);color:var(--refl)}
+  .note.good{border-color:var(--good)}
+  .note.warn{border-color:var(--warn)}
+  .maths{font-family:var(--mono);font-size:12px;line-height:1.95;color:var(--ink2);
+         background:var(--sunk);padding:11px 13px;overflow-x:auto;white-space:pre}
+
+  ul.notes{list-style:none;padding:0;margin:0;display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule)}
+  ul.notes li{background:var(--card);padding:13px 15px;font-size:14.5px;color:var(--ink2)}
+  ul.notes li b{color:var(--ink);font-family:var(--mono);font-size:12.5px;font-weight:700;display:block;margin-bottom:3px}
+
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  @media(max-width:880px){.cards{grid-template-columns:1fr}}
+  .swatch{display:inline-block;width:22px;height:3px;vertical-align:3px;margin-right:7px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--ink2)}
+
+  footer{padding:32px 0 62px;font-family:var(--mono);font-size:11px;color:var(--ink3);line-height:1.8}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+</style>
+
+<nav>
+  <div class="wrap">
+    <div class="navrow">
+      <a href="#lambda" data-nav><b>00</b>Wavelength</a>
+      <a href="#res"    data-nav><b>01</b>Resonance</a>
+      <a href="#swr"    data-nav><b>02</b>Impedance &amp; SWR</a>
+      <a href="#feed"   data-nav><b>03</b>Feedline</a>
+      <a href="#pat"    data-nav><b>04</b>Patterns</a>
+      <a href="#pol"    data-nav><b>05</b>Polarisation</a>
+      <a href="#link"   data-nav><b>06</b>Height &amp; range</a>
+      <a href="#build"  data-nav><b>07</b>Build one</a>
+      <a href="#field"  data-nav><b>08</b>Field notes</a>
+    </div>
+    <div class="bandbar">
+      <span class="lab">Band</span>
+      <div class="bands" id="bands" role="group" aria-label="Band"></div>
+      <span class="lam" id="lamread"></span>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">A primer for a new Technician · everything below is live</div>
+  <h1>An antenna is a <em>length</em>, and the length is a wavelength</h1>
+  <p class="lead">
+    Almost every antenna question turns out to be the same question wearing a different hat: how
+    long is this thing compared to the wave it's trying to launch? Get comfortable with that one
+    ratio and impedance, SWR, gain, pattern and take-off angle all stop being folklore. Pick a band
+    up top — every calculator, plot and dimension on this page follows it.
+  </p>
+</header>
+
+<!-- ══ 00 wavelength ══ -->
+<section id="lambda">
+  <div class="shead"><h2><span class="lyr">Step 00 · the one number</span>Wavelength</h2>
+    <div class="tag">λ = 300 / f</div></div>
+  <p class="max">
+    A radio wave travels 300 million metres per second. If it wiggles 146 million times per second,
+    each wiggle is about two metres long. That's the entire derivation:
+    <b class="n">λ metres = 300 ÷ f MHz</b>. Memorise that and you can size an antenna in your head
+    on a hilltop with no signal.
+  </p>
+  <p class="max">
+    Antennas are built from simple fractions of it — a half wave, a quarter wave, five-eighths of a
+    wave — because those are the lengths where the current on the wire arranges itself into a
+    standing pattern that radiates well. A wire that isn't near one of those fractions still
+    radiates, but it presents an awkward impedance to your radio and you have to work to feed it.
+  </p>
+
+  <div class="sidebar mt">
+    <div class="panel">
+      <div class="panel-hd">Tune</div>
+      <div class="ctrl">
+        <label for="f-in">Frequency · MHz</label>
+        <div class="row"><input type="range" id="f-in" min="1" max="1300" step="0.1" value="146">
+          <span class="num" id="f-n">146.0</span></div>
+      </div>
+      <div class="ctrl">
+        <label>Velocity factor of the wire</label>
+        <div class="seg alt" role="group" aria-label="Velocity factor">
+          <button data-vf="1.0">1.00</button>
+          <button data-vf="0.95" aria-pressed="true">0.95</button>
+          <button data-vf="0.90">0.90</button>
+        </div>
+        <div class="note">Wire is not free space. A real half-wave dipole comes out roughly 5% shorter than the arithmetic says, because the ends behave as if the antenna continues past them.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-hd"><span>Cut list</span><span id="lam-hd"></span></div>
+      <div class="scroll"><table id="cuttbl"></table></div>
+      <div class="pad" style="border-top:1px solid var(--rule2)">
+        <div class="maths" id="lam-math"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid3 mt">
+    <div><h3>Why 468</h3><p>You'll see <code>468 / f</code> quoted for a half-wave dipole in feet.
+      That's just 300/f converted to feet, halved, and multiplied by the 0.95 end-effect fudge.
+      It's a starting point for cutting, not a law — nearby metal, height and wire diameter all move it.</p></div>
+    <div><h3>Cut long, trim short</h3><p>You can always remove wire. Cut a few percent long, measure
+      where it resonates, then trim. Resonance below your target means the antenna is too long, which
+      is the more forgiving mistake to make.</p></div>
+    <div><h3>The pocket check</h3><p>At 146 MHz a quarter wave is about 19 inches, and at 446 MHz
+      about 6.5. If someone hands you a "dual band" whip that's six inches long, you now know which
+      band it's actually resonant on.</p></div>
+  </div>
+</section>
+
+<!-- ══ 01 resonance ══ -->
+<section id="res">
+  <div class="shead"><h2><span class="lyr">Step 01 · what the current is doing</span>Standing waves on the wire</h2>
+    <div class="tag">drag the length</div></div>
+  <p class="max">
+    Feed a wire in the middle and current flows out towards both ends. It can't flow off the ends,
+    so it reflects and comes back, and the outgoing and returning waves add into a fixed pattern —
+    a standing wave. Where that pattern puts a current maximum and where it puts a current
+    <em>node</em> decides almost everything about how the antenna behaves.
+  </p>
+  <div class="panel mt">
+    <div class="panel-hd"><span id="res-title">Half-wave dipole</span><span id="res-len"></span></div>
+    <svg class="viz" viewBox="0 0 780 300" id="ressvg" role="img" aria-label="Current and voltage standing waves on a dipole"></svg>
+    <div class="pad" style="border-top:1px solid var(--rule2)">
+      <div class="legend" style="margin-bottom:14px">
+        <span><i class="swatch" style="background:var(--fwd)"></i>current</span>
+        <span><i class="swatch" style="background:var(--refl)"></i>voltage</span>
+        <span><i class="swatch" style="background:var(--ink3)"></i>envelope</span>
+      </div>
+      <div class="grid2">
+        <div>
+          <label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Total length, in wavelengths</label>
+          <div class="row"><input type="range" id="res-l" min="0.05" max="1.5" step="0.01" value="0.5">
+            <span class="num" id="res-ln">0.50 λ</span></div>
+          <div class="btnrow" style="margin-top:11px">
+            <button class="btn" data-rl="0.5">½λ dipole</button>
+            <button class="btn" data-rl="1.0">1λ</button>
+            <button class="btn" data-rl="1.5">1½λ</button>
+            <button class="btn" data-rl="0.25">too short</button>
+          </div>
+        </div>
+        <div><dl class="kv" id="res-out"></dl><div id="res-note"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="grid2 mt">
+    <div><h3>Current makes the radiation</h3><p>Radiation comes from accelerating charge, which means
+      the parts of the antenna carrying the most <em>current</em> do most of the radiating. On a
+      half-wave dipole that's the middle. The last few inches near the tips carry almost no current
+      and contribute almost nothing — which is why the exact tip shape barely matters, and why
+      loading coils near the base of a short mobile whip are a compromise.</p></div>
+    <div><h3>Why the feedpoint impedance swings</h3><p>Impedance at the feedpoint is just voltage
+      divided by current there. Land the feedpoint on a current maximum and you get a low, friendly
+      impedance near 73 ohms. Land it on a current node — a full wavelength of wire, say — and
+      current goes to nearly zero while voltage peaks, and the impedance rockets into the
+      kilohms. Same wire, same feed, wildly different load.</p></div>
+  </div>
+</section>
+
+<!-- ══ 02 SWR ══ -->
+<section id="swr">
+  <div class="shead"><h2><span class="lyr">Step 02 · the match</span>Impedance, reflection and SWR</h2>
+    <div class="tag">50 Ω is a convention</div></div>
+  <p class="max">
+    Your radio and your coax expect 50 ohms. Your antenna presents whatever it presents. When those
+    differ, some of the power arriving at the antenna turns around and travels back down the line.
+    Forward and reflected waves interfere along the cable, producing peaks and troughs of voltage —
+    and the ratio of the biggest peak to the smallest trough is the standing wave ratio.
+  </p>
+  <div class="panel mt">
+    <div class="panel-hd"><span>Voltage along the feedline</span><span id="swr-hd"></span></div>
+    <svg class="viz" viewBox="0 0 780 250" id="swrsvg" role="img" aria-label="Forward and reflected waves on a feedline"></svg>
+    <div class="pad" style="border-top:1px solid var(--rule2)">
+      <div class="legend" style="margin-bottom:14px">
+        <span><i class="swatch" style="background:var(--fwd)"></i>forward wave</span>
+        <span><i class="swatch" style="background:var(--refl)"></i>reflected wave</span>
+        <span><i class="swatch" style="background:var(--ink)"></i>what a meter sees</span>
+      </div>
+      <div class="grid2">
+        <div>
+          <div class="row" style="margin-bottom:12px">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:8ch">R load</span>
+            <input type="range" id="z-r" min="2" max="300" step="1" value="50"><span class="num" id="z-rn">50 Ω</span></div>
+          <div class="row">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:8ch">X load</span>
+            <input type="range" id="z-x" min="-150" max="150" step="1" value="0"><span class="num" id="z-xn">0 Ω</span></div>
+          <div class="btnrow" style="margin-top:12px">
+            <button class="btn" data-z="50,0">matched</button>
+            <button class="btn" data-z="73,0">½λ dipole</button>
+            <button class="btn" data-z="36,0">¼λ vertical</button>
+            <button class="btn" data-z="30,-60">too short</button>
+            <button class="btn" data-z="120,80">too long</button>
+          </div>
+        </div>
+        <div><dl class="kv" id="swr-out"></dl><div id="swr-note"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2 mt">
+    <div>
+      <h3>What SWR does and doesn't cost you</h3>
+      <p>The reflected power is not burned up at the antenna. It travels back to the transmitter and
+      most of it gets re-reflected forward again. On a short, low-loss run at VHF, a 2:1 SWR costs
+      you a fraction of a decibel of real power — well under a quarter of an S-unit, invisible on the
+      other end.</p>
+      <p>What high SWR actually does is: make your transmitter's protection circuit throttle output,
+      raise voltage and current peaks in a lossy cable so a bigger share is turned into heat, and
+      tell you something has changed. That last one is the real value. A jump in SWR is a broken
+      connector, a wet coax end or a bent element long before it is a power problem.</p>
+    </div>
+    <div>
+      <h3>1.0:1 is not the goal</h3>
+      <p>A resonant half-wave dipole in free space is about 73 ohms, which on 50-ohm coax reads
+      1.46:1 forever. That antenna is working perfectly. A quarter-wave ground plane with horizontal
+      radials is nearer 36 ohms, about 1.4:1 — and drooping those radials down to 45° raises the
+      feedpoint impedance to roughly 50, which is why almost every commercial ground plane has
+      sloping radials.</p>
+      <p>Be suspicious of a flat 1.0:1 across an entire band. Perfect matches over wide bandwidth
+      usually mean something is absorbing power rather than radiating it — a lossy cable, a poor
+      connection, or a dummy load you forgot to unplug.</p>
+    </div>
+  </div>
+
+  <div class="panel mt">
+    <div class="panel-hd"><span>Trim trainer · SWR across the band</span><span id="trim-hd"></span></div>
+    <svg class="viz" viewBox="0 0 780 260" id="trimsvg" role="img" aria-label="SWR versus frequency sweep"></svg>
+    <div class="pad" style="border-top:1px solid var(--rule2)">
+      <div class="grid3">
+        <div>
+          <label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Antenna</label>
+          <select id="trim-type">
+            <option value="gp45">¼λ ground plane, radials at 45°</option>
+            <option value="gph">¼λ ground plane, flat radials</option>
+            <option value="dip">½λ dipole</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Element length</label>
+          <div class="row"><input type="range" id="trim-l" min="60" max="140" step="0.5" value="100">
+            <span class="num" id="trim-ln"></span></div>
+        </div>
+        <div>
+          <label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Element thickness</label>
+          <div class="seg alt" role="group" aria-label="Element thickness">
+            <button data-q="16">thin wire</button>
+            <button data-q="11" aria-pressed="true">rod</button>
+            <button data-q="7">fat tube</button>
+          </div>
+        </div>
+      </div>
+      <div id="trim-out" class="mt"></div>
+    </div>
+  </div>
+  <p class="max mt">
+    Slide the element length and watch the dip move. This is the whole trimming procedure: find where
+    the dip actually sits, compare it to where you want it, and cut. Notice too what element
+    thickness does — a fat tube has a lower Q and a much broader curve, which is why a chunky
+    commercial whip covers a whole band and a thin wire dipole is fussy.
+  </p>
+</section>
+
+<!-- ══ 03 feedline ══ -->
+<section id="feed">
+  <div class="shead"><h2><span class="lyr">Step 03 · the cable</span>Feedline is where power really goes</h2>
+    <div class="tag">dB per 100 ft</div></div>
+  <p class="max">
+    New operators worry about SWR and ignore coax. It's usually the wrong way round. At 446 MHz,
+    fifty feet of thin RG-58 throws away well over half your transmit power as heat before it
+    reaches the antenna — and does exactly the same to every signal coming back the other way.
+  </p>
+  <div class="sidebar mt">
+    <div class="panel">
+      <div class="panel-hd">Run</div>
+      <div class="ctrl"><label for="cx-type">Cable</label><select id="cx-type"></select></div>
+      <div class="ctrl"><label for="cx-len">Length · feet</label>
+        <div class="row"><input type="range" id="cx-len" min="5" max="200" step="1" value="50">
+          <span class="num" id="cx-lenn">50 ft</span></div></div>
+      <div class="ctrl"><label for="cx-swr">SWR at the antenna</label>
+        <div class="row"><input type="range" id="cx-swr" min="1" max="6" step="0.1" value="1.5">
+          <span class="num" id="cx-swrn">1.5</span></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-hd"><span>Loss budget</span><span id="cx-hd"></span></div>
+      <div class="pad">
+        <svg class="viz" viewBox="0 0 700 90" id="cxsvg" role="img" aria-label="Power delivered versus lost in the feedline" style="background:transparent"></svg>
+        <dl class="kv mt" id="cx-out"></dl>
+        <div id="cx-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2 mt">
+    <div>
+      <h3>The illusion that fools everyone</h3>
+      <p>Your SWR meter lives at the radio, but the mismatch lives at the antenna. The reflected
+      wave has to travel the whole cable twice, losing a little each way — so a lossy line makes a
+      bad antenna look good. Three decibels of cable loss turns a genuine 5:1 antenna into a
+      comfortable-looking 2:1 on the meter in your shack.</p>
+      <p class="note bad" id="cx-illusion"></p>
+    </div>
+    <div>
+      <h3>Buying advice, compressed</h3>
+      <p>Loss rises with frequency and falls with cable diameter. On HF almost anything works. On 2
+      metres, RG-8X is fine for short runs and LMR-400 is the sensible default for a roof. On 70
+      centimetres, thin cable is simply not an option for any real distance — and a run of RG-174
+      pigtail inside a mag mount can quietly cost you more than the antenna gains.</p>
+      <p>Connectors matter too. A corroded PL-259 or a joint that got rained on will show up as
+      creeping loss and drifting SWR, and it will always fail on the day of the event.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 04 patterns ══ -->
+<section id="pat">
+  <div class="shead"><h2><span class="lyr">Step 04 · where the energy goes</span>Patterns, gain and take-off angle</h2>
+    <div class="tag">gain is redistribution</div></div>
+  <p class="max">
+    An antenna cannot create power. All "gain" means is that energy which would have gone somewhere
+    useless has been pushed somewhere useful. A dipole beats an imaginary isotropic radiator by
+    2.15 dB only because it refuses to radiate off its ends. A beam gets 7 dB by refusing to radiate
+    almost anywhere except forward — and then you have to point it.
+  </p>
+  <div class="panel mt">
+    <div class="panel-hd"><span id="pat-title">Half-wave dipole</span><span id="pat-hgt"></span></div>
+    <div class="grid2" style="gap:0;border-bottom:1px solid var(--rule2)">
+      <svg class="viz" viewBox="0 0 480 300" id="elevsvg" role="img" aria-label="Elevation radiation pattern"></svg>
+      <svg class="viz" viewBox="0 0 480 300" id="azimsvg" role="img" aria-label="Azimuth radiation pattern" style="border-left:1px solid var(--rule2)"></svg>
+    </div>
+    <div class="pad">
+      <div class="grid3">
+        <div>
+          <label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Antenna</label>
+          <select id="pat-type">
+            <option value="dip">½λ dipole, horizontal</option>
+            <option value="v25">¼λ vertical + radials</option>
+            <option value="v625">⅝λ vertical + radials</option>
+            <option value="v50">½λ vertical, end fed</option>
+            <option value="y3">3-element beam</option>
+            <option value="y5">5-element beam</option>
+            <option value="y8">8-element beam</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:7px">Height above ground · feet</label>
+          <div class="row"><input type="range" id="pat-h" min="3" max="120" step="1" value="30">
+            <span class="num" id="pat-hn">30 ft</span></div>
+        </div>
+        <div><dl class="kv" id="pat-out"></dl></div>
+      </div>
+      <div id="pat-note"></div>
+    </div>
+  </div>
+
+  <div class="grid3 mt">
+    <div><h3>Height is measured in wavelengths</h3><p>Thirty feet is nothing on 40 metres and nearly
+      five wavelengths on 2 metres. A horizontal antenna's pattern is set by interference with its
+      own reflection in the ground, so the same mast produces completely different lobes depending
+      on the band. Change bands up top and watch the plot rearrange itself without touching the
+      height slider.</p></div>
+    <div><h3>dBi, dBd and marketing</h3><p>dBi compares to a theoretical point source; dBd compares
+      to a dipole. They differ by 2.15 dB, and vendors quote whichever flatters. If a handheld whip
+      claims "3 dB gain" with no reference and no pattern, assume the number is optimistic and the
+      antenna is a compromise — which is fine, because a handheld is a compromise.</p></div>
+    <div><h3>Verticals don't lobe the same way</h3><p>A vertical with its own radial system carries
+      its ground plane with it, so its shape is largely set by the antenna rather than the height.
+      Raising it still helps enormously — but through horizon and obstruction clearance, not by
+      reshaping the lobes.</p></div>
+  </div>
+</section>
+
+<!-- ══ 05 polarisation ══ -->
+<section id="pol">
+  <div class="shead"><h2><span class="lyr">Step 05 · orientation</span>Polarisation</h2>
+    <div class="tag">free decibels, or free losses</div></div>
+  <p class="max">
+    A vertical antenna launches a vertically polarised wave, and a receiving antenna at right angles
+    to it responds very poorly. This costs nothing to get right and a great deal to get wrong, and
+    it's the reason for a convention every new Technician runs into: FM and repeaters are vertical,
+    weak-signal SSB and CW work on VHF is horizontal.
+  </p>
+  <div class="sidebar mt">
+    <div class="panel">
+      <div class="panel-hd">Misalignment</div>
+      <div class="ctrl">
+        <label for="pl-a">Angle between antennas</label>
+        <div class="row"><input type="range" id="pl-a" min="0" max="90" step="1" value="0">
+          <span class="num" id="pl-an">0°</span></div>
+      </div>
+      <div class="ctrl"><dl class="kv" id="pl-out"></dl></div>
+    </div>
+    <div class="panel">
+      <div class="panel-hd"><span>Cross-polarisation loss</span><span>theoretical −20·log(cos θ)</span></div>
+      <svg class="viz" viewBox="0 0 700 210" id="polsvg" role="img" aria-label="Polarisation mismatch"></svg>
+      <div class="pad" style="border-top:1px solid var(--rule2)">
+        <p style="margin:0;font-size:14.5px">In the real world the loss levels off around 20 to 25 dB
+        rather than going to infinity, because reflections off buildings and terrain scramble
+        polarisation on the way. That's why holding a handheld sideways still works across town — and
+        why it stops working the moment you need the last few dB on a distant repeater.</p>
+      </div>
+    </div>
+  </div>
+  <div class="note warn mt" style="max-width:66ch">Hold a handheld upright, not tilted. Tilting it 45° throws away 3 dB before the signal has left the room, and your body absorbs more.</div>
+</section>
+
+<!-- ══ 06 height and range ══ -->
+<section id="link">
+  <div class="shead"><h2><span class="lyr">Step 06 · reach</span>Height, horizon and a link budget</h2>
+    <div class="tag">VHF is line of sight</div></div>
+  <p class="max">
+    On the bands a Technician uses most, signals travel roughly in straight lines with a slight bend
+    around the earth. That gives a hard geometric limit before any amount of power or gain matters,
+    and it is why the single most effective antenna upgrade is almost always <em>up</em>.
+  </p>
+  <div class="grid2 mt">
+    <div class="panel">
+      <div class="panel-hd">Radio horizon</div>
+      <svg class="viz" viewBox="0 0 480 190" id="hzsvg" role="img" aria-label="Radio horizon geometry"></svg>
+      <div class="pad" style="border-top:1px solid var(--rule2)">
+        <div class="row" style="margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:9ch">Your antenna</span>
+          <input type="range" id="h1" min="3" max="300" step="1" value="20"><span class="num" id="h1n">20 ft</span></div>
+        <div class="row">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink3);min-width:9ch">Their antenna</span>
+          <input type="range" id="h2" min="3" max="1000" step="1" value="200"><span class="num" id="h2n">200 ft</span></div>
+        <dl class="kv mt" id="hz-out"></dl>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-hd"><span>Link budget</span><span id="lb-hd"></span></div>
+      <div class="pad">
+        <div class="grid2" style="gap:12px">
+          <div><label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px">Power out · watts</label>
+            <div class="row"><input type="range" id="lb-p" min="0.5" max="100" step="0.5" value="5"><span class="num" id="lb-pn">5 W</span></div></div>
+          <div><label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px">Distance · miles</label>
+            <div class="row"><input type="range" id="lb-d" min="1" max="60" step="1" value="12"><span class="num" id="lb-dn">12 mi</span></div></div>
+          <div><label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px">Your antenna · dBi</label>
+            <div class="row"><input type="range" id="lb-g" min="-6" max="14" step="0.5" value="0"><span class="num" id="lb-gn">0</span></div></div>
+          <div><label style="display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px">Their antenna · dBi</label>
+            <div class="row"><input type="range" id="lb-g2" min="-6" max="14" step="0.5" value="6"><span class="num" id="lb-g2n">6</span></div></div>
+        </div>
+        <dl class="kv mt" id="lb-out"></dl>
+        <div id="lb-note"></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel mt">
+    <div class="panel-hd">If you can only change one thing</div>
+    <div class="scroll"><table id="lb-rank"></table></div>
+  </div>
+  <p class="max mt">
+    Treat these numbers as a comparison tool, not a prediction. The path loss model assumes clear
+    free space; real VHF paths run into hills, trees, buildings and rain, and a wet forest can cost
+    you more than everything in the table above. What the model is good for is ranking your options
+    before you spend money.
+  </p>
+</section>
+
+<!-- ══ 07 build ══ -->
+<section id="build">
+  <div class="shead"><h2><span class="lyr">Step 07 · get wire in the air</span>Four antennas worth building</h2>
+    <div class="tag">dimensions follow your band</div></div>
+  <p class="max">
+    Every dimension below is computed for the band selected at the top of the page. Cut a little
+    long, put it up, measure, trim. The first antenna you build yourself teaches more than a month
+    of reading, including the failures.
+  </p>
+  <div class="cards mt" id="cards"></div>
+  <div class="panel mt">
+    <div class="panel-hd">Honest comparison</div>
+    <div class="scroll"><table id="cmptbl"></table></div>
+  </div>
+  <p class="max mt">
+    If you own a handheld and nothing else, the highest-value purchase is not a more powerful radio.
+    It's almost anything that gets a real antenna away from your body and higher up — a roll-up
+    J-pole in a tree with a length of decent coax will routinely turn an unusable repeater into a
+    full-quieting one, for the price of a pizza.
+  </p>
+</section>
+
+<!-- ══ 08 field notes ══ -->
+<section id="field">
+  <div class="shead"><h2>Things that will bite you</h2><div class="tag">field notes</div></div>
+  <ul class="notes">
+    <li><b>Never transmit without a load</b>Keying up with no antenna, or a disconnected coax, reflects everything straight back into the finals. Modern radios protect themselves, older and cheaper ones don't always. Check the connector before you check anything else.</li>
+    <li><b>Water is the enemy</b>Coax wicks. An unsealed connector at the top of a mast will draw water down the cable over months and quietly ruin the whole run. Seal outdoor joints properly and put a drip loop below the connector.</li>
+    <li><b>Your coax braid is part of the antenna</b>Current can flow back down the outside of the shield, making the feedline radiate. The pattern skews, the SWR changes when you touch the cable, and RF turns up in the shack. A choke balun — even a few turns of coax through a ferrite — usually fixes it.</li>
+    <li><b>Your hand is an antenna component</b>On a handheld, your body is the counterpoise. Grip changes the tuning and absorbs power. This is why the same radio performs differently held at your face and held out at arm's length, and why a tigertail or a real antenna on a cable helps so much.</li>
+    <li><b>Measure at the antenna when you can</b>An analyser at the feedpoint tells the truth. The same analyser at the end of a long run tells you a flattering story. If the two disagree, the cable is the difference — and that difference is loss.</li>
+    <li><b>RF exposure is your responsibility</b>Every amateur station has to be evaluated for RF exposure — the old blanket exemption for hams went away in 2021. For a Technician running low power on VHF it is usually a short calculation and a note in a folder, but it does have to be done, and antenna placement relative to people is the main variable.</li>
+    <li><b>Antennas are seasonal</b>Wet trees detune wire antennas, ice adds weight and changes resonance, and a summer-tuned dipole in a leafy yard reads differently in February. If your SWR shifts a few percent with the weather, nothing is broken.</li>
+    <li><b>A dummy load has a perfect match</b>It's also a resistor, and it radiates essentially nothing. Any time an SWR reading looks suspiciously ideal, ask what's absorbing the power.</li>
+  </ul>
+  <div class="grid2 mt">
+    <div><h3>What to buy first</h3><p>An analyser or a cheap NanoVNA changes everything, because it
+      turns guessing into measuring. Second is good coax. Third is height. A more expensive radio
+      comes a long way after all three.</p></div>
+    <div><h3>What to read next</h3><p>The ARRL Antenna Book is the standard reference and worth the
+      shelf space. For modelling, free versions of NEC-based tools let you build the antenna in
+      software first and see the pattern before you cut anything.</p></div>
+  </div>
+</section>
+
+<footer>
+  Patterns computed numerically over perfect ground; real earth is lossier, especially for low horizontal antennas and for verticals with poor radial systems.<br>
+  Beams modelled as Hansen-Woodyard endfire arrays, which track real Yagi gain and beamwidth closely but are not any specific commercial design.<br>
+  Coax loss uses the standard two-term k₁√f + k₂f model. Path loss is free space only. Cut dimensions are starting points, not final answers.
+</footer>
+</div>
+
+<script>
+"use strict";
+const DEG=Math.PI/180, $=id=>document.getElementById(id);
+const M2FT=3.280839895, FT2M=0.3048;
+const fmtFt=m=>{const t=m*M2FT;const ft=Math.floor(t);const inch=(t-ft)*12;
+  return ft+"′ "+inch.toFixed(1)+"″"};
+const fmtIn=m=>(m*39.3701).toFixed(1)+"″";
+
+/* ═══ global band state ═══ */
+const BANDS=[["40 m",7.10],["15 m",21.10],["10 m",28.40],["6 m",52.0],
+             ["2 m",146.0],["1.25 m",223.5],["70 cm",446.0],["33 cm",915.0]];
+const G={f:146.0, vf:0.95};
+const lam=()=>299.7925/G.f;
+
+$("bands").innerHTML=BANDS.map(b=>'<button data-b="'+b[1]+'"'+(b[1]===146?' aria-pressed="true"':'')+'>'+b[0]+'</button>').join("");
+document.querySelectorAll("#bands button").forEach(b=>b.onclick=()=>{
+  G.f=+b.dataset.b;
+  document.querySelectorAll("#bands button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  $("f-in").value=G.f; $("f-n").textContent=G.f.toFixed(1);
+  allUpdate();
+});
+$("f-in").oninput=e=>{G.f=+e.target.value;$("f-n").textContent=G.f.toFixed(1);
+  document.querySelectorAll("#bands button").forEach(x=>x.setAttribute("aria-pressed",+x.dataset.b===G.f));
+  allUpdate()};
+document.querySelectorAll("[data-vf]").forEach(b=>b.onclick=()=>{
+  G.vf=+b.dataset.vf;
+  document.querySelectorAll("[data-vf]").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  wavelength()});
+
+/* ═══ 00 wavelength ═══ */
+function wavelength(){
+  const L=lam();
+  $("lamread").innerHTML="<em>f</em> "+G.f.toFixed(1)+" MHz &nbsp; <em>λ</em> "+L.toFixed(3)+" m &nbsp; <em>¼λ</em> "+fmtIn(L*G.vf/4);
+  $("lam-hd").textContent="velocity factor "+G.vf.toFixed(2);
+  const rows=[["Full wave λ",1],["Half wave λ/2",0.5],["⅝ wave",0.625],["Quarter wave λ/4",0.25],["Eighth wave λ/8",0.125]];
+  $("cuttbl").innerHTML='<thead><tr><th>Fraction</th><th>Free space</th><th>Cut length ×'+G.vf.toFixed(2)+'</th><th>Inches</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr><td class="k">'+r[0]+'</td><td class="k">'+(L*r[1]).toFixed(3)+' m</td><td class="k">'+
+      fmtFt(L*r[1]*G.vf)+'</td><td class="k">'+fmtIn(L*r[1]*G.vf)+'</td></tr>').join("")+'</tbody>';
+  $("lam-math").textContent=
+    "λ = 300 / f            = 300 / "+G.f.toFixed(1)+"  = "+L.toFixed(3)+" m\n"+
+    "half wave, cut         = "+(468/G.f).toFixed(2)+" ft   ("+fmtFt(L*0.5*G.vf)+")\n"+
+    "quarter wave, cut      = "+(234/G.f).toFixed(2)+" ft   ("+fmtIn(L*0.25*G.vf)+")";
+}
+
+/* ═══ 01 standing wave on the antenna ═══ */
+const RS={L:0.5,t:0};
+$("res-l").oninput=e=>{RS.L=+e.target.value;$("res-ln").textContent=RS.L.toFixed(2)+" λ";resDraw()};
+document.querySelectorAll("[data-rl]").forEach(b=>b.onclick=()=>{
+  RS.L=+b.dataset.rl;$("res-l").value=RS.L;$("res-ln").textContent=RS.L.toFixed(2)+" λ";resDraw()});
+function resSvg(){
+  const W=780,H=300,cx=W/2,wireY=170,amp=95;
+  const half=RS.L/2, span=Math.min(300, 60+RS.L*300);
+  const k=2*Math.PI;
+  const I=z=>Math.sin(k*(half-Math.abs(z)));            // current, z in wavelengths
+  const V=z=>Math.cos(k*(half-Math.abs(z)));            // voltage
+  const px=z=>cx+(z/half)*span;
+  let g='';
+  g+='<line class="ax" x1="40" y1="'+wireY+'" x2="'+(W-40)+'" y2="'+wireY+'"/>';
+  // envelopes + instantaneous
+  const ph=Math.cos(RS.t);
+  const build=(fn,scale)=>{let d1="",d2="",d3="";
+    for(let i=0;i<=160;i++){
+      const z=-half+2*half*i/160, x=px(z), y=wireY-fn(z)*amp*scale, yi=wireY-fn(z)*amp*scale*ph;
+      d1+=(i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);
+      d2+=(i?"L":"M")+x.toFixed(1)+" "+(2*wireY-y).toFixed(1);
+      d3+=(i?"L":"M")+x.toFixed(1)+" "+yi.toFixed(1);
+    } return [d1,d2,d3]};
+  const [vi1,vi2,vi3]=build(z=>Math.abs(V(z)),0.62);
+  g+='<path d="'+vi1+'" fill="none" stroke="var(--refl)" stroke-width="1" opacity=".3"/>';
+  g+='<path d="'+vi3+'" fill="none" stroke="var(--refl)" stroke-width="1.6" opacity=".55"/>';
+  const [c1,c2,c3]=build(z=>Math.abs(I(z)),1);
+  g+='<path d="'+c1+'" fill="none" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="3 3"/>';
+  g+='<path d="'+c3+'" fill="none" stroke="var(--fwd)" stroke-width="2.4"/>';
+  // the wire
+  g+='<line x1="'+px(-half)+'" y1="'+wireY+'" x2="'+px(half)+'" y2="'+wireY+
+     '" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>';
+  g+='<circle cx="'+cx+'" cy="'+wireY+'" r="5" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>';
+  g+='<line x1="'+cx+'" y1="'+wireY+'" x2="'+cx+'" y2="'+(wireY+42)+'" stroke="var(--ink)" stroke-width="2"/>';
+  g+='<text class="tkb" x="'+cx+'" y="'+(wireY+58)+'" text-anchor="middle">FEEDPOINT</text>';
+  g+='<text class="tk" x="'+px(-half)+'" y="'+(wireY-8)+'" text-anchor="middle">END</text>';
+  g+='<text class="tk" x="'+px(half)+'" y="'+(wireY-8)+'" text-anchor="middle">END</text>';
+  g+='<text class="tk" x="44" y="24">CURRENT</text>';
+  g+='<text class="tk" x="44" y="'+(2*wireY-24)+'">VOLTAGE</text>';
+  $("ressvg").innerHTML=g;
+}
+function resDraw(){
+  resSvg();
+  const half=RS.L/2, k=2*Math.PI;
+  const Ifeed=Math.abs(Math.sin(k*half));
+  const near=x=>Math.abs(RS.L-x)<0.04;
+  let Zt,name,note;
+  if(Ifeed<0.06){Zt="several kΩ";name="current node at the feed";
+    note='<div class="note bad">Current at the feedpoint is almost zero and voltage is at a peak. The impedance here is enormous — a radio expecting 50 Ω cannot drive this directly. It still radiates; it just needs a matching network or a different feed point.</div>'}
+  else{const Rr=73/(Ifeed*Ifeed); Zt=Rr<2000?Math.round(Rr)+" Ω-ish":"very high";
+    name=near(0.5)?"half-wave dipole":(near(1.5)?"1½λ, still feedable":(RS.L<0.4?"electrically short":"off resonance"));
+    note=near(0.5)
+      ?'<div class="note good">The classic case. Current peaks exactly at the feedpoint, voltage peaks at the tips, and the feedpoint impedance lands near 73 Ω — close enough to 50 Ω coax to feed directly at about 1.46:1.</div>'
+      :(RS.L<0.4
+        ?'<div class="note warn">Too short to fit a half wave of standing pattern. Feedpoint resistance collapses and a large capacitive reactance appears, so you need a loading coil to cancel it. This is exactly what the coil in a stubby mobile whip is doing — and why it is less efficient.</div>'
+        :'<div class="note">Off resonance. There is reactance at the feedpoint that your radio has to fight. Trim towards ½λ or 1½λ and watch the current maximum walk back to the centre.</div>')}
+  $("res-title").textContent=name.charAt(0).toUpperCase()+name.slice(1);
+  $("res-len").textContent=(RS.L*lam()).toFixed(3)+" m total at "+G.f.toFixed(1)+" MHz  ·  "+fmtFt(RS.L*lam()*G.vf);
+  $("res-out").innerHTML=
+    '<dt>Length</dt><dd>'+RS.L.toFixed(2)+' λ</dd>'+
+    '<dt>Feed current</dt><dd>'+(Ifeed*100).toFixed(0)+'% of maximum</dd>'+
+    '<dt>Feed impedance</dt><dd>'+Zt+'</dd>'+
+    '<dt>Physical</dt><dd>'+fmtFt(RS.L*lam()*G.vf)+'</dd>';
+  $("res-note").innerHTML=note;
+}
+(function anim(){
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  setInterval(()=>{RS.t+=0.13;resSvg()},55);
+})();
+
+/* ═══ 02 feedline standing wave + SWR ═══ */
+const ZS={R:50,X:0,t:0};
+function gamma(R,X){const nr=R-50,ni=X,dr=R+50,di=X;
+  const dd=dr*dr+di*di;
+  return {re:(nr*dr+ni*di)/dd, im:(ni*dr-nr*di)/dd}}
+function swrCalc(R,X){const g=gamma(R,X),m=Math.hypot(g.re,g.im);
+  return {m,ang:Math.atan2(g.im,g.re)/DEG,swr:m>=1?99:(1+m)/(1-m),
+          refl:m*m*100, rl:m>0?-20*Math.log10(m):99, ml:-10*Math.log10(1-m*m)}}
+$("z-r").oninput=e=>{ZS.R=+e.target.value;$("z-rn").textContent=ZS.R+" Ω";swrDraw()};
+$("z-x").oninput=e=>{ZS.X=+e.target.value;$("z-xn").textContent=ZS.X+" Ω";swrDraw()};
+document.querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{
+  const [r,x]=b.dataset.z.split(",").map(Number);ZS.R=r;ZS.X=x;
+  $("z-r").value=r;$("z-x").value=x;$("z-rn").textContent=r+" Ω";$("z-xn").textContent=x+" Ω";swrDraw()});
+function swrSvg(){
+  const W=780,H=250,x0=70,x1=720,mid=118,amp=62;
+  const s=swrCalc(ZS.R,ZS.X), gm=s.m, th=s.ang*DEG;
+  let f="",r="",sum="",e1="",e2="";
+  for(let i=0;i<=200;i++){
+    const u=i/200, x=x0+(x1-x0)*u, z=(1-u)*2.0;   // z = wavelengths from load
+    const vF=Math.cos(ZS.t+2*Math.PI*z);
+    const vR=gm*Math.cos(ZS.t-2*Math.PI*z+th);
+    const env=Math.sqrt(1+gm*gm+2*gm*Math.cos(2*(2*Math.PI*z)-th));
+    f+=(i?"L":"M")+x.toFixed(1)+" "+(mid-vF*amp*0.55).toFixed(1);
+    r+=(i?"L":"M")+x.toFixed(1)+" "+(mid-vR*amp*0.55).toFixed(1);
+    sum+=(i?"L":"M")+x.toFixed(1)+" "+(mid-(vF+vR)*amp*0.55).toFixed(1);
+    e1+=(i?"L":"M")+x.toFixed(1)+" "+(mid-env*amp*0.55).toFixed(1);
+    e2+=(i?"L":"M")+x.toFixed(1)+" "+(mid+env*amp*0.55).toFixed(1);
+  }
+  let g='';
+  g+='<line class="ax" x1="'+x0+'" y1="'+mid+'" x2="'+x1+'" y2="'+mid+'"/>';
+  g+='<path d="'+e1+'" fill="none" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="3 3"/>';
+  g+='<path d="'+e2+'" fill="none" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="3 3"/>';
+  g+='<path d="'+f+'" fill="none" stroke="var(--fwd)" stroke-width="1.5" opacity=".65"/>';
+  g+='<path d="'+r+'" fill="none" stroke="var(--refl)" stroke-width="1.5" opacity=".8"/>';
+  g+='<path d="'+sum+'" fill="none" stroke="var(--ink)" stroke-width="2.4"/>';
+  g+='<rect x="18" y="'+(mid-32)+'" width="48" height="64" fill="var(--sunk)" stroke="var(--rule)"/>';
+  g+='<text class="tk" x="42" y="'+(mid+4)+'" text-anchor="middle">RADIO</text>';
+  g+='<line x1="'+x1+'" y1="'+(mid-42)+'" x2="'+x1+'" y2="'+(mid+42)+'" stroke="var(--ink)" stroke-width="3"/>';
+  g+='<text class="tk" x="'+(x1+2)+'" y="'+(mid+60)+'" text-anchor="middle">ANTENNA</text>';
+  g+='<text class="tk" x="'+x0+'" y="'+(H-16)+'">2 WAVELENGTHS OF COAX \u2014 PEAKS AND TROUGHS SIT STILL, THE WAVES DO NOT</text>';
+  $("swrsvg").innerHTML=g;
+}
+function swrDraw(){
+  swrSvg();
+  const s=swrCalc(ZS.R,ZS.X);
+  $("swr-hd").textContent="Z = "+ZS.R+(ZS.X>=0?" + j":" \u2212 j")+Math.abs(ZS.X)+" Ω";
+  $("swr-out").innerHTML=
+    '<dt>SWR</dt><dd class="big" style="color:'+(s.swr<2?"var(--good)":s.swr<3?"var(--warn)":"var(--refl)")+'">'+s.swr.toFixed(2)+" : 1</dd>"+
+    '<dt>|Γ|</dt><dd>'+s.m.toFixed(3)+' ∠ '+s.ang.toFixed(0)+'°</dd>'+
+    '<dt>Power reflected</dt><dd>'+s.refl.toFixed(1)+'%</dd>'+
+    '<dt>Return loss</dt><dd>'+(s.rl>50?"∞":s.rl.toFixed(1))+' dB</dd>'+
+    '<dt>Mismatch loss</dt><dd>'+s.ml.toFixed(2)+' dB</dd>';
+  const note=s.swr<1.2?'<div class="note good">Essentially all the power crosses into the antenna. Note how the reflected trace collapses and the envelope goes flat — that flat envelope <em>is</em> a 1:1 SWR.</div>'
+    :s.swr<2?'<div class="note good">A perfectly normal working match. '+s.ml.toFixed(2)+' dB of mismatch loss is about '+(s.ml<0.3?"nothing":"a tenth of an S-unit")+' — you would never hear the difference.</div>'
+    :s.swr<3?'<div class="note warn">Usable, but your radio may start reducing power to protect itself. Worth chasing down, mostly because it usually means something is off resonance or a connector is failing.</div>'
+    :'<div class="note bad">'+s.refl.toFixed(0)+'% of the power is turning around at the antenna. Most radios will fold back hard here. Check the obvious things first: connector, cable, element length, and whether the antenna is touching metal.</div>';
+  $("swr-note").innerHTML=note;
+}
+(function(){if(window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  setInterval(()=>{ZS.t+=0.16;swrSvg()},60)})();
+
+/* ═══ 02b trim trainer ═══ */
+const EDGES={7.10:[7.0,7.3],21.10:[21.0,21.45],28.40:[28.0,29.7],52.0:[50,54],
+  146.0:[144,148],223.5:[222,225],446.0:[420,450],915.0:[902,928]};
+const TR={type:"gp45",pct:100,Q:11};
+$("trim-type").onchange=e=>{TR.type=e.target.value;trimDraw()};
+$("trim-l").oninput=e=>{TR.pct=+e.target.value;trimDraw()};
+document.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{
+  TR.Q=+b.dataset.q;document.querySelectorAll("[data-q]").forEach(x=>x.setAttribute("aria-pressed",x===b));trimDraw()});
+function trimDraw(){
+  const R0={gp45:50,gph:36,dip:73}[TR.type];
+  const frac={gp45:0.25,gph:0.25,dip:0.5}[TR.type];
+  const f0=G.f*100/TR.pct;
+  const lo=G.f*0.88, hi=G.f*1.12, W=780,H=260,x0=58,x1=756,y0=24,y1=206;
+  const px=f=>x0+(f-lo)/(hi-lo)*(x1-x0);
+  const py=s=>y1-(Math.min(s,5)-1)/4*(y1-y0);
+  const swrAt=f=>{const X=R0*TR.Q*(f/f0-f0/f);return swrCalc(R0,X).swr};
+  let g='',d='';
+  [1,2,3,4,5].forEach(s=>{g+='<line class="ax" x1="'+x0+'" y1="'+py(s)+'" x2="'+x1+'" y2="'+py(s)+
+    '"/><text class="tk" x="'+(x0-8)+'" y="'+(py(s)+3)+'" text-anchor="end">'+s+':1</text>'});
+  const ed=EDGES[G.f];
+  if(ed&&ed[0]<hi&&ed[1]>lo){
+    const a=Math.max(px(ed[0]),x0),b=Math.min(px(ed[1]),x1);
+    g+='<rect x="'+a+'" y="'+y0+'" width="'+(b-a)+'" height="'+(y1-y0)+'" fill="var(--fwd)" opacity=".07"/>';
+    g+='<text class="tk" x="'+((a+b)/2)+'" y="'+(y0+14)+'" text-anchor="middle" fill="var(--fwd)">YOUR BAND</text>';
+  }
+  for(let i=0;i<=240;i++){const f=lo+(hi-lo)*i/240;d+=(i?"L":"M")+px(f).toFixed(1)+" "+py(swrAt(f)).toFixed(1)}
+  g+='<path d="'+d+'" fill="none" stroke="var(--ink)" stroke-width="2.2"/>';
+  g+='<line x1="'+px(f0)+'" y1="'+y0+'" x2="'+px(f0)+'" y2="'+y1+'" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  g+='<text class="tk" x="'+px(f0)+'" y="'+(y1+16)+'" text-anchor="middle" fill="var(--good)">RESONANT '+f0.toFixed(2)+'</text>';
+  g+='<line x1="'+px(G.f)+'" y1="'+y0+'" x2="'+px(G.f)+'" y2="'+y1+'" stroke="var(--fwd)" stroke-width="1.5"/>';
+  g+='<text class="tk" x="'+px(G.f)+'" y="'+(y1+32)+'" text-anchor="middle" fill="var(--fwd)">TARGET '+G.f.toFixed(2)+'</text>';
+  g+='<line class="axb" x1="'+x0+'" y1="'+y1+'" x2="'+x1+'" y2="'+y1+'"/>';
+  $("trimsvg").innerHTML=g;
+  const cut=lam()*frac*G.vf*TR.pct/100;
+  $("trim-ln").textContent=fmtIn(cut);
+  $("trim-hd").textContent=TR.pct.toFixed(0)+"% of correct length · feedpoint "+R0+" Ω";
+  const here=swrAt(G.f), best=swrCalc(R0,0).swr;
+  const err=(f0-G.f)/G.f*100;
+  $("trim-out").innerHTML='<dl class="kv">'+
+    '<dt>SWR at target</dt><dd class="big" style="color:'+(here<2?"var(--good)":here<3?"var(--warn)":"var(--refl)")+'">'+here.toFixed(2)+' : 1</dd>'+
+    '<dt>Best possible</dt><dd>'+best.toFixed(2)+' : 1 — set by the '+R0+' Ω feedpoint, not by tuning</dd>'+
+    '<dt>Resonance</dt><dd>'+f0.toFixed(2)+' MHz ('+(err>0?"+":"")+err.toFixed(1)+'%)</dd>'+
+    '<dt>Cut length</dt><dd>'+fmtIn(cut)+' &nbsp; '+fmtFt(cut)+'</dd></dl>'+
+    (Math.abs(err)<0.5?'<div class="note good">Resonant right where you want it. The remaining SWR is the feedpoint impedance itself, and no amount of trimming will remove it.</div>'
+     :err<0?'<div class="note warn">Resonance has fallen below your target, which means the element is too long. Trim it — and trim in small bites, because you cannot put it back.</div>'
+     :'<div class="note bad">Resonance is above your target: the element is too short. This is the mistake you cannot fix with scissors. Start over a few percent long.</div>');
+}
+
+/* ═══ 03 coax ═══ */
+const COAX={"RG-174":[1.02,0.0035],"RG-58":[0.372,0.0028],"RG-8X":[0.28,0.0021],
+  "RG-213":[0.19,0.0009],"LMR-400":[0.122,0.00026],"LMR-600":[0.078,0.000187]};
+const CX={type:"RG-8X",len:50,swr:1.5};
+$("cx-type").innerHTML=Object.keys(COAX).map(k=>'<option'+(k==="RG-8X"?" selected":"")+'>'+k+'</option>').join("");
+$("cx-type").onchange=e=>{CX.type=e.target.value;coax()};
+$("cx-len").oninput=e=>{CX.len=+e.target.value;$("cx-lenn").textContent=CX.len+" ft";coax()};
+$("cx-swr").oninput=e=>{CX.swr=+e.target.value;$("cx-swrn").textContent=CX.swr.toFixed(1);coax()};
+function matchedLoss(type,f,ft){const [a,b]=COAX[type];return (a*Math.sqrt(f)+b*f)*ft/100}
+function coax(){
+  const ml=matchedLoss(CX.type,G.f,CX.len);
+  const gm=(CX.swr-1)/(CX.swr+1);
+  const a=Math.pow(10,ml/10);
+  const total=10*Math.log10((a*a-gm*gm)/(a*(1-gm*gm)));
+  const pct=Math.pow(10,-total/10)*100;
+  const gIn=gm*Math.pow(10,-ml/10), swrIn=(1+gIn)/(1-gIn);
+  const W=700,x0=6,x1=694,y=26,h=26;
+  const kept=Math.max(0,Math.min(1,pct/100));
+  let g='<rect x="'+x0+'" y="'+y+'" width="'+((x1-x0)*kept)+'" height="'+h+'" fill="var(--fwd)"/>'+
+    '<rect x="'+(x0+(x1-x0)*kept)+'" y="'+y+'" width="'+((x1-x0)*(1-kept))+'" height="'+h+'" fill="var(--refl)" opacity=".8"/>'+
+    '<text class="tkb" x="'+x0+'" y="'+(y-8)+'" fill="var(--fwd)">'+pct.toFixed(0)+'% REACHES THE ANTENNA</text>'+
+    '<text class="tkb" x="'+x1+'" y="'+(y-8)+'" text-anchor="end" fill="var(--refl)">'+(100-pct).toFixed(0)+'% BECOMES HEAT</text>';
+  $("cxsvg").innerHTML=g;
+  $("cx-hd").textContent=CX.type+" · "+G.f.toFixed(0)+" MHz";
+  $("cx-out").innerHTML=
+    '<dt>Matched loss</dt><dd>'+ml.toFixed(2)+' dB over '+CX.len+' ft</dd>'+
+    '<dt>With SWR '+CX.swr.toFixed(1)+'</dt><dd>'+total.toFixed(2)+' dB total</dd>'+
+    '<dt>Power delivered</dt><dd class="big" style="color:'+(pct>60?"var(--good)":pct>35?"var(--warn)":"var(--refl)")+'">'+pct.toFixed(0)+'%</dd>'+
+    '<dt>Per 100 ft</dt><dd>'+matchedLoss(CX.type,G.f,100).toFixed(2)+' dB</dd>';
+  $("cx-note").innerHTML=ml>3?'<div class="note bad">Over 3 dB of cable loss. You are throwing away more than half your power in the coax alone, in both directions. A thicker cable will help far more than a bigger radio.</div>'
+    :ml>1.5?'<div class="note warn">Noticeable loss. Fine for local work, worth improving before you chase weak signals.</div>'
+    :'<div class="note good">Comfortable. The cable is not your limiting factor here.</div>';
+  $("cx-illusion").textContent="With this run, a genuine "+CX.swr.toFixed(1)+":1 at the antenna reads "+
+    swrIn.toFixed(2)+":1 on a meter at the radio. The worse your cable, the better your antenna looks.";
+  linkBudget();
+}
+
+/* ═══ 04 patterns ═══ */
+const PT={type:"dip",hft:30};
+const VLEN={v25:0.25,v625:0.625,v50:0.5};
+const NEL={y3:[3,0.15],y5:[5,0.18],y8:[8,0.18]};
+function dipEl(a){const s=Math.sin(a);return Math.abs(s)<1e-9?0:Math.abs(Math.cos(Math.PI/2*Math.cos(a))/s)}
+function vertEl(eps,L){const kL=2*Math.PI*L,c=Math.cos(eps);
+  if(c<1e-6)return 0;return Math.abs((Math.cos(kL*Math.sin(eps))-Math.cos(kL))/c)}
+function patF(eps,phi,noGnd){
+  const h=PT.hft*FT2M/lam();
+  const gnd=noGnd?1:2*Math.abs(Math.sin(2*Math.PI*h*Math.sin(eps)));
+  if(PT.type==="dip"){
+    const cosA=Math.cos(eps)*Math.cos(phi);
+    return dipEl(Math.acos(Math.max(-1,Math.min(1,cosA))))*gnd;
+  }
+  if(PT.type[0]==="v") return vertEl(eps,VLEN[PT.type]);
+  const [N,d]=NEL[PT.type], kd=2*Math.PI*d;
+  const cx=Math.cos(eps)*Math.cos(phi), cy=Math.cos(eps)*Math.sin(phi);
+  const psi=kd*cx-(kd+Math.PI/N), sn=Math.sin(psi/2);
+  const af=Math.abs(sn)<1e-9?N:Math.abs(Math.sin(N*psi/2)/sn);
+  return dipEl(Math.acos(Math.max(-1,Math.min(1,cy))))*af*gnd;
+}
+function freeSpaceGain(){
+  if(PT.type[0]==="v") return null;
+  let sum=0,max=0;const dE=1*DEG,dP=3*DEG;
+  for(let e=-89.5;e<90;e+=1)for(let p=0;p<360;p+=3){
+    const f=patF(e*DEG,p*DEG,true);if(f>max)max=f;sum+=f*f*Math.cos(e*DEG)*dE*dP}
+  return 10*Math.log10(4*Math.PI*max*max/sum);
+}
+function patStats(){
+  let sum=0,max=0,dE=1*DEG,dP=3*DEG;
+  for(let e=0.5;e<90;e+=1)for(let p=0;p<360;p+=3){
+    const f=patF(e*DEG,p*DEG);if(f>max)max=f;sum+=f*f*Math.cos(e*DEG)*dE*dP}
+  const dBi=10*Math.log10(4*Math.PI*max*max/sum);
+  // broadside plane for horizontal antennas, any plane for verticals
+  const plane=PT.type==="dip"?Math.PI/2:0;
+  const vals=[];for(let e=0;e<=90;e+=0.5)vals.push({a:e,v:patF(e*DEG,plane)});
+  let lobes=[];
+  for(let i=0;i<vals.length;i++){
+    const pv=i>0?vals[i-1].v:-1, nv=i<vals.length-1?vals[i+1].v:-1;
+    if(vals[i].v>=pv&&vals[i].v>=nv&&vals[i].v>0.25*max) lobes.push(vals[i]);
+  }
+  if(!lobes.length) lobes=[vals.reduce((a,b)=>b.v>a.v?b:a,vals[0])];
+  // azimuth beamwidth at the strongest lobe
+  const top=lobes.reduce((a,b)=>b.v>a.v?b:a,lobes[0]);
+  const best=lobes.find(l=>l.v>=top.v*0.944)||top;
+  let pk=0,pa=0;
+  for(let p=0;p<360;p+=0.5){const v=patF(best.a*DEG,p*DEG);if(v>pk){pk=v;pa=p}}
+  let bw=0;for(let d2=0;d2<180;d2+=0.5){if(patF(best.a*DEG,(pa+d2)*DEG)<pk/Math.SQRT2){bw=2*d2;break}}
+  return {dBi,free:freeSpaceGain(),max,lobes,low:lobes[0].a,best:best.a,bw:bw||360};
+}
+function polar(svgId,pts,opts){
+  const W=480,H=300,cx=opts.half?70:240,cy=opts.half?250:150,Rr=opts.half?185:118;
+  const dB=v=>v<=0?-40:20*Math.log10(v/opts.max);
+  const rr=v=>{const d=dB(v);return Rr*Math.max(0,(d+30)/30)};
+  let g='';
+  [0,-10,-20,-30].forEach(d=>{const r=Rr*(d+30)/30;
+    g+=opts.half?'<path d="M'+(cx+r)+' '+cy+' A'+r+' '+r+' 0 0 0 '+(cx-r*0)+' '+(cy-r)+'" fill="none" class="ax"/>'
+      :'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" class="ax"/>';
+    if(d>-30)g+='<text class="tk" x="'+(cx+(opts.half?4:4))+'" y="'+(cy-r-3)+'">'+d+'</text>'});
+  if(opts.half){
+    [0,15,30,45,60,75,90].forEach(a=>{const t=a*DEG;
+      g+='<line class="ax" x1="'+cx+'" y1="'+cy+'" x2="'+(cx+Rr*Math.cos(t))+'" y2="'+(cy-Rr*Math.sin(t))+'"/>';
+      g+='<text class="tk" x="'+(cx+(Rr+14)*Math.cos(t))+'" y="'+(cy-(Rr+14)*Math.sin(t)+3)+'" text-anchor="middle">'+a+'°</text>'});
+    g+='<line class="axb" x1="'+(cx-14)+'" y1="'+cy+'" x2="'+(cx+Rr+6)+'" y2="'+cy+'"/>';
+    g+='<rect x="'+(cx-14)+'" y="'+cy+'" width="'+(Rr+22)+'" height="8" fill="var(--sunk)"/>';
+  }else{
+    [0,45,90,135,180,225,270,315].forEach(a=>{const t=(a-90)*DEG;
+      g+='<line class="ax" x1="'+cx+'" y1="'+cy+'" x2="'+(cx+Rr*Math.cos(t))+'" y2="'+(cy+Rr*Math.sin(t))+'"/>'});
+    ["FRONT","","","","BACK","","",""].forEach((s,i)=>{if(!s)return;const t=(i*45-90)*DEG;
+      g+='<text class="tk" x="'+(cx+(Rr+18)*Math.cos(t))+'" y="'+(cy+(Rr+18)*Math.sin(t)+3)+'" text-anchor="middle">'+s+'</text>'});
+  }
+  let d="";
+  pts.forEach((p,i)=>{const r=rr(p.v);
+    const x=opts.half?cx+r*Math.cos(p.a*DEG):cx+r*Math.cos((p.a-90)*DEG);
+    const y=opts.half?cy-r*Math.sin(p.a*DEG):cy+r*Math.sin((p.a-90)*DEG);
+    d+=(i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1)});
+  if(!opts.half)d+="Z";
+  g+='<path d="'+d+'" fill="var(--fwd)" fill-opacity=".13" stroke="var(--fwd)" stroke-width="2.2"/>';
+  g+='<text class="tkb" x="14" y="20">'+opts.label+'</text>';
+  $(svgId).innerHTML=g;
+}
+$("pat-type").onchange=e=>{PT.type=e.target.value;patDraw()};
+$("pat-h").oninput=e=>{PT.hft=+e.target.value;$("pat-hn").textContent=PT.hft+" ft";patDraw()};
+function patDraw(){
+  const st=patStats(), isV=PT.type[0]==="v";
+  $("pat-h").disabled=isV;
+  const ep=[];for(let a=0;a<=90;a+=0.5)ep.push({a,v:patF(a*DEG,PT.type==="dip"?Math.PI/2:0)});
+  polar("elevsvg",ep,{max:st.max,half:true,label:"ELEVATION"});
+  const az=[];for(let a=0;a<=360;a+=2)az.push({a,v:patF(st.best*DEG,a*DEG)});
+  polar("azimsvg",az,{max:st.max,half:false,label:"AZIMUTH AT "+st.best.toFixed(0)+"° ELEVATION"});
+  const names={dip:"Half-wave dipole, horizontal",v25:"Quarter-wave vertical",
+    v625:"Five-eighths-wave vertical",v50:"Half-wave vertical",
+    y3:"3-element beam",y5:"5-element beam",y8:"8-element beam"};
+  $("pat-title").textContent=names[PT.type];
+  const hl=PT.hft*FT2M/lam();
+  $("pat-hgt").textContent=isV?"height does not reshape this pattern":PT.hft+" ft = "+hl.toFixed(2)+" λ at "+G.f.toFixed(0)+" MHz";
+  $("pat-out").innerHTML=
+    '<dt>Peak, over ground</dt><dd class="big">'+st.dBi.toFixed(1)+' dBi</dd>'+
+    (st.free!==null?'<dt>Free space</dt><dd>'+st.free.toFixed(1)+' dBi &nbsp;<span style="color:var(--ink3)">'+
+      (st.free-2.15).toFixed(1)+' dBd — the number on the box</span></dd>'
+     :'<dt>In dBd</dt><dd>'+(st.dBi-2.15).toFixed(1)+' dBd, over perfect ground</dd>')+
+    '<dt>Lowest lobe</dt><dd>'+st.low.toFixed(0)+'° above horizon</dd>'+
+    '<dt>Lobes</dt><dd>'+st.lobes.length+'</dd>'+
+    '<dt>Beamwidth</dt><dd>'+(st.bw>=359?"omnidirectional":st.bw.toFixed(0)+"° azimuth")+'</dd>';
+  let n;
+  if(isV) n='<div class="note">A vertical carries its own ground plane, so this shape belongs to the antenna rather than the mast. The '+
+    (PT.type==="v625"?"five-eighths whip squeezes more energy towards the horizon than a quarter wave, which is why it is popular for mobile work — but it needs a good ground plane to deliver it."
+     :PT.type==="v50"?"half-wave end-fed vertical needs no radials to work, which is why roll-up J-poles and slim jims are so convenient."
+     :"quarter wave is the reference case: simple, forgiving, and genuinely omnidirectional.")+'</div>';
+  else if(st.low>45) n='<div class="note bad">Everything is going up. At '+hl.toFixed(2)+
+    ' wavelengths this antenna is a cloud-warmer — fine for short local paths bouncing off the ionosphere on HF, close to useless for reaching a distant repeater on VHF. Raise it.</div>';
+  else if(st.low<20) n='<div class="note good">A genuinely low main lobe at '+st.low.toFixed(0)+
+    '°. This is what height buys you: energy launched along the ground instead of over the head of the station you are trying to reach.</div>';
+  else n='<div class="note">Main lobe at '+st.low.toFixed(0)+'°, which is workable. Every extra half wavelength of height pulls the lowest lobe down further and adds another lobe above it.</div>';
+  if(!isV) n+='<div class="note warn">Two gain numbers, both true. Free space is what a manufacturer prints on the box. Over ground you also collect energy reflected off the earth, which here adds close to the theoretical maximum of 6 dB — because the model assumes perfect ground. Real earth is lossy, so expect 3 to 4 dB in practice, and less over dry sand or rock. What the model gets right is the <em>shape</em>: where the lobes and the nulls land.</div>';
+  $("pat-note").innerHTML=n;
+}
+
+/* ═══ 05 polarisation ═══ */
+$("pl-a").oninput=e=>{polDraw(+e.target.value)};
+function polDraw(a){
+  $("pl-an").textContent=a+"°";
+  const th=a*DEG, ideal=a>=90?99:-20*Math.log10(Math.cos(th));
+  const real=Math.min(ideal,22);
+  const W=700,H=210,cx1=150,cx2=470,cy=105,L=62;
+  let g='';
+  g+='<line x1="'+cx1+'" y1="'+(cy-L)+'" x2="'+cx1+'" y2="'+(cy+L)+'" stroke="var(--fwd)" stroke-width="5" stroke-linecap="round"/>';
+  g+='<text class="tk" x="'+cx1+'" y="'+(cy+L+22)+'" text-anchor="middle">TRANSMIT</text>';
+  const dx=L*Math.sin(th),dy=L*Math.cos(th);
+  g+='<line x1="'+(cx2-dx)+'" y1="'+(cy+dy)+'" x2="'+(cx2+dx)+'" y2="'+(cy-dy)+'" stroke="var(--refl)" stroke-width="5" stroke-linecap="round"/>';
+  g+='<line x1="'+cx2+'" y1="'+(cy-L)+'" x2="'+cx2+'" y2="'+(cy+L)+'" stroke="var(--rule)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  g+='<text class="tk" x="'+cx2+'" y="'+(cy+L+22)+'" text-anchor="middle">RECEIVE</text>';
+  for(let i=0;i<5;i++){const x=cx1+40+i*54;
+    g+='<path d="M'+x+' '+cy+' q13 -16 26 0 q13 16 26 0" fill="none" stroke="var(--fwd)" stroke-width="1.4" opacity="'+(0.5-i*0.06)+'"/>'}
+  const bx=560,bw2=110,bh=12;
+  g+='<rect x="'+bx+'" y="'+(cy-6)+'" width="'+bw2+'" height="'+bh+'" fill="var(--sunk)" stroke="var(--rule)"/>';
+  g+='<rect x="'+bx+'" y="'+(cy-6)+'" width="'+(bw2*Math.max(0,1-real/25))+'" height="'+bh+'" fill="var(--good)"/>';
+  g+='<text class="tk" x="'+(bx+bw2/2)+'" y="'+(cy-14)+'" text-anchor="middle">SIGNAL LEFT</text>';
+  $("polsvg").innerHTML=g;
+  $("pl-out").innerHTML=
+    '<dt>Theoretical loss</dt><dd class="big">'+(a>=90?"∞":ideal.toFixed(1)+" dB")+'</dd>'+
+    '<dt>Realistic</dt><dd>about '+real.toFixed(0)+' dB</dd>'+
+    '<dt>Power through</dt><dd>'+(Math.pow(10,-real/10)*100).toFixed(1)+'%</dd>'+
+    '<dt>S-units</dt><dd>roughly '+(real/6).toFixed(1)+'</dd>';
+}
+
+/* ═══ 06 horizon + link budget ═══ */
+const LB={p:5,d:12,g:0,g2:6,h1:20,h2:200};
+["h1","h2"].forEach(k=>$(k).oninput=e=>{LB[k]=+e.target.value;$(k+"n").textContent=LB[k]+" ft";horizon()});
+[["lb-p","p"," W"],["lb-d","d"," mi"],["lb-g","g",""],["lb-g2","g2",""]].forEach(([id,k,u])=>
+  $(id).oninput=e=>{LB[k]=+e.target.value;$(id+"n").textContent=LB[k]+u;linkBudget()});
+function horizon(){
+  const d1=1.415*Math.sqrt(LB.h1), d2=1.415*Math.sqrt(LB.h2), tot=d1+d2;
+  const W=480,H=190,gy=150;
+  let g='<path d="M0 '+(gy+38)+' Q240 '+(gy-26)+' 480 '+(gy+38)+'" fill="var(--sunk)" stroke="var(--rule)"/>';
+  const x1=70,x2=410, top1=gy-8-Math.min(58,LB.h1/6), top2=gy-14-Math.min(58,LB.h2/20);
+  g+='<line x1="'+x1+'" y1="'+(gy+6)+'" x2="'+x1+'" y2="'+top1+'" stroke="var(--ink)" stroke-width="2.5"/>';
+  g+='<line x1="'+x2+'" y1="'+(gy+2)+'" x2="'+x2+'" y2="'+top2+'" stroke="var(--ink)" stroke-width="2.5"/>';
+  g+='<line x1="'+x1+'" y1="'+top1+'" x2="'+x2+'" y2="'+top2+'" stroke="var(--fwd)" stroke-width="2" stroke-dasharray="5 3"/>';
+  g+='<text class="tk" x="'+x1+'" y="'+(top1-8)+'" text-anchor="middle">'+LB.h1+' FT</text>';
+  g+='<text class="tk" x="'+x2+'" y="'+(top2-8)+'" text-anchor="middle">'+LB.h2+' FT</text>';
+  g+='<text class="tkb" x="240" y="'+(gy+62)+'" text-anchor="middle" fill="var(--fwd)">'+tot.toFixed(1)+' MILES TO THE RADIO HORIZON</text>';
+  $("hzsvg").innerHTML=g;
+  $("hz-out").innerHTML=
+    '<dt>Your horizon</dt><dd>'+d1.toFixed(1)+' mi</dd>'+
+    '<dt>Their horizon</dt><dd>'+d2.toFixed(1)+' mi</dd>'+
+    '<dt>Combined</dt><dd class="big">'+tot.toFixed(1)+' miles</dd>'+
+    '<dt>Rule</dt><dd>1.42 × √height in feet</dd>';
+}
+function linkBudget(){
+  const ptx=10*Math.log10(LB.p*1000);
+  const line=matchedLoss(CX.type,G.f,CX.len);
+  const dkm=LB.d*1.60934;
+  const fspl=32.44+20*Math.log10(G.f)+20*Math.log10(dkm);
+  const prx=ptx-line+LB.g+LB.g2-fspl;
+  const sens=-119, marg=prx-sens;
+  const s9=-93;
+  $("lb-hd").textContent=G.f.toFixed(0)+" MHz · "+CX.type;
+  $("lb-out").innerHTML=
+    '<dt>Transmit</dt><dd>'+ptx.toFixed(1)+' dBm ('+LB.p+' W)</dd>'+
+    '<dt>Feedline</dt><dd>−'+line.toFixed(2)+' dB</dd>'+
+    '<dt>Path loss</dt><dd>−'+fspl.toFixed(1)+' dB over '+LB.d+' mi</dd>'+
+    '<dt>Received</dt><dd class="big" style="color:'+(marg>20?"var(--good)":marg>6?"var(--warn)":"var(--refl)")+'">'+prx.toFixed(1)+' dBm</dd>'+
+    '<dt>Margin</dt><dd>'+marg.toFixed(1)+' dB over a −119 dBm receiver</dd>'+
+    '<dt>S-meter</dt><dd>about S'+Math.max(0,Math.min(9,(9+(prx-s9)/6))).toFixed(0)+(prx>s9?" +"+(prx-s9).toFixed(0)+" dB":"")+'</dd>';
+  $("lb-note").innerHTML=marg>20?'<div class="note good">Comfortable. Free space says this path should be full quieting with room to spare — terrain, not budget, is what will decide it.</div>'
+    :marg>6?'<div class="note warn">Workable but not generous. Any obstruction, rain or body absorption eats this margin quickly.</div>'
+    :'<div class="note bad">Marginal or dead. Before adding power, check whether the path is even within the radio horizon above — geometry beats watts.</div>';
+  const better=matchedLoss("LMR-400",G.f,CX.len);
+  const opts=[
+    ["Double your power",3.0,"5 W to 10 W, or 50 to 100"],
+    ["Ten times your power",10.0,"5 W to 50 W — a whole new radio"],
+    ["Rubber duck → ¼λ mag mount",6.0,"typical real-world jump, free of any power change"],
+    ["Swap coax for LMR-400",Math.max(0,line-better),CX.type+" → LMR-400 over "+CX.len+" ft"],
+    ["Add a 3-element beam",7.7-LB.g,"if you can point it"],
+    ["Get the antenna outside and up",0,"changes whether the path exists at all"]
+  ];
+  $("lb-rank").innerHTML='<thead><tr><th>Change</th><th>Gain</th><th>Notes</th></tr></thead><tbody>'+
+    opts.sort((a,b)=>b[1]-a[1]).map(o=>'<tr><td class="k">'+o[0]+'</td><td class="k" style="color:'+
+      (o[1]>=6?"var(--good)":o[1]>2?"var(--warn)":"var(--ink3)")+'">'+
+      (o[1]>0?"+"+o[1].toFixed(1)+" dB":"—")+'</td><td>'+o[2]+'</td></tr>').join("")+'</tbody>';
+}
+
+/* ═══ 07 build cards ═══ */
+function cards(){
+  const L=lam(), vf=G.vf;
+  const q=L*0.25*vf, hf=L*0.5*vf;
+  const C=[
+    ["Quarter-wave ground plane","The first antenna to build. A vertical element with four radials, fed with coax straight from the shield.",
+      [["Vertical element",fmtIn(q)],["4 radials, 5% longer",fmtIn(q*1.05)],["Radial droop","45° down"],["Feed","centre to element, shield to radials"],["Impedance","≈50 Ω with drooping radials"]],
+      "Flat radials give about 36 Ω and 1.4:1. Sloping them down to 45° raises it to roughly 50 and flattens the match — do that."],
+    ["Half-wave dipole","Two legs, fed in the middle. The reference antenna against which everything else is measured.",
+      [["Each leg",fmtIn(hf/2)],["Total tip to tip",fmtFt(hf)],["Feed","balanced centre, use a choke"],["Impedance","≈73 Ω, so 1.46:1 on 50 Ω coax"],["Pattern","broadside to the wire, null off the ends"]],
+      "Hang it horizontally for SSB and CW, or vertically if you need to work FM repeaters. Add a choke balun at the feedpoint or the coax will radiate."],
+    ["Roll-up J-pole","A half-wave radiator with a quarter-wave matching stub. No radials, packs into a pocket, hangs in a tree.",
+      [["Long radiator",fmtIn(L*0.75*vf)],["Matching stub",fmtIn(L*0.25*vf)],["Spacing","≈"+fmtIn(L*0.02)],["Feed tap","1–2 inches up the stub, adjust for lowest SWR"],["Impedance","50 Ω at the tap"]],
+      "Built from 300 Ω twinlead this weighs nothing and outperforms any handheld whip. The feed tap position is the only fussy part — slide it and watch the SWR."],
+    ["Three-element beam","Reflector, driven element and director on a boom. Gain and rejection, at the cost of having to aim it.",
+      [["Driven element",fmtIn(hf*0.97)],["Reflector, ~5% longer",fmtIn(hf*1.02)],["Director, ~5% shorter",fmtIn(hf*0.92)],["Boom spacing","≈"+fmtIn(L*0.15)+" each"],["Gain","around 7.5 dBi"]],
+      "Element lengths interact strongly, so treat these as a starting point and model or tune. The rejection off the back is often more useful than the forward gain."]
+  ];
+  $("cards").innerHTML=C.map(c=>'<div class="panel"><div class="panel-hd"><span>'+c[0]+'</span><span>'+G.f.toFixed(1)+' MHz</span></div>'+
+    '<div class="pad"><p style="margin-bottom:14px;font-size:14.5px">'+c[1]+'</p>'+
+    '<table>'+c[2].map(r=>'<tr><td class="k" style="width:45%">'+r[0]+'</td><td class="k">'+r[1]+'</td></tr>').join("")+'</table>'+
+    '<div class="note">'+c[3]+'</div></div></div>').join("");
+  $("cmptbl").innerHTML='<thead><tr><th>Antenna</th><th>Gain</th><th>Pattern</th><th>Effort</th><th>Best for</th></tr></thead><tbody>'+
+    [["Handheld rubber duck","−3 to 0 dBi","vague, detuned by your hand","none","being in your pocket"],
+     ["¼λ ground plane","≈5 dBi over ground","omni, low angle","an hour","home base, repeaters"],
+     ["½λ dipole","2.2 dBi free space","two lobes broadside","an hour","reference, SSB, portable"],
+     ["Roll-up J-pole","≈2 dBd","omni","an evening","portable, throw in a tree"],
+     ["⅝λ vertical","≈8 dBi over perfect ground","omni, very low angle","buy it","mobile, flat terrain"],
+     ["3-element beam","≈7.5 dBi","65° forward lobe","a weekend","distant repeaters, SSB, satellites"]]
+    .map(r=>'<tr>'+r.map((c,i)=>'<td'+(i<3?' class="k"':'')+'>'+c+'</td>').join("")+'</tr>').join("")+'</tbody>';
+}
+
+/* ═══ nav + init ═══ */
+const links=[...document.querySelectorAll("nav a")];
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)
+  links.forEach(l=>l.classList.toggle("on",l.getAttribute("href")==="#"+e.target.id))}),
+  {rootMargin:"-96px 0px -70% 0px"});
+document.querySelectorAll("section[id]").forEach(s=>io.observe(s));
+
+function allUpdate(){wavelength();resDraw();trimDraw();coax();patDraw();cards()}
+$("res-ln").textContent="0.50 λ";
+$("h1n").textContent="20 ft";$("h2n").textContent="200 ft";
+allUpdate(); swrDraw(); polDraw(0); horizon(); linkBudget();
+</script>
