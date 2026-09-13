@@ -776,18 +776,20 @@
             <p class="eyebrow">Range set</p>
             <div class="field">
               <label for="blocks-subnets">Starting IP / prefix, one per line</label>
-              <textarea id="blocks-subnets" spellcheck="false" autocomplete="off" aria-describedby="blocks-subnets-hint blocks-error">13.13.24.1/24
-13.14.25.1/24</textarea>
+              <textarea id="blocks-subnets" spellcheck="false" autocomplete="off" aria-describedby="blocks-subnets-hint blocks-error">13.13.24.1/28
+13.14.25.1/27
+13.11.12.1/29
+13.12.12.1/27</textarea>
               <span class="field-hint" id="blocks-subnets-hint">The entered IP is the exact range start; the prefix determines its address count.</span>
             </div>
             <div class="field">
               <label for="blocks-size">IPs per block</label>
-              <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="210" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
+              <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="16" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
               <span class="field-hint" id="blocks-size-hint">Blocks use 16 visual columns, grouped 8 + 8.</span>
             </div>
             <label class="check-control" for="blocks-interleave">
-              <input id="blocks-interleave" type="checkbox">
-              <span class="check-copy"><strong>Interleave across blocks</strong><small>Distribute consecutive IPs round-robin across all calculated blocks.</small></span>
+              <input id="blocks-interleave" type="checkbox" checked>
+              <span class="check-copy"><strong>Interleave across blocks</strong><small>Rotate consecutive IPs across blocks while packing each block to its configured capacity.</small></span>
             </label>
             <div class="error" id="blocks-error" role="alert"></div>
             <div class="helper-note">
@@ -798,14 +800,14 @@
 
           <div class="result-stack" aria-live="polite">
             <div class="block-summary-grid">
-              <div class="summary-item"><span class="summary-label">Total addresses</span><span class="summary-value" id="blocks-total">512</span></div>
-              <div class="summary-item"><span class="summary-label">IPs per block</span><span class="summary-value" id="blocks-capacity">210</span></div>
-              <div class="summary-item"><span class="summary-label">Blocks</span><span class="summary-value" id="blocks-count">3</span></div>
-              <div class="summary-item"><span class="summary-label">Mixed blocks</span><span class="summary-value" id="blocks-mixed">1</span></div>
+              <div class="summary-item"><span class="summary-label">Total addresses</span><span class="summary-value" id="blocks-total">88</span></div>
+              <div class="summary-item"><span class="summary-label">IPs per block</span><span class="summary-value" id="blocks-capacity">16</span></div>
+              <div class="summary-item"><span class="summary-label">Blocks</span><span class="summary-value" id="blocks-count">6</span></div>
+              <div class="summary-item"><span class="summary-label">Mixed blocks</span><span class="summary-value" id="blocks-mixed">6</span></div>
             </div>
 
             <div class="result-card">
-              <div class="result-card-head"><h2>Sorted IP ranges</h2><span id="blocks-ranges-meta">2 ranges · ascending</span></div>
+              <div class="result-card-head"><h2>Sorted IP ranges</h2><span id="blocks-ranges-meta">4 ranges · ascending</span></div>
               <div class="sorted-ranges-wrap">
                 <table class="sorted-ranges-table">
                   <thead><tr><th>Input range</th><th>First IP</th><th>Last IP</th><th>Total IPs</th></tr></thead>
@@ -815,7 +817,7 @@
             </div>
 
             <div class="result-card">
-              <div class="result-card-head"><h2>Block map</h2><span id="blocks-grid-meta">16 columns · 8 + 8</span></div>
+              <div class="result-card-head"><h2>Block map</h2><span id="blocks-grid-meta">16 columns · 8 + 8 · interleaved</span></div>
               <div class="block-map">
                 <div class="block-legend" id="blocks-legend"></div>
                 <div class="block-layout" id="blocks-layout"></div>
@@ -1184,50 +1186,88 @@
         return segments;
       }
 
-      function getInterleavedBlockSegments(subnets, index, blockCount) {
+      function progressionSegments(subnets, firstPosition, stride, count) {
         const segments = [];
+        if (count <= 0) return segments;
         for (const subnet of subnets) {
           const subnetStart = subnet.sequenceStart;
           const subnetEnd = subnetStart + subnet.size - 1;
-          const offsetToBlock = (index - (subnetStart % blockCount) + blockCount) % blockCount;
-          const firstPosition = subnetStart + offsetToBlock;
-          if (firstPosition > subnetEnd) continue;
-          const count = Math.floor((subnetEnd - firstPosition) / blockCount) + 1;
-          const firstOffset = firstPosition - subnetStart;
+          const firstTerm = Math.max(0, Math.ceil((subnetStart - firstPosition) / stride));
+          const lastTerm = Math.min(count - 1, Math.floor((subnetEnd - firstPosition) / stride));
+          if (firstTerm > lastTerm) continue;
+          const segmentFirst = firstPosition + firstTerm * stride;
+          const segmentCount = lastTerm - firstTerm + 1;
+          const firstOffset = segmentFirst - subnetStart;
           segments.push({
             sourceIndex: subnet.sourceIndex,
             cidr: subnet.cidr,
             first: formatIPv4(subnet.network + firstOffset),
-            last: formatIPv4(subnet.network + firstOffset + (count - 1) * blockCount),
-            count,
-            stride: blockCount
+            last: formatIPv4(subnet.network + firstOffset + (segmentCount - 1) * stride),
+            count: segmentCount,
+            stride
           });
         }
         return segments;
       }
 
-      function interleavedMixedCoverage(subnets, blockCount) {
+      function getInterleavedBlockSegments(result, index) {
+        const remainder = result.lastBlockSize;
+        const firstPhaseLength = remainder * result.blockCount;
+        const segments = progressionSegments(result.subnets, index, result.blockCount, remainder);
+        if (index < result.blockCount - 1 && remainder < result.blockSize) {
+          segments.push(...progressionSegments(
+            result.subnets,
+            firstPhaseLength + index,
+            result.blockCount - 1,
+            result.blockSize - remainder
+          ));
+        }
+        return segments;
+      }
+
+      function residueIntervals(start, length, modulus) {
+        if (length <= 0 || modulus <= 0) return [];
+        if (length >= modulus) return [[0, modulus - 1]];
+        const first = start % modulus;
+        const last = first + length - 1;
+        return last < modulus
+          ? [[first, last]]
+          : [[first, modulus - 1], [0, last % modulus]];
+      }
+
+      function interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize) {
         const events = new Map([[0, 0], [blockCount, 0]]);
         const addEvent = (position, delta) => events.set(position, (events.get(position) || 0) + delta);
         const addInterval = (start, end) => {
           addEvent(start, 1);
           addEvent(end + 1, -1);
         };
+        const firstPhaseLength = lastBlockSize * blockCount;
 
         subnets.forEach((subnet) => {
-          const length = Math.min(subnet.size, blockCount);
-          if (length === blockCount) {
-            addInterval(0, blockCount - 1);
-            return;
+          const subnetStart = subnet.sequenceStart;
+          const subnetEnd = subnetStart + subnet.size - 1;
+          const intervals = [];
+          const firstStart = Math.max(subnetStart, 0);
+          const firstEnd = Math.min(subnetEnd, firstPhaseLength - 1);
+          if (firstStart <= firstEnd) {
+            intervals.push(...residueIntervals(firstStart, firstEnd - firstStart + 1, blockCount));
           }
-          const start = subnet.sequenceStart % blockCount;
-          const end = start + length - 1;
-          if (end < blockCount) {
-            addInterval(start, end);
-          } else {
-            addInterval(start, blockCount - 1);
-            addInterval(0, end % blockCount);
+          if (blockCount > 1 && lastBlockSize < blockSize) {
+            const secondStart = Math.max(subnetStart, firstPhaseLength);
+            const secondEnd = subnetEnd;
+            if (secondStart <= secondEnd) {
+              intervals.push(...residueIntervals(secondStart - firstPhaseLength, secondEnd - secondStart + 1, blockCount - 1));
+            }
           }
+          intervals.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+          const merged = [];
+          intervals.forEach(([start, end]) => {
+            const previous = merged[merged.length - 1];
+            if (previous && start <= previous[1] + 1) previous[1] = Math.max(previous[1], end);
+            else merged.push([start, end]);
+          });
+          merged.forEach(([start, end]) => addInterval(start, end));
         });
 
         const ranges = [];
@@ -1265,9 +1305,10 @@
         const blockSize = parseBlockSize(blockSizeValue);
         const blockCount = Math.ceil(total / blockSize);
         if (interleave) {
-          const mixed = interleavedMixedCoverage(subnets, blockCount);
+          const lastBlockSize = total - (blockCount - 1) * blockSize;
+          const mixed = interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize);
           const previewIndices = representativeBlockIndices(blockCount, mixed.sampleIndices);
-          return { subnets, total, blockSize, blockCount, mixedCount: mixed.count, mixedIndices: mixed.sampleIndices, previewIndices, interleave: true };
+          return { subnets, total, blockSize, blockCount, lastBlockSize, mixedCount: mixed.count, mixedIndices: mixed.sampleIndices, previewIndices, interleave: true };
         }
         const mixedSet = new Set();
         let boundary = 0;
@@ -1282,12 +1323,12 @@
 
       function blockSummary(result, index) {
         if (result.interleave) {
-          const count = Math.floor((result.total - 1 - index) / result.blockCount) + 1;
+          const count = index === result.blockCount - 1 ? result.lastBlockSize : result.blockSize;
           return {
             index,
             count,
             partial: count < result.blockSize,
-            segments: getInterleavedBlockSegments(result.subnets, index, result.blockCount)
+            segments: getInterleavedBlockSegments(result, index)
           };
         }
         const start = index * result.blockSize;
@@ -1576,13 +1617,13 @@
         tool({
           name: "plan_ipv4_blocks",
           title: "Plan IPv4 address blocks",
-          description: "Sort IPv4 starting-IP/prefix ranges and divide their combined addresses into fixed-size blocks, either contiguously or round-robin across blocks. Each prefix determines the range length without changing its starting IP.",
+          description: "Sort IPv4 starting-IP/prefix ranges and tightly pack their combined addresses into fixed-size blocks, either contiguously or round-robin across blocks. Each prefix determines the range length without changing its starting IP.",
           inputSchema: {
             type: "object",
             properties: {
               subnets: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
-              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 210 },
-              interleave: { type: "boolean", default: false, description: "Distribute consecutive addresses round-robin across all calculated blocks." }
+              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 16 },
+              interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across blocks while packing every full block to capacity." }
             },
             required: ["subnets"],
             additionalProperties: false
@@ -1590,8 +1631,8 @@
           annotations: { readOnlyHint: true, untrustedContentHint: false },
           execute(input) {
             byId("blocks-subnets").value = input.subnets.join("\n");
-            byId("blocks-size").value = String(input.addressesPerBlock ?? 210);
-            byId("blocks-interleave").checked = input.interleave === true;
+            byId("blocks-size").value = String(input.addressesPerBlock ?? 16);
+            byId("blocks-interleave").checked = input.interleave !== false;
             activatePanel("blocks");
             const result = updateBlocks();
             return {
@@ -1599,7 +1640,7 @@
               addressesPerBlock: result.blockSize,
               visualColumns: 16,
               blockCount: result.blockCount,
-              distribution: result.interleave ? "interleaved" : "contiguous",
+              distribution: result.interleave ? "interleaved-tight" : "contiguous",
               mixedBlockCount: result.mixedCount,
               sortedRanges: result.subnets.map((subnet) => ({
                 input: subnet.cidr,
