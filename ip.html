@@ -470,6 +470,8 @@
       max-width: 100%;
     }
     .block-cell { min-width: 0; border-radius: 1px; background: rgba(73, 230, 194, 0.72); }
+    .block-cell[data-ip] { position: relative; cursor: crosshair; transition: filter 100ms ease, transform 100ms ease; }
+    .block-cell[data-ip]:hover { z-index: 1; filter: brightness(1.35); transform: scale(1.45); }
     .block-gutter { min-width: 0; }
     .block-cell.source-1 { background: rgba(113, 185, 255, 0.76); }
     .block-cell.source-2 { background: rgba(244, 197, 106, 0.78); }
@@ -485,6 +487,31 @@
     .block-segment-range .range-stride { width: 100%; margin-top: 1px; color: var(--muted-2); font-size: 0.61rem; letter-spacing: 0.025em; }
     .block-segment-count { color: #b7cbd0; white-space: nowrap; }
     .block-omitted { align-self: center; color: var(--muted-2); font: 0.72rem/1.3 var(--mono); }
+
+    .ip-tooltip {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 40;
+      display: grid;
+      gap: 3px;
+      width: max-content;
+      max-width: calc(100vw - 20px);
+      padding: 10px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: rgba(8, 25, 29, 0.98);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.46);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition: opacity 90ms ease, transform 90ms ease;
+    }
+    .ip-tooltip.visible { opacity: 1; transform: translateY(0); }
+    .ip-tooltip-label { color: var(--muted-2); font: 0.58rem/1.2 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+    .ip-tooltip-ip { color: var(--accent-strong); font: 650 0.82rem/1.35 var(--mono); }
+    .ip-tooltip-source { color: var(--muted); font: 0.7rem/1.35 var(--mono); }
+    .ip-tooltip-label.source { margin-top: 5px; }
 
     .text-button {
       min-height: 32px;
@@ -776,15 +803,15 @@
             <p class="eyebrow">Range set</p>
             <div class="field">
               <label for="blocks-subnets">Starting IP / prefix, one per line</label>
-              <textarea id="blocks-subnets" spellcheck="false" autocomplete="off" aria-describedby="blocks-subnets-hint blocks-error">13.13.24.1/28
-13.14.25.1/27
-13.11.12.1/29
-13.12.12.1/27</textarea>
+              <textarea id="blocks-subnets" spellcheck="false" autocomplete="off" aria-describedby="blocks-subnets-hint blocks-error">10.10.10.0/27
+10.10.10.64/27
+10.10.10.128/27
+10.10.10.192/27</textarea>
               <span class="field-hint" id="blocks-subnets-hint">The entered IP is the exact range start; the prefix determines its address count.</span>
             </div>
             <div class="field">
               <label for="blocks-size">IPs per block</label>
-              <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="16" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
+              <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="32" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
               <span class="field-hint" id="blocks-size-hint">Blocks use 16 visual columns, grouped 8 + 8.</span>
             </div>
             <label class="check-control" for="blocks-interleave">
@@ -800,10 +827,10 @@
 
           <div class="result-stack" aria-live="polite">
             <div class="block-summary-grid">
-              <div class="summary-item"><span class="summary-label">Total addresses</span><span class="summary-value" id="blocks-total">88</span></div>
-              <div class="summary-item"><span class="summary-label">IPs per block</span><span class="summary-value" id="blocks-capacity">16</span></div>
-              <div class="summary-item"><span class="summary-label">Blocks</span><span class="summary-value" id="blocks-count">6</span></div>
-              <div class="summary-item"><span class="summary-label">Mixed blocks</span><span class="summary-value" id="blocks-mixed">6</span></div>
+              <div class="summary-item"><span class="summary-label">Total addresses</span><span class="summary-value" id="blocks-total">128</span></div>
+              <div class="summary-item"><span class="summary-label">IPs per block</span><span class="summary-value" id="blocks-capacity">32</span></div>
+              <div class="summary-item"><span class="summary-label">Blocks</span><span class="summary-value" id="blocks-count">4</span></div>
+              <div class="summary-item"><span class="summary-label">Mixed blocks</span><span class="summary-value" id="blocks-mixed">4</span></div>
             </div>
 
             <div class="result-card">
@@ -828,6 +855,13 @@
       </section>
     </main>
 
+  </div>
+
+  <div class="ip-tooltip" id="block-ip-tooltip" role="tooltip" aria-hidden="true">
+    <span class="ip-tooltip-label">IP address</span>
+    <strong class="ip-tooltip-ip" id="block-ip-tooltip-address"></strong>
+    <span class="ip-tooltip-label source">Source range</span>
+    <span class="ip-tooltip-source" id="block-ip-tooltip-source"></span>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite">Copied to clipboard</div>
@@ -1356,7 +1390,7 @@
         const cellFragment = document.createDocumentFragment();
         let cellIndex = 0;
         const visualCapacity = Math.ceil(result.blockSize / 16) * 16;
-        const appendCell = (className) => {
+        const appendCell = (className, ip = "", source = "") => {
           if (cellIndex % 16 === 8) {
             const gutter = document.createElement("span");
             gutter.className = "block-gutter";
@@ -1365,12 +1399,22 @@
           }
           const cell = document.createElement("span");
           cell.className = className;
+          if (ip) {
+            cell.dataset.ip = ip;
+            cell.dataset.source = source;
+            cell.setAttribute("aria-label", ip + ", from " + source);
+          }
           cellFragment.appendChild(cell);
           cellIndex += 1;
         };
         summary.segments.forEach((segment) => {
+          const firstIp = parseIPv4(segment.first);
           for (let count = 0; count < segment.count; count += 1) {
-            appendCell("block-cell source-" + (segment.sourceIndex % 6));
+            appendCell(
+              "block-cell source-" + (segment.sourceIndex % 6),
+              formatIPv4(firstIp + count * segment.stride),
+              segment.cidr
+            );
           }
         });
         for (let count = summary.count; count < visualCapacity; count += 1) {
@@ -1405,6 +1449,7 @@
 
       function updateBlocks() {
         try {
+          hideBlockTooltip();
           const result = calculateAddressBlocks(byId("blocks-subnets").value, byId("blocks-size").value, byId("blocks-interleave").checked);
           byId("blocks-total").textContent = formatNumber(result.total);
           byId("blocks-capacity").textContent = formatNumber(result.blockSize);
@@ -1475,6 +1520,35 @@
         });
       }
 
+      function positionBlockTooltip(clientX, clientY) {
+        const tooltip = byId("block-ip-tooltip");
+        const gap = 12;
+        const edge = 8;
+        let left = clientX + gap;
+        let top = clientY - tooltip.offsetHeight - gap;
+        if (left + tooltip.offsetWidth > window.innerWidth - edge) left = clientX - tooltip.offsetWidth - gap;
+        if (top < edge) top = clientY + gap;
+        left = Math.max(edge, Math.min(left, window.innerWidth - tooltip.offsetWidth - edge));
+        top = Math.max(edge, Math.min(top, window.innerHeight - tooltip.offsetHeight - edge));
+        tooltip.style.left = left + "px";
+        tooltip.style.top = top + "px";
+      }
+
+      function showBlockTooltip(cell, clientX, clientY) {
+        byId("block-ip-tooltip-address").textContent = cell.dataset.ip;
+        byId("block-ip-tooltip-source").textContent = cell.dataset.source;
+        const tooltip = byId("block-ip-tooltip");
+        tooltip.classList.add("visible");
+        tooltip.setAttribute("aria-hidden", "false");
+        positionBlockTooltip(clientX, clientY);
+      }
+
+      function hideBlockTooltip() {
+        const tooltip = byId("block-ip-tooltip");
+        tooltip.classList.remove("visible");
+        tooltip.setAttribute("aria-hidden", "true");
+      }
+
       let toastTimer;
       function showToast(message) {
         const toast = byId("toast");
@@ -1499,6 +1573,19 @@
         }
         showToast("Copied to clipboard");
       }
+
+      const blocksLayout = byId("blocks-layout");
+      blocksLayout.addEventListener("pointerover", (event) => {
+        const cell = event.target.closest(".block-cell[data-ip]");
+        if (cell) showBlockTooltip(cell, event.clientX, event.clientY);
+      });
+      blocksLayout.addEventListener("pointermove", (event) => {
+        if (event.target.closest(".block-cell[data-ip]")) positionBlockTooltip(event.clientX, event.clientY);
+      });
+      blocksLayout.addEventListener("pointerout", (event) => {
+        if (event.target.closest(".block-cell[data-ip]") && !event.relatedTarget?.closest?.(".block-cell[data-ip]")) hideBlockTooltip();
+      });
+      blocksLayout.addEventListener("pointerleave", hideBlockTooltip);
 
       document.querySelectorAll(".tab").forEach((tab) => {
         tab.addEventListener("click", () => activatePanel(tab.dataset.panel));
@@ -1622,7 +1709,7 @@
             type: "object",
             properties: {
               subnets: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
-              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 16 },
+              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 32 },
               interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across blocks while packing every full block to capacity." }
             },
             required: ["subnets"],
@@ -1631,7 +1718,7 @@
           annotations: { readOnlyHint: true, untrustedContentHint: false },
           execute(input) {
             byId("blocks-subnets").value = input.subnets.join("\n");
-            byId("blocks-size").value = String(input.addressesPerBlock ?? 16);
+            byId("blocks-size").value = String(input.addressesPerBlock ?? 32);
             byId("blocks-interleave").checked = input.interleave !== false;
             activatePanel("blocks");
             const result = updateBlocks();
