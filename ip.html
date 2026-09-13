@@ -171,6 +171,23 @@
       align-items: start;
     }
 
+    .blocks-workspace { display: grid; gap: 14px; }
+    .blocks-form { display: grid; }
+    .blocks-input-pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+    .blocks-input-card { min-width: 0; padding: 18px; }
+    .blocks-range-card { display: flex; flex-direction: column; }
+    .blocks-range-card .field { flex: 1; }
+    .blocks-range-card textarea { min-height: 190px; height: 100%; }
+    .blocks-range-card .helper-note { margin-top: 12px; }
+    .blocks-settings-card .field { margin-bottom: 0; }
+    .blocks-settings-card .check-stack { gap: 7px; margin-top: 12px; }
+    .blocks-settings-card .check-control { padding: 10px; }
+
     .control-card, .result-card, .sub-card {
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -253,6 +270,15 @@
       cursor: pointer;
     }
     .check-control:hover { background: rgba(73, 230, 194, 0.14); }
+    .check-stack { display: grid; gap: 8px; margin-top: 17px; }
+    .check-stack .check-control { margin-top: 0; }
+    .check-control-dependent {
+      margin-left: 29px;
+      border-color: var(--line);
+      background: rgba(8, 21, 25, 0.58);
+    }
+    .check-control.disabled { opacity: 0.48; cursor: not-allowed; }
+    .check-control.disabled:hover { background: rgba(8, 21, 25, 0.58); }
     .check-control input {
       flex: 0 0 auto;
       width: 18px;
@@ -263,6 +289,7 @@
       accent-color: var(--accent);
       cursor: pointer;
     }
+    .check-control input:disabled { cursor: not-allowed; }
     .check-copy { display: grid; gap: 2px; }
     .check-copy strong { color: var(--text); font-size: 0.86rem; font-weight: 680; }
     .check-copy small { color: var(--muted); font-size: 0.76rem; font-weight: 450; line-height: 1.35; }
@@ -438,6 +465,66 @@
     .sorted-ranges-table td:last-child { color: var(--text); font-weight: 650; }
     .sorted-range-source { display: inline-flex; align-items: center; gap: 8px; }
 
+    .allocation-wrap { overflow-x: auto; }
+    .allocation-table {
+      width: 100%;
+      min-width: 540px;
+      border-collapse: collapse;
+      color: var(--muted);
+      font: 0.73rem/1.35 var(--mono);
+    }
+    .allocation-table th,
+    .allocation-table td { padding: 10px 13px; text-align: center; white-space: nowrap; }
+    .allocation-table th {
+      color: var(--muted-2);
+      background: rgba(5, 16, 20, 0.34);
+      font-size: 0.63rem;
+      font-weight: 650;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .allocation-table tbody tr,
+    .allocation-table tfoot tr { border-top: 1px solid var(--line); }
+    .allocation-table th:first-child,
+    .allocation-table td:first-child { position: sticky; left: 0; z-index: 1; min-width: 150px; background: #0c2025; text-align: left; }
+    .allocation-table thead th:first-child { z-index: 2; background: #0a1b20; }
+    .allocation-table td:first-child { color: #c7d8db; }
+    .allocation-table td:last-child,
+    .allocation-table tfoot td { color: var(--text); font-weight: 650; }
+    .allocation-value.has-addresses { color: var(--accent-strong); background: rgba(73, 230, 194, 0.055); }
+    .allocation-omitted { min-width: 30px; color: var(--muted-2); }
+
+    .packing-explanation { display: grid; gap: 18px; padding: 17px; }
+    .packing-equation {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 9px;
+      padding: 13px;
+      border: 1px solid rgba(73, 230, 194, 0.12);
+      border-radius: 10px;
+      background: rgba(73, 230, 194, 0.055);
+      color: var(--muted);
+      font: 0.76rem/1.4 var(--mono);
+    }
+    .packing-equation strong { color: var(--accent-strong); font-weight: 650; }
+    .packing-equation .operator { color: var(--muted-2); }
+    .packing-stage { display: grid; gap: 10px; }
+    .packing-stage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .packing-stage-head h3 { margin: 0; color: #c7d8db; font-size: 0.78rem; }
+    .packing-stage-head span { color: var(--muted-2); font: 0.65rem/1.3 var(--mono); }
+    .packing-cycle { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 7px; }
+    .packing-hop { min-width: 0; padding: 9px 10px; border-radius: 8px; background: rgba(8, 22, 27, 0.82); }
+    .packing-hop-ip { display: block; overflow-wrap: anywhere; color: var(--muted); font: 0.66rem/1.3 var(--mono); }
+    .packing-hop-block { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--accent-strong); font: 650 0.7rem/1.2 var(--mono); }
+    .packing-capacities { display: grid; gap: 8px; }
+    .packing-capacity-row { display: grid; grid-template-columns: 68px minmax(80px, 1fr) 64px; align-items: center; gap: 10px; color: var(--muted); font: 0.69rem/1.2 var(--mono); }
+    .packing-capacity-track { height: 6px; overflow: hidden; border-radius: 999px; background: rgba(77, 105, 113, 0.2); }
+    .packing-capacity-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(73, 230, 194, 0.55), var(--accent)); }
+    .packing-capacity-value { color: #b7cbd0; text-align: right; }
+    .packing-capacity-omitted { color: var(--muted-2); font: 0.66rem/1.2 var(--mono); text-align: center; }
+
     .block-map { padding: 16px 17px 19px; }
     .block-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 15px; color: var(--muted); font: 0.74rem/1.3 var(--mono); }
     .block-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -457,10 +544,12 @@
       border-radius: 12px;
       background: rgba(9, 24, 29, 0.72);
     }
+    .address-block.eni-view { width: 272px; }
     .address-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
     .address-block-title { font: 650 0.78rem/1 var(--mono); }
     .block-badge { padding: 4px 7px; border-radius: 999px; background: var(--accent-dim); color: var(--accent); font-size: 0.66rem; line-height: 1; }
     .block-badge.partial { background: var(--blue-dim); color: var(--blue); }
+    .block-badge.balanced { background: rgba(200, 153, 255, 0.12); color: #d6b7ff; }
     .block-cells {
       display: grid;
       grid-template-columns: repeat(8, 7px) 2px repeat(8, 7px);
@@ -479,6 +568,54 @@
     .block-cell.source-4 { background: rgba(255, 143, 115, 0.76); }
     .block-cell.source-5 { background: rgba(149, 213, 106, 0.76); }
     .block-cell.empty { background: rgba(77, 105, 113, 0.2); }
+    .eni-management {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+      padding: 7px 8px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 7px;
+      background: rgba(5, 16, 20, 0.42);
+      color: var(--muted);
+      font: 0.61rem/1.25 var(--mono);
+    }
+    .eni-management strong { color: #b7cbd0; font-weight: 650; }
+    .eni-management-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .eni-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .eni-unit {
+      min-width: 0;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(5, 16, 20, 0.34);
+    }
+    .eni-unit.empty { border-style: dashed; background: rgba(5, 16, 20, 0.18); }
+    .eni-unit-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font: 0.59rem/1 var(--mono);
+    }
+    .eni-unit-head strong { color: #c7d8db; font-weight: 650; }
+    .eni-cells {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 2px;
+    }
+    .eni-cells .block-cell { aspect-ratio: 1; }
+    .eni-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 7px;
+      color: var(--muted-2);
+      font: 0.59rem/1.25 var(--mono);
+    }
     .block-segments { display: grid; gap: 5px; margin-top: 10px; }
     .block-segment { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; color: var(--muted); font: 0.67rem/1.35 var(--mono); }
     .block-segment-range { display: flex; min-width: 0; flex-wrap: wrap; }
@@ -585,6 +722,8 @@
       .workspace-title { padding-bottom: 10px; }
       .tabs { overflow-x: auto; }
       .calculator-grid { grid-template-columns: 1fr; }
+      .blocks-input-pair { grid-template-columns: 1fr; }
+      .blocks-range-card textarea { min-height: 150px; }
     }
 
     @media (max-width: 650px) {
@@ -596,6 +735,7 @@
       .tab { padding: 0 10px; }
       .panel { padding: 16px; }
       .control-card { padding: 16px; }
+      .blocks-input-card { padding: 16px; }
       .summary-grid { grid-template-columns: 1fr 1fr; }
       .summary-item:first-child { grid-column: 1 / -1; }
       .detail-grid { grid-template-columns: 1fr; }
@@ -608,6 +748,7 @@
       .block-summary-grid { grid-template-columns: 1fr 1fr; }
       .block-summary-grid .summary-item:first-child { grid-column: auto; }
       .address-block { width: 100%; }
+      .address-block.eni-view { width: 100%; }
       .operation-row { grid-template-columns: 1fr 64px; }
       .operation-row .field:last-child { grid-column: 1 / -1; }
     }
@@ -798,37 +939,59 @@
       </section>
 
       <section class="panel" id="panel-blocks" role="tabpanel" aria-labelledby="tab-blocks" tabindex="0" hidden>
-        <div class="calculator-grid">
-          <form class="control-card" id="blocks-form" novalidate>
-            <p class="eyebrow">Range set</p>
-            <div class="field">
-              <label for="blocks-subnets">Starting IP / prefix, one per line</label>
-              <textarea id="blocks-subnets" spellcheck="false" autocomplete="off" aria-describedby="blocks-subnets-hint blocks-error">10.10.10.0/27
+        <div class="blocks-workspace">
+          <form class="blocks-form" id="blocks-form" novalidate>
+            <div class="blocks-input-pair">
+              <section class="control-card blocks-input-card blocks-range-card" aria-label="IP range input">
+                <p class="eyebrow">IP ranges</p>
+                <div class="field">
+                  <label for="blocks-subnets">Starting IP / prefix, one per line</label>
+                  <textarea id="blocks-subnets" spellcheck="false" autocomplete="off" aria-describedby="blocks-subnets-hint blocks-error">10.10.10.0/27
 10.10.10.64/27
 10.10.10.128/27
 10.10.10.192/27</textarea>
-              <span class="field-hint" id="blocks-subnets-hint">The entered IP is the exact range start; the prefix determines its address count.</span>
+                  <span class="field-hint" id="blocks-subnets-hint">The entered IP is the exact range start; the prefix determines its address count.</span>
+                </div>
+                <div class="helper-note">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"></path></svg>
+                  <span>Ranges are sorted by starting IP before distribution. A block may contain addresses from more than one range.</span>
+                </div>
+              </section>
+
+              <section class="control-card blocks-input-card blocks-settings-card" aria-label="Block allocation settings">
+                <p class="eyebrow">Block settings</p>
+                <div class="field">
+                  <label for="blocks-size">Maximum IPs per block</label>
+                  <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="32" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
+                  <span class="field-hint" id="blocks-size-hint">Capacity limit. Blocks use 16 visual columns, grouped 8 + 8.</span>
+                </div>
+                <div class="check-stack">
+                  <label class="check-control" for="blocks-interleave">
+                    <input id="blocks-interleave" type="checkbox" checked>
+                    <span class="check-copy"><strong>Interleave across blocks</strong><small>Rotate consecutive IPs across the calculated blocks.</small></span>
+                  </label>
+                  <label class="check-control" for="blocks-tight">
+                    <input id="blocks-tight" type="checkbox" checked>
+                    <span class="check-copy"><strong>Tight packing</strong><small>Fill earlier blocks to capacity and leave only the final block partial. Uncheck to balance block sizes evenly.</small></span>
+                  </label>
+                  <label class="check-control" for="blocks-eni-view">
+                    <input id="blocks-eni-view" type="checkbox">
+                    <span class="check-copy"><strong>ENI view</strong><small>Show each block as EC2 network interfaces with up to 30 EIPs on ENI_1 through ENI_7. ENI_0 is reserved for management.</small></span>
+                  </label>
+                  <label class="check-control check-control-dependent disabled" for="blocks-eni-all">
+                    <input id="blocks-eni-all" type="checkbox" disabled>
+                    <span class="check-copy"><strong>Show all ENIs</strong><small>Always display ENI_1 through ENI_7, including interfaces with no assigned EIPs.</small></span>
+                  </label>
+                </div>
+              </section>
             </div>
-            <div class="field">
-              <label for="blocks-size">IPs per block</label>
-              <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="32" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
-              <span class="field-hint" id="blocks-size-hint">Blocks use 16 visual columns, grouped 8 + 8.</span>
-            </div>
-            <label class="check-control" for="blocks-interleave">
-              <input id="blocks-interleave" type="checkbox" checked>
-              <span class="check-copy"><strong>Interleave across blocks</strong><small>Rotate consecutive IPs across blocks while packing each block to its configured capacity.</small></span>
-            </label>
             <div class="error" id="blocks-error" role="alert"></div>
-            <div class="helper-note">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"></path></svg>
-              <span>Ranges are sorted by starting IP before distribution. A block may contain addresses from more than one range.</span>
-            </div>
           </form>
 
           <div class="result-stack" aria-live="polite">
             <div class="block-summary-grid">
               <div class="summary-item"><span class="summary-label">Total addresses</span><span class="summary-value" id="blocks-total">128</span></div>
-              <div class="summary-item"><span class="summary-label">IPs per block</span><span class="summary-value" id="blocks-capacity">32</span></div>
+              <div class="summary-item"><span class="summary-label">Block capacity</span><span class="summary-value" id="blocks-capacity">32</span></div>
               <div class="summary-item"><span class="summary-label">Blocks</span><span class="summary-value" id="blocks-count">4</span></div>
               <div class="summary-item"><span class="summary-label">Mixed blocks</span><span class="summary-value" id="blocks-mixed">4</span></div>
             </div>
@@ -844,7 +1007,33 @@
             </div>
 
             <div class="result-card">
-              <div class="result-card-head"><h2>Block map</h2><span id="blocks-grid-meta">16 columns · 8 + 8 · interleaved</span></div>
+              <div class="result-card-head"><h2>Allocation matrix</h2><span id="allocation-meta">4 of 4 blocks</span></div>
+              <div class="allocation-wrap">
+                <table class="allocation-table">
+                  <thead id="allocation-head"></thead>
+                  <tbody id="allocation-body"></tbody>
+                  <tfoot id="allocation-foot"></tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div class="result-card">
+              <div class="result-card-head"><h2>Packing explanation</h2><span id="packing-mode">Tight · interleaved</span></div>
+              <div class="packing-explanation">
+                <div class="packing-equation" id="packing-equation"></div>
+                <div class="packing-stage">
+                  <div class="packing-stage-head"><h3>Allocation cycle</h3><span id="packing-cycle-note"></span></div>
+                  <div class="packing-cycle" id="packing-cycle"></div>
+                </div>
+                <div class="packing-stage">
+                  <div class="packing-stage-head"><h3>Final capacity</h3><span id="packing-capacity-note"></span></div>
+                  <div class="packing-capacities" id="packing-capacities"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="result-card">
+              <div class="result-card-head"><h2>Block map</h2><span id="blocks-grid-meta">16 columns · 8 + 8 · tight · interleaved</span></div>
               <div class="block-map">
                 <div class="block-legend" id="blocks-legend"></div>
                 <div class="block-layout" id="blocks-layout"></div>
@@ -862,6 +1051,8 @@
     <strong class="ip-tooltip-ip" id="block-ip-tooltip-address"></strong>
     <span class="ip-tooltip-label source">Source range</span>
     <span class="ip-tooltip-source" id="block-ip-tooltip-source"></span>
+    <span class="ip-tooltip-label source">Allocation</span>
+    <span class="ip-tooltip-source" id="block-ip-tooltip-allocation"></span>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite">Copied to clipboard</div>
@@ -1189,9 +1380,9 @@
 
       function parseBlockSize(value) {
         const source = String(value).trim();
-        if (!/^\d+$/.test(source)) throw new Error("IPs per block must be a positive whole number.");
+        if (!/^\d+$/.test(source)) throw new Error("Maximum IPs per block must be a positive whole number.");
         const size = Number(source);
-        if (!Number.isSafeInteger(size) || size < 1 || size > 4096) throw new Error("IPs per block must be between 1 and 4,096.");
+        if (!Number.isSafeInteger(size) || size < 1 || size > 4096) throw new Error("Maximum IPs per block must be between 1 and 4,096.");
         return size;
       }
 
@@ -1245,6 +1436,9 @@
       }
 
       function getInterleavedBlockSegments(result, index) {
+        if (!result.tightPacking) {
+          return progressionSegments(result.subnets, index, result.blockCount, blockCapacity(result, index));
+        }
         const remainder = result.lastBlockSize;
         const firstPhaseLength = remainder * result.blockCount;
         const segments = progressionSegments(result.subnets, index, result.blockCount, remainder);
@@ -1269,7 +1463,7 @@
           : [[first, modulus - 1], [0, last % modulus]];
       }
 
-      function interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize) {
+      function interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize, tightPacking) {
         const events = new Map([[0, 0], [blockCount, 0]]);
         const addEvent = (position, delta) => events.set(position, (events.get(position) || 0) + delta);
         const addInterval = (start, end) => {
@@ -1282,16 +1476,20 @@
           const subnetStart = subnet.sequenceStart;
           const subnetEnd = subnetStart + subnet.size - 1;
           const intervals = [];
-          const firstStart = Math.max(subnetStart, 0);
-          const firstEnd = Math.min(subnetEnd, firstPhaseLength - 1);
-          if (firstStart <= firstEnd) {
-            intervals.push(...residueIntervals(firstStart, firstEnd - firstStart + 1, blockCount));
-          }
-          if (blockCount > 1 && lastBlockSize < blockSize) {
-            const secondStart = Math.max(subnetStart, firstPhaseLength);
-            const secondEnd = subnetEnd;
-            if (secondStart <= secondEnd) {
-              intervals.push(...residueIntervals(secondStart - firstPhaseLength, secondEnd - secondStart + 1, blockCount - 1));
+          if (!tightPacking) {
+            intervals.push(...residueIntervals(subnetStart, subnet.size, blockCount));
+          } else {
+            const firstStart = Math.max(subnetStart, 0);
+            const firstEnd = Math.min(subnetEnd, firstPhaseLength - 1);
+            if (firstStart <= firstEnd) {
+              intervals.push(...residueIntervals(firstStart, firstEnd - firstStart + 1, blockCount));
+            }
+            if (blockCount > 1 && lastBlockSize < blockSize) {
+              const secondStart = Math.max(subnetStart, firstPhaseLength);
+              const secondEnd = subnetEnd;
+              if (secondStart <= secondEnd) {
+                intervals.push(...residueIntervals(secondStart - firstPhaseLength, secondEnd - secondStart + 1, blockCount - 1));
+              }
             }
           }
           intervals.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -1334,30 +1532,53 @@
         return [...indices].sort((a, b) => a - b);
       }
 
-      function calculateAddressBlocks(subnetText, blockSizeValue, interleave = false) {
+      function blockCapacity(result, index) {
+        if (result.tightPacking) {
+          return index === result.blockCount - 1 ? result.lastBlockSize : result.blockSize;
+        }
+        const base = Math.floor(result.total / result.blockCount);
+        const extra = result.total % result.blockCount;
+        return base + (index < extra ? 1 : 0);
+      }
+
+      function blockStartPosition(result, index) {
+        if (result.tightPacking) return index * result.blockSize;
+        const base = Math.floor(result.total / result.blockCount);
+        const extra = result.total % result.blockCount;
+        return index < extra
+          ? index * (base + 1)
+          : extra * (base + 1) + (index - extra) * base;
+      }
+
+      function calculateAddressBlocks(subnetText, blockSizeValue, interleave = false, tightPacking = true) {
         const { subnets, total } = parseSubnetList(subnetText);
         const blockSize = parseBlockSize(blockSizeValue);
         const blockCount = Math.ceil(total / blockSize);
+        const lastBlockSize = tightPacking
+          ? total - (blockCount - 1) * blockSize
+          : Math.floor(total / blockCount);
+        const baseResult = { subnets, total, blockSize, blockCount, lastBlockSize, interleave, tightPacking };
         if (interleave) {
-          const lastBlockSize = total - (blockCount - 1) * blockSize;
-          const mixed = interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize);
+          const mixed = interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize, tightPacking);
           const previewIndices = representativeBlockIndices(blockCount, mixed.sampleIndices);
-          return { subnets, total, blockSize, blockCount, lastBlockSize, mixedCount: mixed.count, mixedIndices: mixed.sampleIndices, previewIndices, interleave: true };
+          return { ...baseResult, mixedCount: mixed.count, mixedIndices: mixed.sampleIndices, previewIndices };
         }
         const mixedSet = new Set();
         let boundary = 0;
         subnets.slice(0, -1).forEach((subnet) => {
           boundary += subnet.size;
-          if (boundary % blockSize !== 0) mixedSet.add(Math.floor(boundary / blockSize));
+          const before = assignedBlockForPosition(baseResult, boundary - 1);
+          const after = assignedBlockForPosition(baseResult, boundary);
+          if (before === after) mixedSet.add(after);
         });
         const mixedIndices = [...mixedSet].sort((a, b) => a - b);
         const previewIndices = representativeBlockIndices(blockCount, mixedIndices);
-        return { subnets, total, blockSize, blockCount, mixedCount: mixedIndices.length, mixedIndices, previewIndices, interleave: false };
+        return { ...baseResult, mixedCount: mixedIndices.length, mixedIndices, previewIndices };
       }
 
       function blockSummary(result, index) {
+        const count = blockCapacity(result, index);
         if (result.interleave) {
-          const count = index === result.blockCount - 1 ? result.lastBlockSize : result.blockSize;
           return {
             index,
             count,
@@ -1365,64 +1586,292 @@
             segments: getInterleavedBlockSegments(result, index)
           };
         }
-        const start = index * result.blockSize;
-        const end = Math.min(result.total - 1, start + result.blockSize - 1);
-        const count = end - start + 1;
+        const start = blockStartPosition(result, index);
+        const end = start + count - 1;
         return { index, count, partial: count < result.blockSize, segments: getBlockSegments(result.subnets, start, end) };
       }
 
-      function renderAddressBlock(result, index) {
+      function compactBlockIndices(result, limit = 12) {
+        if (result.blockCount <= limit) return Array.from({ length: result.blockCount }, (_, index) => index);
+        const indices = new Set([0, 1, 2, result.blockCount - 2, result.blockCount - 1]);
+        const candidates = result.previewIndices.filter((index) => !indices.has(index));
+        const available = Math.max(0, limit - indices.size);
+        for (let slot = 1; slot <= available && candidates.length; slot += 1) {
+          indices.add(candidates[Math.floor(slot * (candidates.length - 1) / (available + 1))]);
+        }
+        return [...indices].sort((a, b) => a - b);
+      }
+
+      function blockColumns(indices) {
+        const columns = [];
+        indices.forEach((index, position) => {
+          if (position > 0 && index - indices[position - 1] > 1) columns.push(null);
+          columns.push(index);
+        });
+        return columns;
+      }
+
+      function sourceCountsForBlock(result, index) {
         const summary = blockSummary(result, index);
-        const card = document.createElement("article");
-        card.className = "address-block";
-        card.setAttribute("aria-label", "Block " + (index + 1) + ", " + summary.count + " addresses from " + summary.segments.length + " range" + (summary.segments.length === 1 ? "" : "s"));
+        const counts = Array(result.subnets.length).fill(0);
+        summary.segments.forEach((segment) => { counts[segment.sourceIndex] += segment.count; });
+        return { summary, counts };
+      }
 
-        const head = document.createElement("div");
-        head.className = "address-block-head";
-        const badge = summary.segments.length > 1
-          ? '<span class="block-badge">Mixed</span>'
-          : summary.partial ? '<span class="block-badge partial">Partial</span>' : "";
-        head.innerHTML = '<span class="address-block-title">Block ' + String(index + 1).padStart(2, "0") + "</span>" + badge;
-        card.appendChild(head);
+      function renderAllocationMatrix(result) {
+        const indices = compactBlockIndices(result);
+        const columns = blockColumns(indices);
+        const blocks = new Map(indices.map((index) => [index, sourceCountsForBlock(result, index)]));
+        byId("allocation-meta").textContent = formatNumber(indices.length) + " of " + formatNumber(result.blockCount) + " blocks";
 
+        const headRow = document.createElement("tr");
+        const sourceHead = document.createElement("th");
+        sourceHead.scope = "col";
+        sourceHead.textContent = "Source range";
+        headRow.appendChild(sourceHead);
+        columns.forEach((index) => {
+          const cell = document.createElement("th");
+          cell.scope = "col";
+          if (index === null) {
+            cell.className = "allocation-omitted";
+            cell.textContent = "…";
+          } else {
+            cell.textContent = "Block " + (index + 1);
+          }
+          headRow.appendChild(cell);
+        });
+        const totalHead = document.createElement("th");
+        totalHead.scope = "col";
+        totalHead.textContent = "Total";
+        headRow.appendChild(totalHead);
+        byId("allocation-head").replaceChildren(headRow);
+
+        const bodyFragment = document.createDocumentFragment();
+        result.subnets.forEach((subnet) => {
+          const row = document.createElement("tr");
+          const source = document.createElement("td");
+          const label = document.createElement("span");
+          label.className = "sorted-range-source";
+          label.innerHTML = '<i class="source-dot source-' + (subnet.sourceIndex % 6) + '"></i><span>' + subnet.cidr + "</span>";
+          source.appendChild(label);
+          row.appendChild(source);
+          columns.forEach((index) => {
+            const cell = document.createElement("td");
+            if (index === null) {
+              cell.className = "allocation-omitted";
+              cell.textContent = "…";
+            } else {
+              const count = blocks.get(index).counts[subnet.sourceIndex];
+              cell.className = "allocation-value" + (count ? " has-addresses" : "");
+              cell.textContent = count ? formatNumber(count) : "—";
+              cell.setAttribute("aria-label", formatNumber(count) + " addresses from " + subnet.cidr + " in Block " + (index + 1));
+            }
+            row.appendChild(cell);
+          });
+          const total = document.createElement("td");
+          total.textContent = formatNumber(subnet.size);
+          row.appendChild(total);
+          bodyFragment.appendChild(row);
+        });
+        byId("allocation-body").replaceChildren(bodyFragment);
+
+        const footRow = document.createElement("tr");
+        const totalLabel = document.createElement("td");
+        totalLabel.textContent = "Block total";
+        footRow.appendChild(totalLabel);
+        columns.forEach((index) => {
+          const cell = document.createElement("td");
+          if (index === null) {
+            cell.className = "allocation-omitted";
+            cell.textContent = "…";
+          } else {
+            cell.textContent = formatNumber(blocks.get(index).summary.count);
+          }
+          footRow.appendChild(cell);
+        });
+        const grandTotal = document.createElement("td");
+        grandTotal.textContent = formatNumber(result.total);
+        footRow.appendChild(grandTotal);
+        byId("allocation-foot").replaceChildren(footRow);
+      }
+
+      function addressAtSequencePosition(subnets, position) {
+        for (const subnet of subnets) {
+          if (position < subnet.sequenceStart + subnet.size) {
+            return {
+              address: formatIPv4(subnet.network + position - subnet.sequenceStart),
+              sourceIndex: subnet.sourceIndex,
+              cidr: subnet.cidr
+            };
+          }
+        }
+        throw new Error("Address position is outside the combined range.");
+      }
+
+      function assignedBlockForPosition(result, position) {
+        if (!result.interleave) {
+          if (result.tightPacking) return Math.floor(position / result.blockSize);
+          const base = Math.floor(result.total / result.blockCount);
+          const extra = result.total % result.blockCount;
+          const largerSection = extra * (base + 1);
+          return position < largerSection
+            ? Math.floor(position / (base + 1))
+            : extra + Math.floor((position - largerSection) / base);
+        }
+        if (!result.tightPacking) return position % result.blockCount;
+        const firstPhaseLength = result.lastBlockSize * result.blockCount;
+        if (position < firstPhaseLength) return position % result.blockCount;
+        return (position - firstPhaseLength) % (result.blockCount - 1);
+      }
+
+      function renderPackingExplanation(result) {
+        byId("packing-mode").textContent = (result.tightPacking ? "Tight" : "Balanced") + (result.interleave ? " · interleaved" : " · contiguous");
+        byId("packing-equation").innerHTML = "<strong>" + formatNumber(result.total) + ' addresses</strong><span class="operator">÷</span><span>' + formatNumber(result.blockSize) + ' per block</span><span class="operator">=</span><strong>' + formatNumber(result.blockCount) + " blocks</strong>";
+
+        const cycleCount = Math.min(result.total, Math.min(12, result.blockCount * 2));
+        byId("packing-cycle-note").textContent = result.interleave
+          ? result.tightPacking ? "Next active block; full blocks leave the rotation" : "Round-robin across evenly sized blocks"
+          : result.tightPacking ? "Fill the current block before advancing" : "Balanced contiguous chunks";
+        const cycleFragment = document.createDocumentFragment();
+        for (let position = 0; position < cycleCount; position += 1) {
+          const address = addressAtSequencePosition(result.subnets, position);
+          const blockIndex = assignedBlockForPosition(result, position);
+          const hop = document.createElement("div");
+          hop.className = "packing-hop";
+          const ip = document.createElement("span");
+          ip.className = "packing-hop-ip";
+          ip.textContent = address.address;
+          const block = document.createElement("span");
+          block.className = "packing-hop-block";
+          block.innerHTML = '<i class="source-dot source-' + (address.sourceIndex % 6) + '"></i>→ Block ' + (blockIndex + 1);
+          hop.append(ip, block);
+          hop.setAttribute("aria-label", address.address + " from " + address.cidr + " goes to Block " + (blockIndex + 1));
+          cycleFragment.appendChild(hop);
+        }
+        byId("packing-cycle").replaceChildren(cycleFragment);
+
+        const balancedBase = Math.floor(result.total / result.blockCount);
+        const balancedExtra = result.total % result.blockCount;
+        const fullBlocks = result.tightPacking
+          ? Math.floor(result.total / result.blockSize)
+          : balancedBase === result.blockSize ? result.blockCount : balancedBase + 1 === result.blockSize ? balancedExtra : 0;
+        const underCapacity = result.blockCount - fullBlocks;
+        byId("packing-capacity-note").textContent = underCapacity
+          ? formatNumber(fullBlocks) + " at capacity · " + formatNumber(underCapacity) + " below capacity"
+          : "All blocks at capacity";
+        const capacityIndices = compactBlockIndices(result, 8);
+        const capacityColumns = blockColumns(capacityIndices);
+        const capacityFragment = document.createDocumentFragment();
+        capacityColumns.forEach((index) => {
+          if (index === null) {
+            const omitted = document.createElement("div");
+            omitted.className = "packing-capacity-omitted";
+            omitted.textContent = "… omitted blocks …";
+            capacityFragment.appendChild(omitted);
+            return;
+          }
+          const count = blockSummary(result, index).count;
+          const row = document.createElement("div");
+          row.className = "packing-capacity-row";
+          row.innerHTML = '<span>Block ' + (index + 1) + '</span><div class="packing-capacity-track"><div class="packing-capacity-fill" style="width:' + (count / result.blockSize * 100) + '%"></div></div><span class="packing-capacity-value">' + formatNumber(count) + " / " + formatNumber(result.blockSize) + "</span>";
+          capacityFragment.appendChild(row);
+        });
+        byId("packing-capacities").replaceChildren(capacityFragment);
+      }
+
+      function addressesForBlock(summary) {
+        const addresses = [];
+        summary.segments.forEach((segment) => {
+          const firstIp = parseIPv4(segment.first);
+          for (let count = 0; count < segment.count; count += 1) {
+            addresses.push({
+              ip: formatIPv4(firstIp + count * segment.stride),
+              source: segment.cidr,
+              sourceIndex: segment.sourceIndex
+            });
+          }
+        });
+        return addresses;
+      }
+
+      function makeBlockCell(address, allocation) {
+        const cell = document.createElement("span");
+        cell.className = address ? "block-cell source-" + (address.sourceIndex % 6) : "block-cell empty";
+        if (address) {
+          cell.dataset.ip = address.ip;
+          cell.dataset.source = address.source;
+          cell.dataset.allocation = allocation;
+          cell.setAttribute("aria-label", address.ip + ", from " + address.source + ", allocated to " + allocation);
+        } else {
+          cell.setAttribute("aria-hidden", "true");
+        }
+        return cell;
+      }
+
+      function renderStandardBlockCells(result, index, addresses) {
         const cells = document.createElement("div");
         cells.className = "block-cells";
         const cellFragment = document.createDocumentFragment();
-        let cellIndex = 0;
         const visualCapacity = Math.ceil(result.blockSize / 16) * 16;
-        const appendCell = (className, ip = "", source = "") => {
+        for (let cellIndex = 0; cellIndex < visualCapacity; cellIndex += 1) {
           if (cellIndex % 16 === 8) {
             const gutter = document.createElement("span");
             gutter.className = "block-gutter";
             gutter.setAttribute("aria-hidden", "true");
             cellFragment.appendChild(gutter);
           }
-          const cell = document.createElement("span");
-          cell.className = className;
-          if (ip) {
-            cell.dataset.ip = ip;
-            cell.dataset.source = source;
-            cell.setAttribute("aria-label", ip + ", from " + source);
-          }
-          cellFragment.appendChild(cell);
-          cellIndex += 1;
-        };
-        summary.segments.forEach((segment) => {
-          const firstIp = parseIPv4(segment.first);
-          for (let count = 0; count < segment.count; count += 1) {
-            appendCell(
-              "block-cell source-" + (segment.sourceIndex % 6),
-              formatIPv4(firstIp + count * segment.stride),
-              segment.cidr
-            );
-          }
-        });
-        for (let count = summary.count; count < visualCapacity; count += 1) {
-          appendCell("block-cell empty");
+          cellFragment.appendChild(makeBlockCell(addresses[cellIndex], "Block " + String(index + 1).padStart(2, "0")));
         }
         cells.appendChild(cellFragment);
-        card.appendChild(cells);
+        return cells;
+      }
 
+      function renderEniBlockCells(index, addresses, showAllEnis) {
+        const body = document.createElement("div");
+        const management = document.createElement("div");
+        management.className = "eni-management";
+        management.innerHTML = '<span><strong>ENI_0</strong> <span class="eni-management-role">· management / control plane</span></span><span>0 EIPs · reserved</span>';
+        body.appendChild(management);
+
+        const activeEniCount = Math.ceil(addresses.length / 30);
+        const eniCount = showAllEnis ? 7 : activeEniCount;
+        const grid = document.createElement("div");
+        grid.className = "eni-grid";
+        for (let eniIndex = 1; eniIndex <= eniCount; eniIndex += 1) {
+          const first = (eniIndex - 1) * 30;
+          const assigned = addresses.slice(first, first + 30);
+          const unit = document.createElement("section");
+          unit.className = "eni-unit" + (assigned.length ? "" : " empty");
+          unit.setAttribute("aria-label", "ENI " + eniIndex + ", " + assigned.length + " of 30 EIPs");
+
+          const unitHead = document.createElement("div");
+          unitHead.className = "eni-unit-head";
+          unitHead.innerHTML = "<strong>ENI_" + eniIndex + "</strong><span>" + assigned.length + " / 30</span>";
+          unit.appendChild(unitHead);
+
+          const cells = document.createElement("div");
+          cells.className = "eni-cells";
+          for (let slot = 0; slot < 30; slot += 1) {
+            cells.appendChild(makeBlockCell(
+              assigned[slot],
+              "Block " + String(index + 1).padStart(2, "0") + " · ENI_" + eniIndex + " · slot " + (slot + 1)
+            ));
+          }
+          unit.appendChild(cells);
+          grid.appendChild(unit);
+        }
+        body.appendChild(grid);
+
+        const foot = document.createElement("div");
+        foot.className = "eni-foot";
+        foot.innerHTML = showAllEnis
+          ? "<span>ENI_1–ENI_7 shown · " + activeEniCount + " active</span><span>30 max / ENI</span>"
+          : "<span>ENI_1–ENI_" + eniCount + " allocate EIPs</span><span>30 max / ENI</span>";
+        body.appendChild(foot);
+        return body;
+      }
+
+      function renderBlockSegments(summary) {
         const segmentList = document.createElement("div");
         segmentList.className = "block-segments";
         summary.segments.forEach((segment) => {
@@ -1443,19 +1892,60 @@
           row.append(range, count);
           segmentList.appendChild(row);
         });
-        card.appendChild(segmentList);
+        return segmentList;
+      }
+
+      function renderAddressBlock(result, index) {
+        const summary = blockSummary(result, index);
+        const addresses = addressesForBlock(summary);
+        const sourceCount = new Set(summary.segments.map((segment) => segment.sourceIndex)).size;
+        const card = document.createElement("article");
+        card.className = "address-block" + (result.eniView ? " eni-view" : "");
+        const eniDetails = result.eniView
+          ? ", ENI_0 reserved and " + (result.showAllEnis ? "7 allocation ENIs shown" : Math.ceil(summary.count / 30) + " allocation ENIs")
+          : "";
+        card.setAttribute("aria-label", "Block " + (index + 1) + ", " + summary.count + " addresses from " + sourceCount + " range" + (sourceCount === 1 ? "" : "s") + eniDetails);
+
+        const head = document.createElement("div");
+        head.className = "address-block-head";
+        const badge = sourceCount > 1
+          ? '<span class="block-badge">Mixed</span>'
+          : !result.tightPacking ? '<span class="block-badge balanced">Balanced</span>'
+          : summary.partial ? '<span class="block-badge partial">Partial</span>' : "";
+        head.innerHTML = '<span class="address-block-title">Block ' + String(index + 1).padStart(2, "0") + "</span>" + badge;
+        card.appendChild(head);
+        card.appendChild(result.eniView
+          ? renderEniBlockCells(index, addresses, result.showAllEnis)
+          : renderStandardBlockCells(result, index, addresses));
+        card.appendChild(renderBlockSegments(summary));
         return card;
       }
 
       function updateBlocks() {
         try {
           hideBlockTooltip();
-          const result = calculateAddressBlocks(byId("blocks-subnets").value, byId("blocks-size").value, byId("blocks-interleave").checked);
+          const result = calculateAddressBlocks(
+            byId("blocks-subnets").value,
+            byId("blocks-size").value,
+            byId("blocks-interleave").checked,
+            byId("blocks-tight").checked
+          );
+          result.eniView = byId("blocks-eni-view").checked;
+          const showAllEnisControl = byId("blocks-eni-all");
+          showAllEnisControl.disabled = !result.eniView;
+          showAllEnisControl.closest(".check-control").classList.toggle("disabled", !result.eniView);
+          result.showAllEnis = result.eniView && showAllEnisControl.checked;
+          byId("blocks-size-hint").textContent = result.eniView
+            ? "Physical ENI capacity: up to 7 allocation ENIs × 30 EIPs, excluding reserved ENI_0."
+            : "Capacity limit. Blocks use 16 visual columns, grouped 8 + 8.";
+          if (result.eniView && result.blockSize > 210) {
+            throw new Error("ENI view supports a maximum of 210 IPs per block: 7 allocation ENIs × 30 EIPs.");
+          }
           byId("blocks-total").textContent = formatNumber(result.total);
           byId("blocks-capacity").textContent = formatNumber(result.blockSize);
           byId("blocks-count").textContent = formatNumber(result.blockCount);
           byId("blocks-mixed").textContent = formatNumber(result.mixedCount);
-          byId("blocks-grid-meta").textContent = "16 columns · 8 + 8" + (result.interleave ? " · interleaved" : "");
+          byId("blocks-grid-meta").textContent = (result.eniView ? "ENI view · 30 max / ENI" + (result.showAllEnis ? " · all 7 shown" : "") + " · " : "16 columns · 8 + 8 · ") + (result.tightPacking ? "tight" : "balanced") + (result.interleave ? " · interleaved" : "");
           byId("blocks-ranges-meta").textContent = formatNumber(result.subnets.length) + " range" + (result.subnets.length === 1 ? "" : "s") + " · ascending";
 
           const ranges = byId("blocks-ranges");
@@ -1478,6 +1968,9 @@
             rangeFragment.appendChild(row);
           });
           ranges.appendChild(rangeFragment);
+
+          renderAllocationMatrix(result);
+          renderPackingExplanation(result);
 
           const legend = byId("blocks-legend");
           legend.innerHTML = "";
@@ -1537,6 +2030,7 @@
       function showBlockTooltip(cell, clientX, clientY) {
         byId("block-ip-tooltip-address").textContent = cell.dataset.ip;
         byId("block-ip-tooltip-source").textContent = cell.dataset.source;
+        byId("block-ip-tooltip-allocation").textContent = cell.dataset.allocation;
         const tooltip = byId("block-ip-tooltip");
         tooltip.classList.add("visible");
         tooltip.setAttribute("aria-hidden", "false");
@@ -1632,6 +2126,9 @@
 
       ["blocks-subnets", "blocks-size"].forEach((id) => byId(id).addEventListener("input", () => { try { updateBlocks(); } catch (_) {} }));
       byId("blocks-interleave").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
+      byId("blocks-tight").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
+      byId("blocks-eni-view").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
+      byId("blocks-eni-all").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-form").addEventListener("submit", (event) => { event.preventDefault(); try { updateBlocks(); } catch (_) {} });
 
       function registerModelTools() {
@@ -1704,13 +2201,16 @@
         tool({
           name: "plan_ipv4_blocks",
           title: "Plan IPv4 address blocks",
-          description: "Sort IPv4 starting-IP/prefix ranges and tightly pack their combined addresses into fixed-size blocks, either contiguously or round-robin across blocks. Each prefix determines the range length without changing its starting IP.",
+          description: "Sort IPv4 starting-IP/prefix ranges and allocate their combined addresses into fixed-size blocks using tight or balanced capacities and contiguous or interleaved ordering. Each prefix determines the range length without changing its starting IP.",
           inputSchema: {
             type: "object",
             properties: {
               subnets: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
               addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 32 },
-              interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across blocks while packing every full block to capacity." }
+              interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across blocks instead of keeping each block contiguous." },
+              tightPacking: { type: "boolean", default: true, description: "Fill earlier blocks to capacity. When false, balance address counts evenly across all blocks." },
+              eniView: { type: "boolean", default: false, description: "Display each block as ENI_0 management plus up to seven allocation ENIs with 30 EIPs each. Requires addressesPerBlock to be 210 or less." },
+              showAllEnis: { type: "boolean", default: false, description: "When ENI view is enabled, display all seven allocation ENIs, including empty ones." }
             },
             required: ["subnets"],
             additionalProperties: false
@@ -1720,6 +2220,9 @@
             byId("blocks-subnets").value = input.subnets.join("\n");
             byId("blocks-size").value = String(input.addressesPerBlock ?? 32);
             byId("blocks-interleave").checked = input.interleave !== false;
+            byId("blocks-tight").checked = input.tightPacking !== false;
+            byId("blocks-eni-view").checked = input.eniView === true;
+            byId("blocks-eni-all").checked = input.showAllEnis === true;
             activatePanel("blocks");
             const result = updateBlocks();
             return {
@@ -1727,7 +2230,10 @@
               addressesPerBlock: result.blockSize,
               visualColumns: 16,
               blockCount: result.blockCount,
-              distribution: result.interleave ? "interleaved-tight" : "contiguous",
+              distribution: result.interleave ? "interleaved" : "contiguous",
+              packing: result.tightPacking ? "tight" : "balanced",
+              eniView: result.eniView,
+              showAllEnis: result.showAllEnis,
               mixedBlockCount: result.mixedCount,
               sortedRanges: result.subnets.map((subnet) => ({
                 input: subnet.cidr,
