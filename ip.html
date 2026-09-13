@@ -482,6 +482,7 @@
     .block-segment-range { display: flex; min-width: 0; flex-wrap: wrap; }
     .block-segment-range span { white-space: nowrap; }
     .block-segment-range .range-separator { padding: 0 2px; color: var(--muted-2); }
+    .block-segment-range .range-stride { width: 100%; margin-top: 1px; color: var(--muted-2); font-size: 0.61rem; letter-spacing: 0.025em; }
     .block-segment-count { color: #b7cbd0; white-space: nowrap; }
     .block-omitted { align-self: center; color: var(--muted-2); font: 0.72rem/1.3 var(--mono); }
 
@@ -784,10 +785,14 @@
               <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="210" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
               <span class="field-hint" id="blocks-size-hint">Blocks use 16 visual columns, grouped 8 + 8.</span>
             </div>
+            <label class="check-control" for="blocks-interleave">
+              <input id="blocks-interleave" type="checkbox">
+              <span class="check-copy"><strong>Interleave across blocks</strong><small>Distribute consecutive IPs round-robin across all calculated blocks.</small></span>
+            </label>
             <div class="error" id="blocks-error" role="alert"></div>
             <div class="helper-note">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"></path></svg>
-              <span>Ranges are sorted by starting IP before being concatenated. A block may contain addresses from more than one range.</span>
+              <span>Ranges are sorted by starting IP before distribution. A block may contain addresses from more than one range.</span>
             </div>
           </form>
 
@@ -1171,11 +1176,77 @@
             cidr: subnet.cidr,
             first: formatIPv4(subnet.network + offset),
             last: formatIPv4(subnet.network + offset + count - 1),
-            count
+            count,
+            stride: 1
           });
           cursor = segmentEnd + 1;
         }
         return segments;
+      }
+
+      function getInterleavedBlockSegments(subnets, index, blockCount) {
+        const segments = [];
+        for (const subnet of subnets) {
+          const subnetStart = subnet.sequenceStart;
+          const subnetEnd = subnetStart + subnet.size - 1;
+          const offsetToBlock = (index - (subnetStart % blockCount) + blockCount) % blockCount;
+          const firstPosition = subnetStart + offsetToBlock;
+          if (firstPosition > subnetEnd) continue;
+          const count = Math.floor((subnetEnd - firstPosition) / blockCount) + 1;
+          const firstOffset = firstPosition - subnetStart;
+          segments.push({
+            sourceIndex: subnet.sourceIndex,
+            cidr: subnet.cidr,
+            first: formatIPv4(subnet.network + firstOffset),
+            last: formatIPv4(subnet.network + firstOffset + (count - 1) * blockCount),
+            count,
+            stride: blockCount
+          });
+        }
+        return segments;
+      }
+
+      function interleavedMixedCoverage(subnets, blockCount) {
+        const events = new Map([[0, 0], [blockCount, 0]]);
+        const addEvent = (position, delta) => events.set(position, (events.get(position) || 0) + delta);
+        const addInterval = (start, end) => {
+          addEvent(start, 1);
+          addEvent(end + 1, -1);
+        };
+
+        subnets.forEach((subnet) => {
+          const length = Math.min(subnet.size, blockCount);
+          if (length === blockCount) {
+            addInterval(0, blockCount - 1);
+            return;
+          }
+          const start = subnet.sequenceStart % blockCount;
+          const end = start + length - 1;
+          if (end < blockCount) {
+            addInterval(start, end);
+          } else {
+            addInterval(start, blockCount - 1);
+            addInterval(0, end % blockCount);
+          }
+        });
+
+        const ranges = [];
+        const addMixedRange = (start, end) => {
+          const previous = ranges[ranges.length - 1];
+          if (previous && previous[1] + 1 === start) previous[1] = end;
+          else ranges.push([start, end]);
+        };
+        let cursor = 0;
+        let coverage = 0;
+        [...events.entries()].sort((a, b) => a[0] - b[0]).forEach(([position, delta]) => {
+          if (position > cursor && coverage >= 2) addMixedRange(cursor, position - 1);
+          coverage += delta;
+          cursor = position;
+        });
+        return {
+          count: ranges.reduce((sum, range) => sum + range[1] - range[0] + 1, 0),
+          sampleIndices: ranges.flatMap((range) => range[0] === range[1] ? [range[0]] : [range[0], range[1]])
+        };
       }
 
       function representativeBlockIndices(blockCount, mixedIndices) {
@@ -1189,10 +1260,15 @@
         return [...indices].sort((a, b) => a - b);
       }
 
-      function calculateAddressBlocks(subnetText, blockSizeValue) {
+      function calculateAddressBlocks(subnetText, blockSizeValue, interleave = false) {
         const { subnets, total } = parseSubnetList(subnetText);
         const blockSize = parseBlockSize(blockSizeValue);
         const blockCount = Math.ceil(total / blockSize);
+        if (interleave) {
+          const mixed = interleavedMixedCoverage(subnets, blockCount);
+          const previewIndices = representativeBlockIndices(blockCount, mixed.sampleIndices);
+          return { subnets, total, blockSize, blockCount, mixedCount: mixed.count, mixedIndices: mixed.sampleIndices, previewIndices, interleave: true };
+        }
         const mixedSet = new Set();
         let boundary = 0;
         subnets.slice(0, -1).forEach((subnet) => {
@@ -1201,10 +1277,19 @@
         });
         const mixedIndices = [...mixedSet].sort((a, b) => a - b);
         const previewIndices = representativeBlockIndices(blockCount, mixedIndices);
-        return { subnets, total, blockSize, blockCount, mixedIndices, previewIndices };
+        return { subnets, total, blockSize, blockCount, mixedCount: mixedIndices.length, mixedIndices, previewIndices, interleave: false };
       }
 
       function blockSummary(result, index) {
+        if (result.interleave) {
+          const count = Math.floor((result.total - 1 - index) / result.blockCount) + 1;
+          return {
+            index,
+            count,
+            partial: count < result.blockSize,
+            segments: getInterleavedBlockSegments(result.subnets, index, result.blockCount)
+          };
+        }
         const start = index * result.blockSize;
         const end = Math.min(result.total - 1, start + result.blockSize - 1);
         const count = end - start + 1;
@@ -1215,7 +1300,7 @@
         const summary = blockSummary(result, index);
         const card = document.createElement("article");
         card.className = "address-block";
-        card.setAttribute("aria-label", "Block " + (index + 1) + ", " + summary.count + " addresses from " + summary.segments.length + " subnet" + (summary.segments.length === 1 ? "" : "s"));
+        card.setAttribute("aria-label", "Block " + (index + 1) + ", " + summary.count + " addresses from " + summary.segments.length + " range" + (summary.segments.length === 1 ? "" : "s"));
 
         const head = document.createElement("div");
         head.className = "address-block-head";
@@ -1261,6 +1346,12 @@
           const range = document.createElement("span");
           range.className = "block-segment-range";
           range.innerHTML = "<span>" + segment.first + '</span><span class="range-separator">–</span><span>' + segment.last + "</span>";
+          if (segment.stride > 1) {
+            const stride = document.createElement("span");
+            stride.className = "range-stride";
+            stride.textContent = "step: +" + formatNumber(segment.stride) + " addresses";
+            range.appendChild(stride);
+          }
           const count = document.createElement("span");
           count.className = "block-segment-count";
           count.textContent = formatNumber(segment.count);
@@ -1273,12 +1364,12 @@
 
       function updateBlocks() {
         try {
-          const result = calculateAddressBlocks(byId("blocks-subnets").value, byId("blocks-size").value);
+          const result = calculateAddressBlocks(byId("blocks-subnets").value, byId("blocks-size").value, byId("blocks-interleave").checked);
           byId("blocks-total").textContent = formatNumber(result.total);
           byId("blocks-capacity").textContent = formatNumber(result.blockSize);
           byId("blocks-count").textContent = formatNumber(result.blockCount);
-          byId("blocks-mixed").textContent = formatNumber(result.mixedIndices.length);
-          byId("blocks-grid-meta").textContent = "16 columns · 8 + 8";
+          byId("blocks-mixed").textContent = formatNumber(result.mixedCount);
+          byId("blocks-grid-meta").textContent = "16 columns · 8 + 8" + (result.interleave ? " · interleaved" : "");
           byId("blocks-ranges-meta").textContent = formatNumber(result.subnets.length) + " range" + (result.subnets.length === 1 ? "" : "s") + " · ascending";
 
           const ranges = byId("blocks-ranges");
@@ -1412,6 +1503,7 @@
       byId("arithmetic-form").addEventListener("submit", (event) => { event.preventDefault(); try { updateArithmetic(); updateDistance(); } catch (_) {} });
 
       ["blocks-subnets", "blocks-size"].forEach((id) => byId(id).addEventListener("input", () => { try { updateBlocks(); } catch (_) {} }));
+      byId("blocks-interleave").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-form").addEventListener("submit", (event) => { event.preventDefault(); try { updateBlocks(); } catch (_) {} });
 
       function registerModelTools() {
@@ -1484,12 +1576,13 @@
         tool({
           name: "plan_ipv4_blocks",
           title: "Plan IPv4 address blocks",
-          description: "Sort IPv4 starting-IP/prefix ranges and divide their combined addresses into fixed-size blocks. Each prefix determines the range length without changing its starting IP.",
+          description: "Sort IPv4 starting-IP/prefix ranges and divide their combined addresses into fixed-size blocks, either contiguously or round-robin across blocks. Each prefix determines the range length without changing its starting IP.",
           inputSchema: {
             type: "object",
             properties: {
               subnets: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
-              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 210 }
+              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 210 },
+              interleave: { type: "boolean", default: false, description: "Distribute consecutive addresses round-robin across all calculated blocks." }
             },
             required: ["subnets"],
             additionalProperties: false
@@ -1498,6 +1591,7 @@
           execute(input) {
             byId("blocks-subnets").value = input.subnets.join("\n");
             byId("blocks-size").value = String(input.addressesPerBlock ?? 210);
+            byId("blocks-interleave").checked = input.interleave === true;
             activatePanel("blocks");
             const result = updateBlocks();
             return {
@@ -1505,7 +1599,8 @@
               addressesPerBlock: result.blockSize,
               visualColumns: 16,
               blockCount: result.blockCount,
-              mixedBlockCount: result.mixedIndices.length,
+              distribution: result.interleave ? "interleaved" : "contiguous",
+              mixedBlockCount: result.mixedCount,
               sortedRanges: result.subnets.map((subnet) => ({
                 input: subnet.cidr,
                 first: formatIPv4(subnet.network),
