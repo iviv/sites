@@ -184,9 +184,82 @@
     .blocks-range-card .field { flex: 1; }
     .blocks-range-card textarea { min-height: 190px; height: 100%; }
     .blocks-range-card .helper-note { margin-top: 12px; }
+    .blocks-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+    .blocks-settings-fields .field { align-content: start; }
     .blocks-settings-card .field { margin-bottom: 0; }
     .blocks-settings-card .check-stack { gap: 7px; margin-top: 12px; }
     .blocks-settings-card .check-control { padding: 10px; }
+
+    .route-map-card { transition: margin-left 160ms ease; }
+    .route-map-card.route-map-inset { margin-left: 216px; }
+
+    .route-float-controls {
+      position: fixed;
+      z-index: 18;
+      display: grid;
+      width: 200px;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(11, 32, 37, 0.97);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(14px);
+    }
+
+    .route-float-field { display: grid; gap: 4px; }
+    .route-float-field > span { color: var(--muted); font: 0.68rem/1.2 var(--mono); }
+    .route-float-controls textarea {
+      width: 100%;
+      height: 86px;
+      min-height: 86px;
+      padding: 7px 9px;
+      border-radius: 7px;
+      font-size: 0.7rem;
+      line-height: 1.4;
+      resize: vertical;
+    }
+    .route-float-controls input[type="number"] {
+      min-height: 36px;
+      padding: 7px 9px;
+      border-radius: 7px;
+      font-size: 0.82rem;
+    }
+
+    .route-float-checks { display: grid; gap: 5px; }
+    .route-float-check {
+      display: flex;
+      align-items: center;
+      min-height: 32px;
+      gap: 7px;
+      padding: 6px 8px;
+      border: 1px solid rgba(73, 230, 194, 0.2);
+      border-radius: 7px;
+      background: var(--accent-dim);
+      color: var(--text);
+      cursor: pointer;
+      font: 0.72rem/1.2 var(--mono);
+    }
+    .route-float-check:hover { background: rgba(73, 230, 194, 0.14); }
+    .route-float-check input {
+      flex: 0 0 auto;
+      width: 16px;
+      height: 16px;
+      min-height: 16px;
+      margin: 0;
+      padding: 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .route-float-check.disabled { opacity: 0.42; cursor: not-allowed; }
+    .route-float-check.disabled:hover { background: var(--accent-dim); }
+    .route-float-check input:disabled { cursor: not-allowed; }
+    .route-float-error {
+      display: none;
+      color: var(--danger);
+      font: 0.67rem/1.35 var(--mono);
+    }
+    .route-float-error.visible { display: block; }
 
     .control-card, .result-card, .sub-card {
       border: 1px solid var(--line);
@@ -240,6 +313,7 @@
     }
 
     input.has-suffix { padding-right: 52px; }
+    input.has-wide-suffix { padding-right: 78px; }
     input::placeholder { color: #4f686e; }
     input:hover { border-color: rgba(145, 191, 202, 0.31); }
     input:focus { border-color: var(--line-strong); background: rgba(2, 11, 14, 0.88); box-shadow: 0 0 0 4px rgba(73, 230, 194, 0.06); outline: 0; }
@@ -432,7 +506,7 @@
 
     .block-summary-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 1px;
       overflow: hidden;
       border: 1px solid var(--line);
@@ -724,6 +798,8 @@
       .calculator-grid { grid-template-columns: 1fr; }
       .blocks-input-pair { grid-template-columns: 1fr; }
       .blocks-range-card textarea { min-height: 150px; }
+      .route-float-controls { display: none !important; }
+      .route-map-card.route-map-inset { margin-left: 0; }
     }
 
     @media (max-width: 650px) {
@@ -736,6 +812,7 @@
       .panel { padding: 16px; }
       .control-card { padding: 16px; }
       .blocks-input-card { padding: 16px; }
+      .blocks-settings-fields { grid-template-columns: 1fr; }
       .summary-grid { grid-template-columns: 1fr 1fr; }
       .summary-item:first-child { grid-column: 1 / -1; }
       .detail-grid { grid-template-columns: 1fr; }
@@ -780,13 +857,13 @@
       <div class="workspace-head">
         <div class="workspace-title">
           <h1>IPv4 network calculator</h1>
-          <p>Subnet boundaries, address ranges, IP arithmetic, and block planning.</p>
+          <p>Subnet boundaries, address ranges, IP arithmetic, and route planning.</p>
         </div>
         <div class="tabs" role="tablist" aria-label="Calculator tools">
           <button class="tab" id="tab-subnet" type="button" role="tab" aria-selected="true" aria-controls="panel-subnet" data-panel="subnet">Subnet</button>
           <button class="tab" id="tab-range" type="button" role="tab" aria-selected="false" aria-controls="panel-range" data-panel="range">Range</button>
           <button class="tab" id="tab-arithmetic" type="button" role="tab" aria-selected="false" aria-controls="panel-arithmetic" data-panel="arithmetic">Arithmetic</button>
-          <button class="tab" id="tab-blocks" type="button" role="tab" aria-selected="false" aria-controls="panel-blocks" data-panel="blocks">Blocks</button>
+          <button class="tab" id="tab-blocks" type="button" role="tab" aria-selected="false" aria-controls="panel-blocks" data-panel="blocks">Routes</button>
         </div>
       </div>
 
@@ -954,29 +1031,36 @@
                 </div>
                 <div class="helper-note">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"></path></svg>
-                  <span>Ranges are sorted by starting IP before distribution. A block may contain addresses from more than one range.</span>
+                  <span>Ranges are sorted by starting IP before distribution. A route may contain addresses from more than one range.</span>
                 </div>
               </section>
 
-              <section class="control-card blocks-input-card blocks-settings-card" aria-label="Block allocation settings">
-                <p class="eyebrow">Block settings</p>
-                <div class="field">
-                  <label for="blocks-size">Maximum IPs per block</label>
-                  <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="32" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
-                  <span class="field-hint" id="blocks-size-hint">Capacity limit. Blocks use 16 visual columns, grouped 8 + 8.</span>
+              <section class="control-card blocks-input-card blocks-settings-card" aria-label="Route allocation settings">
+                <p class="eyebrow">Route settings</p>
+                <div class="blocks-settings-fields">
+                  <div class="field">
+                    <label for="blocks-size">Egress route width</label>
+                    <div class="input-wrap"><input id="blocks-size" class="has-suffix" value="32" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-size-hint blocks-error"><span class="input-suffix">IPs</span></div>
+                    <span class="field-hint" id="blocks-size-hint">Maximum capacity per route.</span>
+                  </div>
+                  <div class="field">
+                    <label for="blocks-min-routes">Minimum routes</label>
+                    <div class="input-wrap"><input id="blocks-min-routes" class="has-suffix has-wide-suffix" value="1" min="1" max="4096" step="1" spellcheck="false" autocomplete="off" inputmode="numeric" aria-describedby="blocks-min-routes-hint blocks-error"><span class="input-suffix">routes</span></div>
+                    <span class="field-hint" id="blocks-min-routes-hint">Applied only when the natural route count is lower.</span>
+                  </div>
                 </div>
                 <div class="check-stack">
                   <label class="check-control" for="blocks-interleave">
                     <input id="blocks-interleave" type="checkbox" checked>
-                    <span class="check-copy"><strong>Interleave across blocks</strong><small>Rotate consecutive IPs across the calculated blocks.</small></span>
+                    <span class="check-copy"><strong>Interleave across routes</strong><small>Rotate consecutive IPs across the calculated routes.</small></span>
                   </label>
                   <label class="check-control" for="blocks-tight">
                     <input id="blocks-tight" type="checkbox" checked>
-                    <span class="check-copy"><strong>Tight packing</strong><small>Fill earlier blocks to capacity and leave only the final block partial. Uncheck to balance block sizes evenly.</small></span>
+                    <span class="check-copy"><strong>Tight packing</strong><small id="blocks-tight-hint">Fill earlier routes to capacity and leave only the final route partial. Uncheck to balance route sizes evenly.</small></span>
                   </label>
                   <label class="check-control" for="blocks-eni-view">
                     <input id="blocks-eni-view" type="checkbox">
-                    <span class="check-copy"><strong>ENI view</strong><small>Show each block as EC2 network interfaces with up to 30 EIPs on ENI_1 through ENI_7. ENI_0 is reserved for management.</small></span>
+                    <span class="check-copy"><strong>ENI view</strong><small>Show each route as EC2 network interfaces with up to 30 EIPs on ENI_1 through ENI_7. ENI_0 is reserved for management.</small></span>
                   </label>
                   <label class="check-control check-control-dependent disabled" for="blocks-eni-all">
                     <input id="blocks-eni-all" type="checkbox" disabled>
@@ -991,9 +1075,10 @@
           <div class="result-stack" aria-live="polite">
             <div class="block-summary-grid">
               <div class="summary-item"><span class="summary-label">Total addresses</span><span class="summary-value" id="blocks-total">128</span></div>
-              <div class="summary-item"><span class="summary-label">Block capacity</span><span class="summary-value" id="blocks-capacity">32</span></div>
-              <div class="summary-item"><span class="summary-label">Blocks</span><span class="summary-value" id="blocks-count">4</span></div>
-              <div class="summary-item"><span class="summary-label">Mixed blocks</span><span class="summary-value" id="blocks-mixed">4</span></div>
+              <div class="summary-item"><span class="summary-label">Egress route width</span><span class="summary-value" id="blocks-capacity">32</span></div>
+              <div class="summary-item"><span class="summary-label">Actual egress width</span><span class="summary-value" id="blocks-actual-capacity">32</span></div>
+              <div class="summary-item"><span class="summary-label">Routes</span><span class="summary-value" id="blocks-count">4</span></div>
+              <div class="summary-item"><span class="summary-label">Mixed routes</span><span class="summary-value" id="blocks-mixed">4</span></div>
             </div>
 
             <div class="result-card">
@@ -1007,7 +1092,7 @@
             </div>
 
             <div class="result-card">
-              <div class="result-card-head"><h2>Allocation matrix</h2><span id="allocation-meta">4 of 4 blocks</span></div>
+              <div class="result-card-head"><h2>Allocation matrix</h2><span id="allocation-meta">4 of 4 routes</span></div>
               <div class="allocation-wrap">
                 <table class="allocation-table">
                   <thead id="allocation-head"></thead>
@@ -1032,8 +1117,8 @@
               </div>
             </div>
 
-            <div class="result-card">
-              <div class="result-card-head"><h2>Block map</h2><span id="blocks-grid-meta">16 columns · 8 + 8 · tight · interleaved</span></div>
+            <div class="result-card route-map-card" id="blocks-map-card">
+              <div class="result-card-head"><h2>Route map</h2><span id="blocks-grid-meta">16 columns · 8 + 8 · tight · interleaved</span></div>
               <div class="block-map">
                 <div class="block-legend" id="blocks-legend"></div>
                 <div class="block-layout" id="blocks-layout"></div>
@@ -1045,6 +1130,31 @@
     </main>
 
   </div>
+
+  <form class="route-float-controls" id="route-float-controls" aria-label="Floating route controls" hidden novalidate>
+    <label class="route-float-field" for="float-blocks-subnets">
+      <span>Ranges</span>
+      <textarea id="float-blocks-subnets" rows="4" spellcheck="false" autocomplete="off" aria-describedby="route-float-error">10.10.10.0/27
+10.10.10.64/27
+10.10.10.128/27
+10.10.10.192/27</textarea>
+    </label>
+    <label class="route-float-field" for="float-blocks-size">
+      <span>Width</span>
+      <input id="float-blocks-size" type="number" value="32" min="1" max="4096" step="1" inputmode="numeric" aria-describedby="route-float-error">
+    </label>
+    <label class="route-float-field" for="float-blocks-min-routes">
+      <span>Min routes</span>
+      <input id="float-blocks-min-routes" type="number" value="1" min="1" max="4096" step="1" inputmode="numeric" aria-describedby="route-float-error">
+    </label>
+    <div class="route-float-checks">
+      <label class="route-float-check" for="float-blocks-interleave"><input id="float-blocks-interleave" type="checkbox" checked>Interleave</label>
+      <label class="route-float-check" for="float-blocks-tight"><input id="float-blocks-tight" type="checkbox" checked>Tight</label>
+      <label class="route-float-check" for="float-blocks-eni-view"><input id="float-blocks-eni-view" type="checkbox">ENI</label>
+      <label class="route-float-check disabled" for="float-blocks-eni-all"><input id="float-blocks-eni-all" type="checkbox" disabled>All 7</label>
+    </div>
+    <div class="route-float-error" id="route-float-error" role="alert"></div>
+  </form>
 
   <div class="ip-tooltip" id="block-ip-tooltip" role="tooltip" aria-hidden="true">
     <span class="ip-tooltip-label">IP address</span>
@@ -1380,10 +1490,18 @@
 
       function parseBlockSize(value) {
         const source = String(value).trim();
-        if (!/^\d+$/.test(source)) throw new Error("Maximum IPs per block must be a positive whole number.");
+        if (!/^\d+$/.test(source)) throw new Error("Egress route width must be a positive whole number.");
         const size = Number(source);
-        if (!Number.isSafeInteger(size) || size < 1 || size > 4096) throw new Error("Maximum IPs per block must be between 1 and 4,096.");
+        if (!Number.isSafeInteger(size) || size < 1 || size > 4096) throw new Error("Egress route width must be between 1 and 4,096 IPs.");
         return size;
+      }
+
+      function parseMinimumRoutes(value) {
+        const source = String(value).trim();
+        if (!/^\d+$/.test(source)) throw new Error("Minimum routes must be a positive whole number.");
+        const count = Number(source);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 4096) throw new Error("Minimum routes must be between 1 and 4,096.");
+        return count;
       }
 
       function getBlockSegments(subnets, start, end) {
@@ -1550,16 +1668,32 @@
           : extra * (base + 1) + (index - extra) * base;
       }
 
-      function calculateAddressBlocks(subnetText, blockSizeValue, interleave = false, tightPacking = true) {
+      function calculateAddressBlocks(subnetText, blockSizeValue, minimumRoutesValue = 1, interleave = false, tightPacking = true) {
         const { subnets, total } = parseSubnetList(subnetText);
         const blockSize = parseBlockSize(blockSizeValue);
-        const blockCount = Math.ceil(total / blockSize);
-        const lastBlockSize = tightPacking
+        const minimumRoutes = parseMinimumRoutes(minimumRoutesValue);
+        const naturalBlockCount = Math.ceil(total / blockSize);
+        const blockCount = Math.max(naturalBlockCount, minimumRoutes);
+        const minimumApplied = blockCount > naturalBlockCount;
+        const effectiveTightPacking = tightPacking && !minimumApplied;
+        const lastBlockSize = effectiveTightPacking
           ? total - (blockCount - 1) * blockSize
           : Math.floor(total / blockCount);
-        const baseResult = { subnets, total, blockSize, blockCount, lastBlockSize, interleave, tightPacking };
+        const baseResult = {
+          subnets,
+          total,
+          blockSize,
+          blockCount,
+          naturalBlockCount,
+          minimumRoutes,
+          minimumApplied,
+          requestedTightPacking: tightPacking,
+          lastBlockSize,
+          interleave,
+          tightPacking: effectiveTightPacking
+        };
         if (interleave) {
-          const mixed = interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize, tightPacking);
+          const mixed = interleavedMixedCoverage(subnets, blockCount, blockSize, lastBlockSize, effectiveTightPacking);
           const previewIndices = representativeBlockIndices(blockCount, mixed.sampleIndices);
           return { ...baseResult, mixedCount: mixed.count, mixedIndices: mixed.sampleIndices, previewIndices };
         }
@@ -1622,7 +1756,7 @@
         const indices = compactBlockIndices(result);
         const columns = blockColumns(indices);
         const blocks = new Map(indices.map((index) => [index, sourceCountsForBlock(result, index)]));
-        byId("allocation-meta").textContent = formatNumber(indices.length) + " of " + formatNumber(result.blockCount) + " blocks";
+        byId("allocation-meta").textContent = formatNumber(indices.length) + " of " + formatNumber(result.blockCount) + " routes";
 
         const headRow = document.createElement("tr");
         const sourceHead = document.createElement("th");
@@ -1636,7 +1770,7 @@
             cell.className = "allocation-omitted";
             cell.textContent = "…";
           } else {
-            cell.textContent = "Block " + (index + 1);
+            cell.textContent = "Route " + (index + 1);
           }
           headRow.appendChild(cell);
         });
@@ -1664,7 +1798,7 @@
               const count = blocks.get(index).counts[subnet.sourceIndex];
               cell.className = "allocation-value" + (count ? " has-addresses" : "");
               cell.textContent = count ? formatNumber(count) : "—";
-              cell.setAttribute("aria-label", formatNumber(count) + " addresses from " + subnet.cidr + " in Block " + (index + 1));
+              cell.setAttribute("aria-label", formatNumber(count) + " addresses from " + subnet.cidr + " in Route " + (index + 1));
             }
             row.appendChild(cell);
           });
@@ -1677,7 +1811,7 @@
 
         const footRow = document.createElement("tr");
         const totalLabel = document.createElement("td");
-        totalLabel.textContent = "Block total";
+        totalLabel.textContent = "Route total";
         footRow.appendChild(totalLabel);
         columns.forEach((index) => {
           const cell = document.createElement("td");
@@ -1725,13 +1859,15 @@
       }
 
       function renderPackingExplanation(result) {
-        byId("packing-mode").textContent = (result.tightPacking ? "Tight" : "Balanced") + (result.interleave ? " · interleaved" : " · contiguous");
-        byId("packing-equation").innerHTML = "<strong>" + formatNumber(result.total) + ' addresses</strong><span class="operator">÷</span><span>' + formatNumber(result.blockSize) + ' per block</span><span class="operator">=</span><strong>' + formatNumber(result.blockCount) + " blocks</strong>";
+        byId("packing-mode").textContent = (result.minimumApplied ? "Minimum applied · balanced" : result.tightPacking ? "Tight" : "Balanced") + (result.interleave ? " · interleaved" : " · contiguous");
+        byId("packing-equation").innerHTML = "<strong>" + formatNumber(result.total) + ' addresses</strong><span class="operator">÷</span><span>' + formatNumber(result.blockSize) + ' width</span><span class="operator">=</span><strong>' + formatNumber(result.naturalBlockCount) + ' natural route' + (result.naturalBlockCount === 1 ? "" : "s") + '</strong><span class="operator">max</span><span>minimum ' + formatNumber(result.minimumRoutes) + '</span><span class="operator">=</span><strong>' + formatNumber(result.blockCount) + " routes</strong>";
 
         const cycleCount = Math.min(result.total, Math.min(12, result.blockCount * 2));
-        byId("packing-cycle-note").textContent = result.interleave
-          ? result.tightPacking ? "Next active block; full blocks leave the rotation" : "Round-robin across evenly sized blocks"
-          : result.tightPacking ? "Fill the current block before advancing" : "Balanced contiguous chunks";
+        byId("packing-cycle-note").textContent = result.minimumApplied
+          ? result.interleave ? "Minimum applied; round-robin across balanced routes" : "Minimum applied; balanced contiguous chunks"
+          : result.interleave
+            ? result.tightPacking ? "Next active route; full routes leave the rotation" : "Round-robin across evenly sized routes"
+            : result.tightPacking ? "Fill the current route before advancing" : "Balanced contiguous chunks";
         const cycleFragment = document.createDocumentFragment();
         for (let position = 0; position < cycleCount; position += 1) {
           const address = addressAtSequencePosition(result.subnets, position);
@@ -1743,9 +1879,9 @@
           ip.textContent = address.address;
           const block = document.createElement("span");
           block.className = "packing-hop-block";
-          block.innerHTML = '<i class="source-dot source-' + (address.sourceIndex % 6) + '"></i>→ Block ' + (blockIndex + 1);
+          block.innerHTML = '<i class="source-dot source-' + (address.sourceIndex % 6) + '"></i>→ Route ' + (blockIndex + 1);
           hop.append(ip, block);
-          hop.setAttribute("aria-label", address.address + " from " + address.cidr + " goes to Block " + (blockIndex + 1));
+          hop.setAttribute("aria-label", address.address + " from " + address.cidr + " goes to Route " + (blockIndex + 1));
           cycleFragment.appendChild(hop);
         }
         byId("packing-cycle").replaceChildren(cycleFragment);
@@ -1757,8 +1893,8 @@
           : balancedBase === result.blockSize ? result.blockCount : balancedBase + 1 === result.blockSize ? balancedExtra : 0;
         const underCapacity = result.blockCount - fullBlocks;
         byId("packing-capacity-note").textContent = underCapacity
-          ? formatNumber(fullBlocks) + " at capacity · " + formatNumber(underCapacity) + " below capacity"
-          : "All blocks at capacity";
+          ? formatNumber(fullBlocks) + " routes at capacity · " + formatNumber(underCapacity) + " below capacity"
+          : "All routes at capacity";
         const capacityIndices = compactBlockIndices(result, 8);
         const capacityColumns = blockColumns(capacityIndices);
         const capacityFragment = document.createDocumentFragment();
@@ -1766,14 +1902,14 @@
           if (index === null) {
             const omitted = document.createElement("div");
             omitted.className = "packing-capacity-omitted";
-            omitted.textContent = "… omitted blocks …";
+            omitted.textContent = "… omitted routes …";
             capacityFragment.appendChild(omitted);
             return;
           }
           const count = blockSummary(result, index).count;
           const row = document.createElement("div");
           row.className = "packing-capacity-row";
-          row.innerHTML = '<span>Block ' + (index + 1) + '</span><div class="packing-capacity-track"><div class="packing-capacity-fill" style="width:' + (count / result.blockSize * 100) + '%"></div></div><span class="packing-capacity-value">' + formatNumber(count) + " / " + formatNumber(result.blockSize) + "</span>";
+          row.innerHTML = '<span>Route ' + (index + 1) + '</span><div class="packing-capacity-track"><div class="packing-capacity-fill" style="width:' + (count / result.blockSize * 100) + '%"></div></div><span class="packing-capacity-value">' + formatNumber(count) + " / " + formatNumber(result.blockSize) + "</span>";
           capacityFragment.appendChild(row);
         });
         byId("packing-capacities").replaceChildren(capacityFragment);
@@ -1820,7 +1956,7 @@
             gutter.setAttribute("aria-hidden", "true");
             cellFragment.appendChild(gutter);
           }
-          cellFragment.appendChild(makeBlockCell(addresses[cellIndex], "Block " + String(index + 1).padStart(2, "0")));
+          cellFragment.appendChild(makeBlockCell(addresses[cellIndex], "Route " + String(index + 1).padStart(2, "0")));
         }
         cells.appendChild(cellFragment);
         return cells;
@@ -1854,7 +1990,7 @@
           for (let slot = 0; slot < 30; slot += 1) {
             cells.appendChild(makeBlockCell(
               assigned[slot],
-              "Block " + String(index + 1).padStart(2, "0") + " · ENI_" + eniIndex + " · slot " + (slot + 1)
+              "Route " + String(index + 1).padStart(2, "0") + " · ENI_" + eniIndex + " · slot " + (slot + 1)
             ));
           }
           unit.appendChild(cells);
@@ -1864,8 +2000,12 @@
 
         const foot = document.createElement("div");
         foot.className = "eni-foot";
-        foot.innerHTML = showAllEnis
+        foot.innerHTML = activeEniCount === 0 && !showAllEnis
+          ? "<span>No allocation ENIs active</span><span>30 max / ENI</span>"
+          : showAllEnis
           ? "<span>ENI_1–ENI_7 shown · " + activeEniCount + " active</span><span>30 max / ENI</span>"
+          : eniCount === 1
+          ? "<span>ENI_1 allocates EIPs</span><span>30 max / ENI</span>"
           : "<span>ENI_1–ENI_" + eniCount + " allocate EIPs</span><span>30 max / ENI</span>";
         body.appendChild(foot);
         return body;
@@ -1880,7 +2020,7 @@
           const range = document.createElement("span");
           range.className = "block-segment-range";
           range.innerHTML = "<span>" + segment.first + '</span><span class="range-separator">–</span><span>' + segment.last + "</span>";
-          if (segment.stride > 1) {
+          if (segment.stride > 1 && segment.count > 1) {
             const stride = document.createElement("span");
             stride.className = "range-stride";
             stride.textContent = "step: +" + formatNumber(segment.stride) + " addresses";
@@ -1901,10 +2041,11 @@
         const sourceCount = new Set(summary.segments.map((segment) => segment.sourceIndex)).size;
         const card = document.createElement("article");
         card.className = "address-block" + (result.eniView ? " eni-view" : "");
+        const activeEniCount = Math.ceil(summary.count / 30);
         const eniDetails = result.eniView
-          ? ", ENI_0 reserved and " + (result.showAllEnis ? "7 allocation ENIs shown" : Math.ceil(summary.count / 30) + " allocation ENIs")
+          ? ", ENI_0 reserved and " + (result.showAllEnis ? "7 allocation ENIs shown" : activeEniCount + " allocation ENI" + (activeEniCount === 1 ? "" : "s"))
           : "";
-        card.setAttribute("aria-label", "Block " + (index + 1) + ", " + summary.count + " addresses from " + sourceCount + " range" + (sourceCount === 1 ? "" : "s") + eniDetails);
+        card.setAttribute("aria-label", "Route " + (index + 1) + ", " + summary.count + " address" + (summary.count === 1 ? "" : "es") + " from " + sourceCount + " range" + (sourceCount === 1 ? "" : "s") + eniDetails);
 
         const head = document.createElement("div");
         head.className = "address-block-head";
@@ -1912,7 +2053,7 @@
           ? '<span class="block-badge">Mixed</span>'
           : !result.tightPacking ? '<span class="block-badge balanced">Balanced</span>'
           : summary.partial ? '<span class="block-badge partial">Partial</span>' : "";
-        head.innerHTML = '<span class="address-block-title">Block ' + String(index + 1).padStart(2, "0") + "</span>" + badge;
+        head.innerHTML = '<span class="address-block-title">Route ' + String(index + 1).padStart(2, "0") + "</span>" + badge;
         card.appendChild(head);
         card.appendChild(result.eniView
           ? renderEniBlockCells(index, addresses, result.showAllEnis)
@@ -1921,12 +2062,86 @@
         return card;
       }
 
+      function syncFloatingRouteControls() {
+        const valuePairs = [
+          ["blocks-subnets", "float-blocks-subnets"],
+          ["blocks-size", "float-blocks-size"],
+          ["blocks-min-routes", "float-blocks-min-routes"]
+        ];
+        valuePairs.forEach(([sourceId, targetId]) => {
+          const source = byId(sourceId);
+          const target = byId(targetId);
+          target.value = source.value;
+          target.setAttribute("aria-invalid", source.getAttribute("aria-invalid") || "false");
+        });
+
+        const checkedPairs = [
+          ["blocks-interleave", "float-blocks-interleave"],
+          ["blocks-tight", "float-blocks-tight"],
+          ["blocks-eni-view", "float-blocks-eni-view"],
+          ["blocks-eni-all", "float-blocks-eni-all"]
+        ];
+        checkedPairs.forEach(([sourceId, targetId]) => {
+          const source = byId(sourceId);
+          const target = byId(targetId);
+          target.checked = source.checked;
+          target.disabled = source.disabled;
+          target.closest(".route-float-check").classList.toggle("disabled", source.disabled);
+        });
+
+        const message = byId("blocks-error").textContent;
+        const error = byId("route-float-error");
+        error.textContent = message;
+        error.classList.toggle("visible", Boolean(message));
+      }
+
+      let floatingControlsFrame = 0;
+      function scheduleFloatingRouteControls() {
+        if (floatingControlsFrame) return;
+        floatingControlsFrame = requestAnimationFrame(() => {
+          floatingControlsFrame = 0;
+          updateFloatingRouteControls();
+        });
+      }
+
+      function updateFloatingRouteControls() {
+        const controls = byId("route-float-controls");
+        const mapCard = byId("blocks-map-card");
+        const settings = document.querySelector(".blocks-settings-card");
+        const routesActive = byId("tab-blocks").getAttribute("aria-selected") === "true";
+        const mapRect = mapCard.getBoundingClientRect();
+        const settingsRect = settings.getBoundingClientRect();
+        const mapVisible = mapRect.top < window.innerHeight - 24 && mapRect.bottom > 120;
+        const settingsPastViewport = settingsRect.bottom < 12;
+        const shouldShow = routesActive && window.innerWidth > 900 && settingsPastViewport && mapVisible;
+
+        if (!shouldShow) {
+          controls.hidden = true;
+          mapCard.classList.remove("route-map-inset");
+          return;
+        }
+
+        controls.hidden = false;
+        const workspaceRect = document.querySelector(".workspace").getBoundingClientRect();
+        const useOuterGutter = workspaceRect.left >= controls.offsetWidth + 28;
+        mapCard.classList.toggle("route-map-inset", !useOuterGutter);
+
+        const left = useOuterGutter
+          ? workspaceRect.left - controls.offsetWidth - 14
+          : workspaceRect.left + 26;
+        const maxTop = Math.max(12, window.innerHeight - controls.offsetHeight - 12);
+        const top = Math.max(12, Math.min(mapRect.top, maxTop));
+        controls.style.left = Math.round(left) + "px";
+        controls.style.top = Math.round(top) + "px";
+      }
+
       function updateBlocks() {
         try {
           hideBlockTooltip();
           const result = calculateAddressBlocks(
             byId("blocks-subnets").value,
             byId("blocks-size").value,
+            byId("blocks-min-routes").value,
             byId("blocks-interleave").checked,
             byId("blocks-tight").checked
           );
@@ -1937,15 +2152,22 @@
           result.showAllEnis = result.eniView && showAllEnisControl.checked;
           byId("blocks-size-hint").textContent = result.eniView
             ? "Physical ENI capacity: up to 7 allocation ENIs × 30 EIPs, excluding reserved ENI_0."
-            : "Capacity limit. Blocks use 16 visual columns, grouped 8 + 8.";
+            : "Maximum capacity per route.";
+          byId("blocks-min-routes-hint").textContent = result.minimumApplied
+            ? "Applied: natural count " + formatNumber(result.naturalBlockCount) + " increased to " + formatNumber(result.blockCount) + "."
+            : "Not applied: natural route count is " + formatNumber(result.naturalBlockCount) + ".";
+          byId("blocks-tight-hint").textContent = result.minimumApplied
+            ? "Minimum routes is active, so IPs are balanced evenly. This preference is retained for other inputs."
+            : "Fill earlier routes to capacity and leave only the final route partial. Uncheck to balance route sizes evenly.";
           if (result.eniView && result.blockSize > 210) {
-            throw new Error("ENI view supports a maximum of 210 IPs per block: 7 allocation ENIs × 30 EIPs.");
+            throw new Error("ENI view supports a maximum egress route width of 210 IPs: 7 allocation ENIs × 30 EIPs.");
           }
           byId("blocks-total").textContent = formatNumber(result.total);
           byId("blocks-capacity").textContent = formatNumber(result.blockSize);
+          byId("blocks-actual-capacity").textContent = formatNumber(blockCapacity(result, 0));
           byId("blocks-count").textContent = formatNumber(result.blockCount);
           byId("blocks-mixed").textContent = formatNumber(result.mixedCount);
-          byId("blocks-grid-meta").textContent = (result.eniView ? "ENI view · 30 max / ENI" + (result.showAllEnis ? " · all 7 shown" : "") + " · " : "16 columns · 8 + 8 · ") + (result.tightPacking ? "tight" : "balanced") + (result.interleave ? " · interleaved" : "");
+          byId("blocks-grid-meta").textContent = (result.eniView ? "ENI view · 30 max / ENI" + (result.showAllEnis ? " · all 7 shown" : "") + " · " : "16 columns · 8 + 8 · ") + (result.minimumApplied ? "minimum applied · balanced" : result.tightPacking ? "tight" : "balanced") + (result.interleave ? " · interleaved" : "");
           byId("blocks-ranges-meta").textContent = formatNumber(result.subnets.length) + " range" + (result.subnets.length === 1 ? "" : "s") + " · ascending";
 
           const ranges = byId("blocks-ranges");
@@ -1986,15 +2208,19 @@
             if (position > 0 && index - result.previewIndices[position - 1] > 1) {
               const omitted = document.createElement("span");
               omitted.className = "block-omitted";
-              omitted.textContent = "… " + formatNumber(index - result.previewIndices[position - 1] - 1) + " blocks …";
+              omitted.textContent = "… " + formatNumber(index - result.previewIndices[position - 1] - 1) + " routes …";
               layout.appendChild(omitted);
             }
             layout.appendChild(renderAddressBlock(result, index));
           });
-          setError("blocks-error", "", ["blocks-subnets", "blocks-size"]);
+          setError("blocks-error", "", ["blocks-subnets", "blocks-size", "blocks-min-routes"]);
+          syncFloatingRouteControls();
+          scheduleFloatingRouteControls();
           return result;
         } catch (error) {
-          setError("blocks-error", error.message, ["blocks-subnets", "blocks-size"]);
+          setError("blocks-error", error.message, ["blocks-subnets", "blocks-size", "blocks-min-routes"]);
+          syncFloatingRouteControls();
+          scheduleFloatingRouteControls();
           throw error;
         }
       }
@@ -2011,6 +2237,7 @@
           panel.hidden = !active;
           if (active && focusPanel) panel.focus();
         });
+        scheduleFloatingRouteControls();
       }
 
       function positionBlockTooltip(clientX, clientY) {
@@ -2124,12 +2351,40 @@
       ["distance-start", "distance-end"].forEach((id) => byId(id).addEventListener("input", () => { try { updateDistance(); } catch (_) {} }));
       byId("arithmetic-form").addEventListener("submit", (event) => { event.preventDefault(); try { updateArithmetic(); updateDistance(); } catch (_) {} });
 
-      ["blocks-subnets", "blocks-size"].forEach((id) => byId(id).addEventListener("input", () => { try { updateBlocks(); } catch (_) {} }));
+      ["blocks-subnets", "blocks-size", "blocks-min-routes"].forEach((id) => byId(id).addEventListener("input", () => { try { updateBlocks(); } catch (_) {} }));
       byId("blocks-interleave").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-tight").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-eni-view").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-eni-all").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-form").addEventListener("submit", (event) => { event.preventDefault(); try { updateBlocks(); } catch (_) {} });
+
+      [
+        ["float-blocks-subnets", "blocks-subnets"],
+        ["float-blocks-size", "blocks-size"],
+        ["float-blocks-min-routes", "blocks-min-routes"]
+      ].forEach(([sourceId, targetId]) => {
+        byId(sourceId).addEventListener("input", () => {
+          byId(targetId).value = byId(sourceId).value;
+          try { updateBlocks(); } catch (_) {}
+        });
+      });
+      [
+        ["float-blocks-interleave", "blocks-interleave"],
+        ["float-blocks-tight", "blocks-tight"],
+        ["float-blocks-eni-view", "blocks-eni-view"],
+        ["float-blocks-eni-all", "blocks-eni-all"]
+      ].forEach(([sourceId, targetId]) => {
+        byId(sourceId).addEventListener("change", () => {
+          byId(targetId).checked = byId(sourceId).checked;
+          try { updateBlocks(); } catch (_) {}
+        });
+      });
+      byId("route-float-controls").addEventListener("submit", (event) => {
+        event.preventDefault();
+        try { updateBlocks(); } catch (_) {}
+      });
+      window.addEventListener("scroll", scheduleFloatingRouteControls, { passive: true });
+      window.addEventListener("resize", scheduleFloatingRouteControls);
 
       function registerModelTools() {
         const context = document.modelContext;
@@ -2200,16 +2455,17 @@
 
         tool({
           name: "plan_ipv4_blocks",
-          title: "Plan IPv4 address blocks",
-          description: "Sort IPv4 starting-IP/prefix ranges and allocate their combined addresses into fixed-size blocks using tight or balanced capacities and contiguous or interleaved ordering. Each prefix determines the range length without changing its starting IP.",
+          title: "Plan IPv4 egress routes",
+          description: "Sort IPv4 starting-IP/prefix ranges and allocate their combined addresses into fixed-width egress routes using an optional minimum route count, tight or balanced capacities, and contiguous or interleaved ordering. Each prefix determines the range length without changing its starting IP.",
           inputSchema: {
             type: "object",
             properties: {
               subnets: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
-              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 32 },
-              interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across blocks instead of keeping each block contiguous." },
-              tightPacking: { type: "boolean", default: true, description: "Fill earlier blocks to capacity. When false, balance address counts evenly across all blocks." },
-              eniView: { type: "boolean", default: false, description: "Display each block as ENI_0 management plus up to seven allocation ENIs with 30 EIPs each. Requires addressesPerBlock to be 210 or less." },
+              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 32, description: "Egress route width in IP addresses." },
+              minimumRoutes: { type: "integer", minimum: 1, maximum: 4096, default: 1, description: "Minimum number of routes. If this exceeds the natural route count, addresses are balanced across the requested minimum." },
+              interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across routes instead of keeping each route contiguous." },
+              tightPacking: { type: "boolean", default: true, description: "Fill earlier routes to capacity. When false, balance address counts evenly across all routes." },
+              eniView: { type: "boolean", default: false, description: "Display each route as ENI_0 management plus up to seven allocation ENIs with 30 EIPs each. Requires the egress route width to be 210 or less." },
               showAllEnis: { type: "boolean", default: false, description: "When ENI view is enabled, display all seven allocation ENIs, including empty ones." }
             },
             required: ["subnets"],
@@ -2219,6 +2475,7 @@
           execute(input) {
             byId("blocks-subnets").value = input.subnets.join("\n");
             byId("blocks-size").value = String(input.addressesPerBlock ?? 32);
+            byId("blocks-min-routes").value = String(input.minimumRoutes ?? 1);
             byId("blocks-interleave").checked = input.interleave !== false;
             byId("blocks-tight").checked = input.tightPacking !== false;
             byId("blocks-eni-view").checked = input.eniView === true;
@@ -2228,6 +2485,10 @@
             return {
               totalAddresses: result.total,
               addressesPerBlock: result.blockSize,
+              minimumRoutes: result.minimumRoutes,
+              naturalRouteCount: result.naturalBlockCount,
+              minimumApplied: result.minimumApplied,
+              actualEgressRouteWidth: blockCapacity(result, 0),
               visualColumns: 16,
               blockCount: result.blockCount,
               distribution: result.interleave ? "interleaved" : "contiguous",
