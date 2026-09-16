@@ -219,7 +219,7 @@
       line-height: 1.4;
       resize: vertical;
     }
-    .route-float-controls input[type="number"] {
+    .route-float-controls input[type="number"], .route-float-controls select {
       min-height: 36px;
       padding: 7px 9px;
       border-radius: 7px;
@@ -1054,6 +1054,7 @@
 
               <section class="control-card blocks-input-card blocks-settings-card" aria-label="Route allocation settings">
                 <p class="eyebrow">Route settings</p>
+                <div class="field"><label for="blocks-instance">EC2 instance</label><select id="blocks-instance"><option value="m7i.xlarge">m7i.xlarge</option><option value="m7i.2xlarge">m7i.2xlarge</option><option value="m7i.4xlarge" selected>m7i.4xlarge</option></select><span class="field-hint" id="blocks-instance-hint"></span></div>
                 <div class="blocks-settings-fields">
                   <div class="field">
                     <label for="blocks-size">Egress route width</label>
@@ -1081,11 +1082,11 @@
                   </label>
                   <label class="check-control" for="blocks-prefixes">
                     <input id="blocks-prefixes" type="checkbox">
-                    <span class="check-copy"><strong>Use prefixes</strong><small>Switch to 3,248 IPs per EC2: 7 ENIs × 29 private /28 blocks × 16 IPs. Uncheck to restore the previous width.</small></span>
+                    <span class="check-copy"><strong>Use prefixes</strong><small id="blocks-prefix-hint">Switch to 3,248 IPs per EC2: 7 ENIs × 29 private /28 blocks × 16 IPs. Uncheck to restore the previous width.</small></span>
                   </label>
                   <label class="check-control check-control-dependent disabled" for="blocks-eni-all">
                     <input id="blocks-eni-all" type="checkbox" disabled>
-                    <span class="check-copy"><strong>Show all ENIs</strong><small>Always display ENI_1 through ENI_7, including interfaces with no assigned EIPs.</small></span>
+                    <span class="check-copy"><strong>Show all ENIs</strong><small id="blocks-all-hint">Always display ENI_1 through ENI_7, including interfaces with no assigned EIPs.</small></span>
                   </label>
                 </div>
               </section>
@@ -1160,6 +1161,7 @@
 10.10.10.128/27
 10.10.10.192/27</textarea>
     </label>
+    <label class="route-float-field" for="float-blocks-instance"><span>EC2 instance</span><select id="float-blocks-instance"><option value="m7i.xlarge">m7i.xlarge</option><option value="m7i.2xlarge">m7i.2xlarge</option><option value="m7i.4xlarge" selected>m7i.4xlarge</option></select></label>
     <label class="route-float-field" for="float-blocks-size">
       <span>Width</span>
       <input id="float-blocks-size" type="number" value="32" min="1" max="4096" step="1" inputmode="numeric" aria-describedby="route-float-error">
@@ -1173,7 +1175,7 @@
       <label class="route-float-check"><input id="float-blocks-tight" type="checkbox" checked><span>Tight</span></label>
       <label class="route-float-check"><input id="float-blocks-eni-view" type="checkbox"><span>ENI</span></label>
       <label class="route-float-check"><input id="float-blocks-prefixes" type="checkbox"><span>Use prefixes</span></label>
-      <label class="route-float-check disabled"><input id="float-blocks-eni-all" type="checkbox" disabled><span>All 7</span></label>
+      <label class="route-float-check disabled"><input id="float-blocks-eni-all" type="checkbox" disabled><span id="float-blocks-all-label">All 7</span></label>
     </div>
     <div class="route-float-error" id="route-float-error" role="alert"></div>
   </form>
@@ -1196,10 +1198,17 @@
       const MAX_IP = 4294967295;
       const ADDRESS_SPACE = 4294967296;
       const PREFIX_IPS = 16;
-      const PREFIXES_PER_ENI = 29;
-      const EGRESS_ENIS = 7;
-      const PREFIX_ENI_CAPACITY = PREFIX_IPS * PREFIXES_PER_ENI;
-      const PREFIX_EC2_CAPACITY = EGRESS_ENIS * PREFIX_ENI_CAPACITY;
+      function getInstanceProfile(sku = "m7i.4xlarge") {
+        // AWS general-purpose network specifications; ENI_0 is reserved for management.
+        const limits = { "m7i.xlarge": [4, 15], "m7i.2xlarge": [4, 15], "m7i.4xlarge": [8, 30] };
+        if (!Object.hasOwn(limits, sku)) throw new Error("Unsupported EC2 instance: " + sku);
+        const [totalEnis, ipsPerEni] = limits[sku];
+        const egressEnis = totalEnis - 1;
+        const prefixesPerEni = ipsPerEni - 1;
+        const prefixIpsPerEni = prefixesPerEni * PREFIX_IPS;
+        return { sku, totalEnis, egressEnis, ipsPerEni, prefixesPerEni, prefixIpsPerEni,
+          ordinaryCapacity: egressEnis * ipsPerEni, prefixCapacity: egressEnis * prefixIpsPerEni };
+      }
       const copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
 
       const byId = (id) => document.getElementById(id);
@@ -1737,15 +1746,15 @@
         return { ...baseResult, mixedCount: mixedIndices.length, mixedIndices, previewIndices };
       }
 
-      function calculateRouteAllocation(subnets, width, minimum, interleave, tight, usePrefixes, eniView) {
+      function calculateRouteAllocation(subnets, width, minimum, interleave, tight, usePrefixes, eniView, sku = "m7i.4xlarge") {
         const result = calculateAddressBlocks(subnets, width, minimum, interleave, tight);
         result.usePrefixes = usePrefixes;
         result.eniView = usePrefixes || eniView;
-        const limit = usePrefixes ? PREFIX_EC2_CAPACITY : 210;
+        const profile = getInstanceProfile(sku);
+        result.instance = profile;
+        const limit = usePrefixes ? profile.prefixCapacity : profile.ordinaryCapacity;
         if (result.eniView && result.blockSize > limit) {
-          throw new Error(usePrefixes
-            ? "Prefix mode supports at most 3,248 IPs per EC2: 7 ENIs × 29 prefixes × 16 IPs."
-            : "ENI view supports a maximum egress route width of 210 IPs: 7 allocation ENIs × 30 EIPs.");
+          throw new Error(profile.sku + " supports at most " + limit.toLocaleString("en-US") + " IPs per EC2 in " + (usePrefixes ? "prefix mode." : "ENI view."));
         }
         return result;
       }
@@ -2002,32 +2011,34 @@
         return cells;
       }
 
-      function renderEniBlockCells(index, addresses, showAllEnis) {
+      function renderEniBlockCells(index, addresses, showAllEnis, profile) {
+        const capacity = profile.ipsPerEni;
         const body = document.createElement("div");
         const management = document.createElement("div");
         management.className = "eni-management";
         management.innerHTML = '<span><strong>ENI_0</strong> <span class="eni-management-role">· management / control plane</span></span><span>0 EIPs · reserved</span>';
         body.appendChild(management);
 
-        const activeEniCount = Math.ceil(addresses.length / 30);
-        const eniCount = showAllEnis ? 7 : activeEniCount;
+        const activeEniCount = Math.ceil(addresses.length / capacity);
+        const eniCount = showAllEnis ? profile.egressEnis : activeEniCount;
         const grid = document.createElement("div");
         grid.className = "eni-grid";
         for (let eniIndex = 1; eniIndex <= eniCount; eniIndex += 1) {
-          const first = (eniIndex - 1) * 30;
-          const assigned = addresses.slice(first, first + 30);
+          const first = (eniIndex - 1) * capacity;
+          const assigned = addresses.slice(first, first + capacity);
           const unit = document.createElement("section");
           unit.className = "eni-unit" + (assigned.length ? "" : " empty");
-          unit.setAttribute("aria-label", "ENI " + eniIndex + ", " + assigned.length + " of 30 EIPs");
+          unit.setAttribute("aria-label", "ENI " + eniIndex + ", " + assigned.length + " of " + capacity + " EIPs");
 
           const unitHead = document.createElement("div");
           unitHead.className = "eni-unit-head";
-          unitHead.innerHTML = "<strong>ENI_" + eniIndex + "</strong><span>" + assigned.length + " / 30</span>";
+          unitHead.innerHTML = "<strong>ENI_" + eniIndex + "</strong><span>" + assigned.length + " / capacity</span>";
           unit.appendChild(unitHead);
 
           const cells = document.createElement("div");
           cells.className = "eni-cells";
-          for (let slot = 0; slot < 30; slot += 1) {
+          cells.style.gridTemplateColumns = "repeat(" + (capacity === 15 ? 5 : 10) + ", minmax(0, 1fr))";
+          for (let slot = 0; slot < capacity; slot += 1) {
             cells.appendChild(makeBlockCell(
               assigned[slot],
               "Route " + String(index + 1).padStart(2, "0") + " · ENI_" + eniIndex + " · slot " + (slot + 1)
@@ -2041,20 +2052,20 @@
         const foot = document.createElement("div");
         foot.className = "eni-foot";
         foot.innerHTML = activeEniCount === 0 && !showAllEnis
-          ? "<span>No allocation ENIs active</span><span>30 max / ENI</span>"
+          ? "<span>No allocation ENIs active</span><span>" + capacity + " max / ENI</span>"
           : showAllEnis
-          ? "<span>ENI_1–ENI_7 shown · " + activeEniCount + " active</span><span>30 max / ENI</span>"
+          ? "<span>ENI_1–ENI_" + profile.egressEnis + " shown · " + activeEniCount + " active</span><span>" + capacity + " max / ENI</span>"
           : eniCount === 1
-          ? "<span>ENI_1 allocates EIPs</span><span>30 max / ENI</span>"
-          : "<span>ENI_1–ENI_" + eniCount + " allocate EIPs</span><span>30 max / ENI</span>";
+          ? "<span>ENI_1 allocates EIPs</span><span>" + capacity + " max / ENI</span>"
+          : "<span>ENI_1–ENI_" + eniCount + " allocate EIPs</span><span>" + capacity + " max / ENI</span>";
         body.appendChild(foot);
         return body;
       }
 
-      function prefixEniAssignments(addresses, showAllEnis) {
-        const count = showAllEnis ? EGRESS_ENIS : Math.ceil(addresses.length / PREFIX_ENI_CAPACITY);
+      function prefixEniAssignments(addresses, showAllEnis, profile = getInstanceProfile()) {
+        const count = showAllEnis ? profile.egressEnis : Math.ceil(addresses.length / profile.prefixIpsPerEni);
         return Array.from({ length: count }, (_, index) => {
-          const assigned = addresses.slice(index * PREFIX_ENI_CAPACITY, (index + 1) * PREFIX_ENI_CAPACITY);
+          const assigned = addresses.slice(index * profile.prefixIpsPerEni, (index + 1) * profile.prefixIpsPerEni);
           return {
             eni: index + 1,
             count: assigned.length,
@@ -2064,18 +2075,18 @@
         });
       }
 
-      function renderPrefixBlockCells(index, addresses, showAllEnis) {
+      function renderPrefixBlockCells(index, addresses, showAllEnis, profile) {
         const body = document.createElement("div");
         const management = document.createElement("div");
         management.className = "eni-management";
         management.textContent = "ENI_0 · Management · reserved";
         body.appendChild(management);
-        const assignments = prefixEniAssignments(addresses, showAllEnis);
+        const assignments = prefixEniAssignments(addresses, showAllEnis, profile);
         assignments.forEach((assignment, position) => {
           const eni = document.createElement("details");
           eni.className = "prefix-eni" + (assignment.count ? "" : " empty");
           const summary = document.createElement("summary");
-          summary.textContent = "ENI_" + assignment.eni + " · " + assignment.count + " / 464 IPs · " + assignment.prefixes.length + " / 29 prefixes";
+          summary.textContent = "ENI_" + assignment.eni + " · " + assignment.count + " / " + profile.prefixIpsPerEni + " IPs · " + assignment.prefixes.length + " / " + profile.prefixesPerEni + " prefixes";
           eni.appendChild(summary);
           let populated = false;
           const populate = () => {
@@ -2147,9 +2158,9 @@
         const sourceCount = new Set(summary.segments.map((segment) => segment.sourceIndex)).size;
         const card = document.createElement("article");
         card.className = "address-block" + (result.usePrefixes ? " prefix-view" : result.eniView ? " eni-view" : "");
-        const activeEniCount = Math.ceil(summary.count / (result.usePrefixes ? PREFIX_ENI_CAPACITY : 30));
+        const activeEniCount = Math.ceil(summary.count / (result.usePrefixes ? result.instance.prefixIpsPerEni : result.instance.ipsPerEni));
         const eniDetails = result.eniView
-          ? ", ENI_0 reserved and " + (result.showAllEnis ? "7 allocation ENIs shown" : activeEniCount + " allocation ENI" + (activeEniCount === 1 ? "" : "s"))
+          ? ", ENI_0 reserved and " + (result.showAllEnis ? result.instance.egressEnis + " allocation ENIs shown" : activeEniCount + " allocation ENI" + (activeEniCount === 1 ? "" : "s"))
           : "";
         card.setAttribute("aria-label", "Route " + (index + 1) + ", " + summary.count + " address" + (summary.count === 1 ? "" : "es") + " from " + sourceCount + " range" + (sourceCount === 1 ? "" : "s") + eniDetails);
 
@@ -2162,10 +2173,16 @@
         head.innerHTML = '<span class="address-block-title">Route ' + String(index + 1).padStart(2, "0") + ' <span class="address-block-count">· ' + formatNumber(summary.count) + " IP" + (summary.count === 1 ? "" : "s") + "</span></span>" + badge;
         if (result.usePrefixes) head.querySelector(".address-block-title").prepend("EC2 " + String(index + 1).padStart(2, "0") + " · ");
         card.appendChild(head);
+        if (result.eniView) {
+          const sku = document.createElement("div");
+          sku.className = "prefix-eni-meta";
+          sku.textContent = result.instance.sku;
+          card.appendChild(sku);
+        }
         card.appendChild(result.usePrefixes
-          ? renderPrefixBlockCells(index, addresses, result.showAllEnis)
+          ? renderPrefixBlockCells(index, addresses, result.showAllEnis, result.instance)
           : result.eniView
-          ? renderEniBlockCells(index, addresses, result.showAllEnis)
+          ? renderEniBlockCells(index, addresses, result.showAllEnis, result.instance)
           : renderStandardBlockCells(result, index, addresses));
         card.appendChild(renderBlockSegments(summary));
         return card;
@@ -2173,6 +2190,7 @@
 
       function syncFloatingRouteControls() {
         const valuePairs = [
+          ["blocks-instance", "float-blocks-instance"],
           ["blocks-subnets", "float-blocks-subnets"],
           ["blocks-size", "float-blocks-size"],
           ["blocks-min-routes", "float-blocks-min-routes"]
@@ -2181,6 +2199,7 @@
           const source = byId(sourceId);
           const target = byId(targetId);
           target.value = source.value;
+          if (sourceId === "blocks-size") target.max = source.max;
           target.setAttribute("aria-invalid", source.getAttribute("aria-invalid") || "false");
         });
 
@@ -2249,14 +2268,17 @@
       let widthBeforePrefixes = "32";
       let eniViewBeforePrefixes = false;
       function setPrefixMode(enabled) {
+        const profile = getInstanceProfile(byId("blocks-instance").value);
         if (enabled !== prefixModeActive) {
           if (enabled) {
             widthBeforePrefixes = byId("blocks-size").value;
             eniViewBeforePrefixes = byId("blocks-eni-view").checked;
-            byId("blocks-size").value = String(PREFIX_EC2_CAPACITY);
+            byId("blocks-size").value = String(profile.prefixCapacity);
             byId("blocks-eni-view").checked = true;
           } else {
-            byId("blocks-size").value = widthBeforePrefixes;
+            byId("blocks-size").value = eniViewBeforePrefixes
+              ? String(Math.min(Number(widthBeforePrefixes) || profile.ordinaryCapacity, profile.ordinaryCapacity))
+              : widthBeforePrefixes;
             byId("blocks-eni-view").checked = eniViewBeforePrefixes;
           }
           prefixModeActive = enabled;
@@ -2266,7 +2288,20 @@
         byId("blocks-eni-view").closest(".check-control").classList.toggle("disabled", enabled);
         byId("blocks-eni-hint").textContent = enabled
           ? "Included in prefix mode: expand each ENI to see its 16-IP blocks. ENI_0 is reserved for management."
-          : "Show each route as EC2 network interfaces with up to 30 EIPs on ENI_1 through ENI_7. ENI_0 is reserved for management.";
+          : "Up to " + profile.ipsPerEni + " EIPs per ENI, on ENI_1 through ENI_" + profile.egressEnis + ". ENI_0 is reserved for management.";
+        byId("blocks-instance-hint").textContent = profile.totalEnis + " ENIs total · " + profile.egressEnis + " for egress · " + profile.ipsPerEni + " IPv4 slots per ENI";
+        byId("blocks-prefix-hint").textContent = "Switch to " + formatNumber(profile.prefixCapacity) + " IPs per EC2: " + profile.egressEnis + " ENIs × " + profile.prefixesPerEni + " private /28 blocks × 16 IPs. Uncheck to restore the ordinary width for this SKU.";
+        byId("blocks-all-hint").textContent = "Display ENI_1 through ENI_" + profile.egressEnis + ", including empty interfaces.";
+        byId("float-blocks-all-label").textContent = "All " + profile.egressEnis;
+        byId("blocks-size").max = enabled ? profile.prefixCapacity : byId("blocks-eni-view").checked ? profile.ordinaryCapacity : 4096;
+      }
+
+      function selectInstance(sku) {
+        const profile = getInstanceProfile(sku);
+        byId("blocks-instance").value = sku;
+        byId("blocks-size").value = String(byId("blocks-prefixes").checked ? profile.prefixCapacity : profile.ordinaryCapacity);
+        // A new SKU resets both modes to its capacity, avoiding stale widths on toggle-off.
+        widthBeforePrefixes = String(profile.ordinaryCapacity);
       }
 
       function updateBlocks() {
@@ -2280,16 +2315,18 @@
             byId("blocks-interleave").checked,
             byId("blocks-tight").checked,
             byId("blocks-prefixes").checked,
-            byId("blocks-eni-view").checked
+            byId("blocks-eni-view").checked,
+            byId("blocks-instance").value
           );
+          const profile = result.instance;
           const showAllEnisControl = byId("blocks-eni-all");
           showAllEnisControl.disabled = !result.eniView;
           showAllEnisControl.closest(".check-control").classList.toggle("disabled", !result.eniView);
           result.showAllEnis = result.eniView && showAllEnisControl.checked;
           byId("blocks-size-hint").textContent = result.usePrefixes
-            ? "m7i.4xlarge · up to 3,248 IPs per EC2. Address capacity only; ENI_0 and each egress ENI’s primary IP are reserved."
+            ? profile.sku + " · up to " + formatNumber(profile.prefixCapacity) + " IPs per EC2. Address capacity only; ENI_0 and each egress ENI’s primary IP are reserved."
             : result.eniView
-            ? "Physical ENI capacity: up to 7 allocation ENIs × 30 EIPs, excluding reserved ENI_0."
+            ? "Physical ENI capacity: " + profile.egressEnis + " egress ENIs × " + profile.ipsPerEni + " EIPs, excluding reserved ENI_0."
             : "Maximum capacity per route.";
           byId("blocks-min-routes-hint").textContent = result.minimumApplied
             ? "Applied: natural count " + formatNumber(result.naturalBlockCount) + " increased to " + formatNumber(result.blockCount) + "."
@@ -2303,7 +2340,7 @@
           byId("blocks-actual-capacity").textContent = formatNumber(blockCapacity(result, 0));
           byId("blocks-count").textContent = formatNumber(result.blockCount);
           byId("blocks-mixed").textContent = formatNumber(result.mixedCount);
-          byId("blocks-grid-meta").textContent = (result.usePrefixes ? "Prefixes · " + formatNumber(result.blockCount) + " EC2 · " : result.eniView ? "ENI view · 30 max / ENI" + (result.showAllEnis ? " · all 7 shown" : "") + " · " : "") + (result.minimumApplied ? "minimum applied · balanced" : result.tightPacking ? "tight" : "balanced") + (result.interleave ? " · interleaved" : "");
+          byId("blocks-grid-meta").textContent = (result.usePrefixes ? "Prefixes · " + formatNumber(result.blockCount) + " EC2 · " : result.eniView ? "ENI view · " + profile.ipsPerEni + " max / ENI" + (result.showAllEnis ? " · all " + profile.egressEnis + " shown" : "") + " · " : "") + (result.minimumApplied ? "minimum applied · balanced" : result.tightPacking ? "tight" : "balanced") + (result.interleave ? " · interleaved" : "");
           byId("blocks-ranges-meta").textContent = formatNumber(result.subnets.length) + " range" + (result.subnets.length === 1 ? "" : "s") + " · ascending";
 
           const ranges = byId("blocks-ranges");
@@ -2495,6 +2532,11 @@
       byId("arithmetic-form").addEventListener("submit", (event) => { event.preventDefault(); try { updateArithmetic(); updateDistance(); } catch (_) {} });
 
       ["blocks-subnets", "blocks-size", "blocks-min-routes"].forEach((id) => byId(id).addEventListener("input", () => { try { updateBlocks(); } catch (_) {} }));
+      ["blocks-instance", "float-blocks-instance"].forEach((id) => {
+        byId(id).addEventListener("change", () => {
+          try { selectInstance(byId(id).value); updateBlocks(); } catch (_) {}
+        });
+      });
       byId("blocks-interleave").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-tight").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
       byId("blocks-eni-view").addEventListener("change", () => { try { updateBlocks(); } catch (_) {} });
@@ -2606,22 +2648,25 @@
             type: "object",
             properties: {
               subnets: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 100 },
-              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, default: 32, description: "Egress route width in IP addresses." },
+              instanceType: { type: "string", enum: ["m7i.xlarge", "m7i.2xlarge", "m7i.4xlarge"], default: "m7i.4xlarge", description: "EC2 SKU; reserves ENI_0 for management." },
+              addressesPerBlock: { type: "integer", minimum: 1, maximum: 4096, description: "Route width; defaults to selected SKU capacity in ENI/prefix mode, or 32 in plain mode." },
               minimumRoutes: { type: "integer", minimum: 1, maximum: 4096, default: 1, description: "Minimum number of routes. If this exceeds the natural route count, addresses are balanced across the requested minimum." },
               interleave: { type: "boolean", default: true, description: "Rotate consecutive addresses across routes instead of keeping each route contiguous." },
               tightPacking: { type: "boolean", default: true, description: "Fill earlier routes to capacity. When false, balance address counts evenly across all routes." },
-              eniView: { type: "boolean", default: false, description: "Display each route as ENI_0 management plus up to seven allocation ENIs with 30 EIPs each. Requires the egress route width to be 210 or less." },
-              usePrefixes: { type: "boolean", default: false, description: "Show EC2 → ENI → private /28 blocks with 16 public-IP assignment slots each. Enables ENI view. Defaults width to 3248; explicit width must be at most 3248." },
-              showAllEnis: { type: "boolean", default: false, description: "When ENI view is enabled, display all seven allocation ENIs, including empty ones." }
+              eniView: { type: "boolean", default: false, description: "Display management ENI_0 and egress ENIs using the selected SKU limits. Explicit width must fit its ordinary capacity." },
+              usePrefixes: { type: "boolean", default: false, description: "Show EC2 → ENI → private /28 blocks with 16 public-IP assignment slots each. Enables ENI view. Defaults to the selected SKU prefix capacity (672 or 3248); explicit width must fit that capacity." },
+              showAllEnis: { type: "boolean", default: false, description: "When ENI view is enabled, display all allocation ENIs for the selected SKU, including empty ones." }
             },
             required: ["subnets"],
             additionalProperties: false
           },
           annotations: { readOnlyHint: true, untrustedContentHint: false },
           execute(input) {
+            const profile = getInstanceProfile(input.instanceType ?? "m7i.4xlarge");
+            selectInstance(profile.sku);
             byId("blocks-subnets").value = input.subnets.join("\n");
             setPrefixMode(input.usePrefixes === true);
-            byId("blocks-size").value = String(input.addressesPerBlock ?? (input.usePrefixes ? PREFIX_EC2_CAPACITY : 32));
+            byId("blocks-size").value = String(input.addressesPerBlock ?? (input.usePrefixes ? profile.prefixCapacity : input.eniView ? profile.ordinaryCapacity : 32));
             byId("blocks-min-routes").value = String(input.minimumRoutes ?? 1);
             byId("blocks-interleave").checked = input.interleave !== false;
             byId("blocks-tight").checked = input.tightPacking !== false;
@@ -2642,7 +2687,9 @@
               packing: result.tightPacking ? "tight" : "balanced",
               eniView: result.eniView,
               usePrefixes: result.usePrefixes,
-              prefixCapacity: result.usePrefixes ? { ipsPerPrefix: PREFIX_IPS, prefixesPerEni: PREFIXES_PER_ENI, ipsPerEni: PREFIX_ENI_CAPACITY, ipsPerEc2: PREFIX_EC2_CAPACITY } : null,
+              instanceType: profile.sku,
+              networkCapacity: profile,
+              prefixCapacity: result.usePrefixes ? { ipsPerPrefix: PREFIX_IPS, prefixesPerEni: profile.prefixesPerEni, ipsPerEni: profile.prefixIpsPerEni, ipsPerEc2: profile.prefixCapacity } : null,
               showAllEnis: result.showAllEnis,
               mixedBlockCount: result.mixedCount,
               sortedRanges: result.subnets.map((subnet) => ({
