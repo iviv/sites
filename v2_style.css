@@ -1716,7 +1716,43 @@ h4::after {
 }
 
 /* Header rows: name (opens details) and a one-line value; each row tinted by its DKIM coverage. */
-.headers-views { margin-bottom: 0; }
+/* Toolbar: every control shares one height, font size and corner radius, so the row reads as one strip. */
+.headers-toolbar { --control-h: 34px; }
+
+.headers-toolbar .btn,
+.headers-toolbar .headers-search {
+    height: var(--control-h);
+    font-size: 0.82rem;
+}
+
+.headers-toolbar .btn {
+    padding: 0 12px;
+    color: var(--heading);
+    line-height: inherit;
+}
+
+.headers-toolbar .btn:hover:not(:disabled) { transform: none; }
+
+.headers-toolbar .headers-search { padding: 0 10px; }
+
+.headers-toolbar .signed-filter-btn { padding-left: 10px; }
+
+.headers-toolbar .signed-filter-btn[aria-pressed="false"] .lock-icon { color: var(--muted); }
+
+.headers-toolbar .signed-filter-btn[aria-pressed="true"],
+.headers-toolbar .headers-raw-btn[aria-pressed="true"] { color: var(--accent-text); }
+
+.headers-toolbar .relay-tabs {
+    height: var(--control-h);
+    margin: 0;
+    padding: 2px;
+    border-radius: var(--radius-xs);
+}
+
+.headers-toolbar .relay-tab {
+    padding: 0 12px;
+    border-radius: 4px;
+}
 
 .relay-tab[aria-pressed="true"] {
     background: var(--container-bg);
