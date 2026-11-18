@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Email Parser & DKIM Validator</title>
+<title>Email Inspector</title>
 <link rel="stylesheet" href="v2_style.css">
 </head>
 <body class="theme-auto">
@@ -17,8 +17,8 @@
                 </svg>
             </span>
             <div>
-                <h1>Email Parser &amp; DKIM Validator</h1>
-                <p class="tagline">Inspect a raw message and verify its DKIM, SPF and DMARC.</p>
+                <h1>Email Inspector</h1>
+                <p class="tagline">Check a raw message: DKIM, SPF and DMARC, the route it took, and what it contains.</p>
             </div>
         </div>
         <div class="header-actions">
@@ -58,7 +58,7 @@
             <nav id="jump-bar" class="jump-bar" aria-label="Jump to a section"></nav>
             <section class="section" id="section-summary">
                 <h2 class="section-heading">
-                    <span>Summary</span>
+                    <span>Summary<span id="summary-glance" class="glance" hidden></span></span>
                     <span class="header-controls"><button type="button" id="copy-report" class="btn btn-secondary report-btn" title="Copy a plain-text report of these results">Copy report</button></span>
                 </h2>
                 <div id="summary-output"></div>
@@ -128,6 +128,7 @@
     </main>
     <div id="copy-status" class="copy-toast" role="status" aria-live="polite"></div>
 <script src="v2_dns.js"></script>
+<script src="v2_public_suffix.js"></script>
 <script src="v2_email_parser.js"></script>
 <script src="v2_dkim_validator.js"></script>
 <script src="v2_spf_validator.js"></script>

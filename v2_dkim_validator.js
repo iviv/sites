@@ -124,12 +124,13 @@
       try {
         records = await this.queryDns(name, 'TXT');
       } catch (error) {
-        return { dnsCommand, status: 'temperror', error: 'DNS lookup failed: ' + error.message };
+        return { dnsCommand, dnsName: name, records: null, status: 'temperror', error: 'DNS lookup failed: ' + error.message };
       }
-      if (records.length !== 1) return { dnsCommand, error: records.length ? 'Multiple DKIM key records' : 'No DKIM key record' };
+      // The full answer is kept for the step-by-step explanation.
+      if (records.length !== 1) return { dnsCommand, dnsName: name, records, error: records.length ? 'Multiple DKIM key records' : 'No DKIM key record' };
       const rawDns = dns.txt(records[0]);
       const { tags: dnsTags, error } = dns.parseTags(rawDns);
-      const record = { dnsCommand, rawDns, dnsTags, publicKey: dnsTags.p };
+      const record = { dnsCommand, dnsName: name, records, rawDns, dnsTags, publicKey: dnsTags.p };
       if (error || !dnsTags.p || (dnsTags.v !== undefined && (dnsTags.v !== 'DKIM1' || Object.keys(dnsTags)[0] !== 'v'))) {
         return { ...record, error: 'Invalid or revoked DKIM key' };
       }
@@ -218,7 +219,8 @@
       const expired = tags.x !== undefined && Number(tags.x) < Date.now() / 1000;
 
       const record = await this.fetchPublicKey(tags.s, tags.d);
-      Object.assign(dkim, { publicKey: record.publicKey, dnsRaw: record.rawDns, dnsTags: record.dnsTags, dnsCommand: record.dnsCommand });
+      Object.assign(dkim, { publicKey: record.publicKey, dnsRaw: record.rawDns, dnsTags: record.dnsTags, dnsCommand: record.dnsCommand,
+        dnsQuestion: { type: 'TXT', name: record.dnsName || null, records: record.records ?? null, error: record.records ? null : record.error || null } });
       if (record.error) result.keyError = record.error;
       // The current DNS record is useful for inspection even after expiration.
       if (record.error) {
@@ -358,9 +360,11 @@
         return { valid: false, error: 'Invalid ARC-Seal signature' };
       }
       const record = await this.dkim.fetchPublicKey(tags.s, tags.d);
-      if (record.error) return { valid: null, error: record.error, keyName: tags.s + '._domainkey.' + tags.d };
+      // The key lookup and the sealed data, for the step-by-step explanation.
+      const question = { type: 'TXT', name: record.dnsName || null, records: record.records ?? null, error: record.records ? null : record.error || null };
+      if (record.error) return { valid: null, error: record.error, keyName: tags.s + '._domainkey.' + tags.d, question, data };
       const check = await this.dkim.checkSignature(record, { a: tags.a, d: tags.d }, signature, wireBytes(data, email));
-      return { valid: check.status === 'unavailable' ? null : check.valid, error: check.error || null, key: check.key };
+      return { valid: check.status === 'unavailable' ? null : check.valid, error: check.error || null, key: check.key, question, data };
     }
 
     chainStatus(sets) {

@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const { createHash, generateKeyPairSync, sign } = require('node:crypto');
 const { test } = require('node:test');
-const { EmailParser, parseEmail, decodeMimeWords, RelayParser, IpAddress, parseMailDate, ServerValidationParser, MimeParser, HeaderInsights } = require('../v2_email_parser');
+const { EmailParser, parseEmail, decodeMimeWords, RelayParser, IpAddress, parseMailDate, ServerValidationParser, MimeParser, HeaderInsights, DeliveryRecords } = require('../v2_email_parser');
+const EmailDns = require('../v2_dns');
+const PublicSuffix = require('../v2_public_suffix');
 const { DkimParser, DkimValidator, ArcValidator } = require('../v2_dkim_validator');
 const { DmarcValidator } = require('../v2_dmarc_validator');
 const { SpfValidator } = require('../v2_spf_validator');
@@ -70,6 +72,9 @@ test('names the network and organization behind an IP from routing and registry 
   const owner = await IpAddress.networkOwner('204.220.171.48', { lookup, getJson });
   assert.deepEqual(owner, { ip: '204.220.171.48', asn: '396479', prefix: '204.220.171.0/24', country: 'US', registry: 'ARIN',
     asName: 'Mailgun Technologies Inc.', organization: 'Mailgun Technologies Inc.', network: 'MAILGUN-204-220-160-20', range: '204.220.160.0/20' });
+  assert.deepEqual(owner.lookups.dns.map(({ name, records }) => [name, records.length]),
+    [['48.171.220.204.origin.asn.cymru.com', 1], ['AS396479.asn.cymru.com', 1]]);
+  assert.deepEqual([owner.lookups.rdap, owner.lookups.rdapOk], ['https://rdap.arin.net/registry/ip/204.220.171.48', true]);
 
   // Without a registry answer the routing data still names the network.
   const routingOnly = await IpAddress.networkOwner('204.220.171.48', { lookup, getJson: async () => { throw new Error('offline'); } });
@@ -252,7 +257,8 @@ test('an expired DKIM signature that still verifies is reported as aligned but n
   const key = publicKey.export({ type: 'pkcs1', format: 'der' }).toString('base64');
   const tags = sig => 'v=1; a=rsa-sha256; d=mail.example.test; s=mail; t=1700000000; x=1700000060; ' +
     'h=from:subject; bh=' + hash('Hello\r\n').toString('base64') + '; b=' + sig;
-  const build = sig => parseEmail('Authentication-Results: mx.receiver.test; dkim=pass header.d=mail.example.test;' +
+  const build = sig => parseEmail('Received: from mail.example.test by mx.receiver.test; Tue, 14 Nov 2023 22:13:30 +0000\r\n' +
+    'Authentication-Results: mx.receiver.test; dkim=pass header.d=mail.example.test;' +
     ' dmarc=pass (p=NONE) header.from=example.test\r\nDKIM-Signature: ' + tags(sig) +
     '\r\nFrom: sender@example.test\r\nSubject: Archived message\r\n\r\nHello\r\n');
   const validator = new DkimValidator();
@@ -288,12 +294,45 @@ test('SPF records each rule outcome in order, the DNS lookups used, and the reve
   const budget = { terms: 0, voids: 0, ptr: null };
   const trace = await validator.evaluateRecursive('192.0.2.10', 'example.test', 0, 'bounce@example.test', null, budget);
   assert.equal(trace.result, 'Pass');
-  assert.deepEqual(trace.terms, [
+  assert.deepEqual(trace.terms.map(({ token, outcome }) => ({ token, outcome })), [
     { token: 'include:other.example.test', outcome: 'no-match' },
     { token: 'ip4:192.0.2.0/24', outcome: 'matched' }
   ]);
+  assert.deepEqual(trace.terms[0].detail, { target: 'other.example.test', result: 'Fail' });
   assert.equal(budget.terms, 1);
   assert.equal(await validator.reverseName('192.0.2.10'), 'mail.example.test');
+});
+
+test('SPF records every DNS question with its answer and the rule that asked it', async () => {
+  const email = parseEmail([
+    'Return-Path: <bounce@mailer.example.test>',
+    'Received: from mail.example.test (mail.example.test [192.0.2.25]) by mx.example.net',
+    'From: a@example.test', '', 'Hi'
+  ].join('\r\n'));
+  const validator = new SpfValidator();
+  validator.queryDns = async (name, type) => ({
+    'TXT mailer.example.test': ['"v=spf1 mx include:esp.example.net -all"'],
+    'MX mailer.example.test': ['10 mx1.mailer.example.test.'],
+    'A mx1.mailer.example.test': ['198.51.100.9'],
+    'TXT esp.example.net': ['"v=spf1 ip4:192.0.2.0/24 ~all"']
+  })[type + ' ' + name] || [];
+  const result = await validator.verify(email);
+  assert.equal(result.result, 'pass');
+  assert.deepEqual([result.mailboxSource, result.ipSource, result.helo], ['Return-Path', 'Received', 'mail.example.test']);
+  assert.deepEqual(result.operations.map(({ depth, domain, token, type, name, records }) => [depth, domain, token, `${type} ${name}`, records.length]), [
+    [0, 'mailer.example.test', null, 'TXT mailer.example.test', 1],
+    [0, 'mailer.example.test', 'mx', 'MX mailer.example.test', 1],
+    [0, 'mailer.example.test', 'mx', 'A mx1.mailer.example.test', 1],
+    [1, 'esp.example.net', null, 'TXT esp.example.net', 1]
+  ]);
+  assert.deepEqual(result.trace.terms.map(term => [term.token, term.outcome, term.detail]), [
+    ['mx', 'no-match', { target: 'mailer.example.test', hosts: ['mx1.mailer.example.test'], prefix: 32 }],
+    ['include:esp.example.net', 'matched', { target: 'esp.example.net', result: 'Pass' }]
+  ]);
+  // A domain without a policy doesn't use up the void lookup allowance, which is for the rules' own lookups.
+  validator.queryDns = async () => [];
+  const none = await validator.verify(email);
+  assert.deepEqual([none.result, none.voidLookups, none.operations.length], ['none', 0, 1]);
 });
 
 test('SPF matches IPv6 CIDRs and uses AAAA for a and mx', async () => {
@@ -331,7 +370,8 @@ test('SPF distinguishes an unavailable DNS server from an absent record', async 
 });
 
 test('SPF reports the historical result when the sending IP is unavailable', async () => {
-  const email = parseEmail('From: sender@example.test\r\nReturn-Path: <sender@example.test>\r\n' +
+  const email = parseEmail('Received: from mail.example.test by receiver.example.test\r\n' +
+    'From: sender@example.test\r\nReturn-Path: <sender@example.test>\r\n' +
     'Authentication-Results: receiver.example.test; spf=pass smtp.mailfrom=example.test\r\n\r\n');
   const validator = new SpfValidator();
   validator.queryDns = async () => ['v=spf1 ip4:192.0.2.0/24 -all'];
@@ -402,6 +442,7 @@ test('SPF finds the IPv6 peer at the receiver named in Authentication-Results', 
 
 test('SPF can use delivery metadata in the SPF clause of Authentication-Results', async () => {
   const email = parseEmail([
+    'Received: from mail.example.test by mx.example.test',
     'Authentication-Results: mx.example.test;',
     ' spf=pass (sender IP is 192.0.2.11) smtp.mailfrom=mailer.example.test;',
     ' dkim=none (no signature)', 'From: sender@example.test', '', 'Hello'
@@ -497,6 +538,64 @@ test('DMARC passes via aligned DKIM when SPF passes for a delivery provider', as
   assert.deepEqual(result.passedBy, ['DKIM']);
 });
 
+test('DMARC fails from headers alone when the envelope domain can\'t match From and no signature does', async () => {
+  const email = parseEmail('From: support@bank.example\r\n\r\nHi\r\n');
+  const validator = new DmarcValidator();
+  validator.queryDns = async name => name === '_dmarc.bank.example' ? ['v=DMARC1; p=reject'] : [];
+  // The sender's own domain passes SPF, but it isn't the From domain, so SPF can't count whatever the session was.
+  const spoof = await validator.verify(email, { domain: 'attacker.example', result: 'pass', source: 'headers' }, []);
+  assert.equal(spoof.result, 'fail');
+  assert.deepEqual(spoof.passedBy, []);
+  // An envelope domain that matches From could have passed SPF in the real session, so that stays unconfirmed.
+  const aligned = await validator.verify(email, { domain: 'bounce.bank.example', result: 'pass', source: 'headers' }, []);
+  assert.equal(aligned.result, 'unavailable');
+});
+
+test('a Received header claiming the receiver handled the message before it arrived is flagged as forged', () => {
+  const at = 'Tue, 17 Nov 2026 15:38:16 -0800';
+  const scam = parseEmail([
+    `Received: by 2002:a05:7022:ec8a:b0:1b5:474:b524 with SMTP id q; ${at}`,
+    `Received: from sb076.cfd (success.bank.example. [185.215.184.118]) by mx.google.com with ESMTPS id x; ${at}`,
+    'Authentication-Results: mx.google.com; spf=pass smtp.mailfrom=sb076.throwaway.example',
+    'From: alex <alert@gqgtn.nkx>',
+    `Received: from efianalytics.com (efianalytics.com. 216.244.76.116) by mx.google.com with ESMTPS id ?act=cl; ${at}`,
+    'Subject: Storage full', '', 'Hi', ''
+  ].join('\r\n'));
+  const delivery = DeliveryRecords.assess(scam);
+  assert.deepEqual(delivery.forgedHops.map(hop => [hop.index, hop.by, hop.entryFrom]), [[4, 'mx.google.com', 'sb076.cfd']]);
+  const issues = HeaderInsights.anomalies(headerFields(scam.rawHeaders), { delivery });
+  assert.deepEqual(issues.map(issue => [issue.kind, issue.indexes]), [['forged-hop', [4]]]);
+  assert.match(issues[0].message, /claims mx\.google\.com handled the message before sb076\.cfd handed it to mx\.google\.com/);
+
+  // Gmail to Gmail: the hops below the receiving server came from Google's own outbound servers, so nothing is flagged.
+  const gmailToGmail = parseEmail([
+    `Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41]) by mx.google.com with SMTPS id y; ${at}`,
+    `Received: by 2002:a05:6a20:1234::1 with SMTP id z; ${at}`,
+    `Received: from laptop ([192.0.2.20]) by smtp.gmail.com with ESMTPSA id w; ${at}`,
+    'From: alex@example.com', '', 'Hi', ''
+  ].join('\r\n'));
+  assert.deepEqual(DeliveryRecords.assess(gmailToGmail).forgedHops, []);
+  // A content filter re-injecting on the same server is fine too: the server took it from itself.
+  const filtered = parseEmail([
+    `Received: from localhost (localhost [127.0.0.1]) by mail.example.net (Postfix) with ESMTP id a; ${at}`,
+    `Received: from mail.sender.example (mail.sender.example [198.51.100.4]) by mail.example.net (Postfix) with ESMTPS id b; ${at}`,
+    `Received: from laptop by mail.sender.example; ${at}`, 'From: a@sender.example', '', 'Hi', ''
+  ].join('\r\n'));
+  assert.deepEqual(DeliveryRecords.assess(filtered).forgedHops, []);
+});
+
+test('top-level domains come from the suffix list, including ones listed only under wildcards', () => {
+  for (const host of ['example.com', 'sb076.cfd', 'shop.co.uk', 'foo.ck', 'site.xn--p1ai']) assert.equal(PublicSuffix.knownTld(host), true, host);
+  for (const host of ['gqgtn.nkx', 'bank.example', 'mail.test', 'printer.local', '']) assert.equal(PublicSuffix.knownTld(host), false, host);
+});
+
+test('a Google Takeout export\'s Spam label counts as Gmail\'s spam verdict', () => {
+  const spam = HeaderInsights.spamVerdicts(headerFields('X-Gmail-Labels: Spam,Category Promotions,Unread\r\nSubject: Hi'));
+  assert.deepEqual([spam.provider, spam.items.map(item => [item.label, item.tone])], ['Gmail', [['In Spam', 'fail']]]);
+  assert.equal(HeaderInsights.spamVerdicts(headerFields('X-Gmail-Labels: Inbox,Important\r\nSubject: Hi')), null);
+  assert.equal(HeaderInsights.category('X-Gmail-Labels'), 'spam');
+});
+
 test('MIME parser decodes text parts and lists attachments with RFC 2231 names and decoded sizes', () => {
   const pdf = Buffer.from('%PDF-1.4 fake document bytes');
   const email = new EmailParser().parseBytes(Buffer.from([
@@ -563,6 +662,10 @@ test('ARC verifies a sealed set, and breaks when the recorded results or the cha
   assert.deepEqual([intact.sets[0].sealer, intact.sets[0].cv, intact.sets[0].seal.valid, intact.sets[0].ams.valid],
     ['forwarder.test', 'none', true, true]);
   assert.equal(intact.sets[0].recorded, 'mx.forwarder.test; dkim=pass header.d=example.test');
+  // The seal keeps its key lookup and the data it covers, for the step-by-step explanation.
+  assert.equal(intact.sets[0].seal.question.type, 'TXT');
+  assert.match(intact.sets[0].seal.question.name, /\._domainkey\./);
+  assert.match(intact.sets[0].seal.data, /^arc-authentication-results:i=1;/);
 
   const altered = await arc.verify(build(ams, seal, 'i=1; mx.forwarder.test; dkim=fail header.d=example.test'));
   assert.equal(altered.status, 'fail');
@@ -610,17 +713,193 @@ test('spam verdicts come from the receiving provider, not from the sender\'s unt
 });
 
 test('header warnings flag repeated From headers and receiver results written below the oldest hop', () => {
-  const fields = headerFields([
+  const text = [
     'Authentication-Results: mx.example.net; dmarc=fail',
     'Received: from mail.sender.test by mx.example.net; Tue, 10 Nov 2026 16:55:12 +0000',
     'From: Bank <alerts@bank.example>',
     'Authentication-Results: mx.example.net; dkim=pass; dmarc=pass',
     'From: someone@sender.test',
     'Subject: Hi'
-  ].join('\r\n'));
-  const issues = HeaderInsights.anomalies(fields, { covered: new Set(['from:1']), receiver: 'mx.example.net' });
+  ].join('\r\n');
+  const delivery = DeliveryRecords.assess(parseEmail(text + '\r\n\r\n'));
+  const issues = HeaderInsights.anomalies(headerFields(text), { covered: new Set(['from:1']), delivery });
   assert.deepEqual(issues.map(issue => [issue.kind, issue.indexes]), [['duplicate', [2, 4]], ['forged-results', [3]]]);
   assert.match(issues[0].message, /only one is signed/);
-  assert.deepEqual(HeaderInsights.anomalies(headerFields('Received: by mx.example.net\r\nAuthentication-Results: other.example; spf=pass\r\nFrom: a@b.test'),
-    { receiver: 'mx.example.net' }), []);
+  assert.match(issues[1].message, /naming mx\.example\.net may be forged/);
+  // A server the Received chain doesn't show isn't used, but isn't a warning sign on its own.
+  const other = 'Received: by mx.example.net\r\nAuthentication-Results: other.example; spf=pass\r\nFrom: a@b.test';
+  assert.deepEqual(HeaderInsights.anomalies(headerFields(other), { delivery: DeliveryRecords.assess(parseEmail(other + '\r\n\r\n')) }), []);
+});
+
+test('delivery results count only where the Received chain shows a receiving server writing them', async () => {
+  const dmarc = new DmarcValidator();
+  dmarc.queryDns = async name => name === '_dmarc.bank.example' ? ['v=DMARC1; p=reject'] : [];
+  const spf = new SpfValidator();
+  spf.queryDns = async () => ['v=spf1 ip4:198.51.100.0/24 -all'];
+
+  // The sender wrote the only results header, naming a server the message never passed through.
+  const forged = parseEmail([
+    'Received: from attacker.example (attacker.example [203.0.113.9]) by mx.victim.example with ESMTP; Tue, 17 Nov 2026 12:00:00 +0000',
+    'Authentication-Results: mx.google.com; dkim=pass header.d=bank.example; spf=pass (sender IP is 198.51.100.4) smtp.mailfrom=bank.example; dmarc=pass header.from=bank.example',
+    'Received-SPF: pass (google.com: domain of a@bank.example designates 198.51.100.4 as permitted sender) client-ip=198.51.100.4;',
+    'From: support@bank.example', '', 'Hi', ''
+  ].join('\r\n'));
+  assert.deepEqual(DeliveryRecords.assess(forged).records.map(record => [record.server, record.trusted, record.reason]),
+    [['mx.google.com', false, 'unknown-server'], ['google.com', false, 'unknown-server']]);
+  assert.equal((await dmarc.verify(forged, null, [])).reported, null);
+  const forgedSpf = await spf.verify(forged);
+  assert.deepEqual([forgedSpf.headerResult, forgedSpf.senderIp, forgedSpf.ignoredReports], [null, '203.0.113.9', 2]);
+
+  // Gmail writes its results just below its own Received header; a copy below the sender's hop came with the message.
+  const gmail = parseEmail([
+    'Received: by 2002:a05:6a20:1234:b0:1b5:474:b524 with SMTP id x; Tue, 17 Nov 2026 12:00:02 -0800 (PST)',
+    'Received: from mail.bank.example (mail.bank.example. [198.51.100.4]) by mx.google.com with ESMTPS id y; Tue, 17 Nov 2026 12:00:01 -0800 (PST)',
+    'Received-SPF: pass (google.com: domain of a@bank.example designates 198.51.100.4 as permitted sender) client-ip=198.51.100.4;',
+    'Authentication-Results: mx.google.com; spf=pass smtp.mailfrom=bank.example; dmarc=fail (p=REJECT) header.from=bank.example',
+    'Received: from laptop by mail.bank.example; Tue, 17 Nov 2026 12:00:00 -0800',
+    'Authentication-Results: mx.google.com; dkim=pass header.d=bank.example; dmarc=pass header.from=bank.example',
+    'From: support@bank.example', '', 'Hi', ''
+  ].join('\r\n'));
+  const gmailRecords = DeliveryRecords.assess(gmail).records;
+  assert.deepEqual(gmailRecords.map(record => [record.name, record.trusted, record.reason, record.suspicious]), [
+    ['received-spf', true, null, false], ['authentication-results', true, null, false],
+    ['authentication-results', false, 'below-other', true]]);
+  assert.match(DeliveryRecords.explain(gmailRecords[2]), /below the Received header added by mail\.bank\.example/);
+  assert.deepEqual([gmailRecords[1].via.by, gmailRecords[1].org, gmailRecords[1].byReceiver], ['mx.google.com', 'google.com', false]);
+  assert.deepEqual((await dmarc.verify(gmail, null, [])).reported, { result: 'fail', authServId: 'mx.google.com' });
+
+  // Microsoft names no server; its results sit above its own Received header. The sending tenant's copy sits lower.
+  const microsoft = parseEmail([
+    'Received: from DM6PR11MB1234.namprd11.prod.outlook.com (2603:10b6:5:1::1) by SN6PR11MB5678.namprd11.prod.outlook.com with HTTPS; Tue, 17 Nov 2026 20:00:03 +0000',
+    'Authentication-Results: spf=pass (sender IP is 198.51.100.4) smtp.mailfrom=bank.example; dkim=pass (signature was verified) header.d=bank.example;dmarc=pass action=none header.from=bank.example;compauth=pass reason=100',
+    'Received-SPF: Pass (protection.outlook.com: domain of bank.example designates 198.51.100.4 as permitted sender) receiver=protection.outlook.com; client-ip=198.51.100.4; helo=mail.bank.example; pr=C',
+    'Received: from mail.bank.example (198.51.100.4) by BN8NAM12FT034.mail.protection.outlook.com (10.13.182.1) with Microsoft SMTP Server; Tue, 17 Nov 2026 20:00:02 +0000',
+    'Received: from laptop by mail.bank.example; Tue, 17 Nov 2026 20:00:00 +0000',
+    'Authentication-Results: dkim=none (message not signed) header.d=none;dmarc=none action=none header.from=bank.example;',
+    'From: support@bank.example', '', 'Hi', ''
+  ].join('\r\n'));
+  const microsoftRecords = DeliveryRecords.assess(microsoft).records;
+  assert.deepEqual(microsoftRecords.map(record => [record.server, record.trusted, record.reason, record.suspicious]), [
+    [null, true, null, false], ['protection.outlook.com', true, null, false], [null, false, 'below-other', false]]);
+  assert.equal(microsoftRecords[0].byReceiver, true);
+  const parsed = new ServerValidationParser().parseOne(microsoftRecords[0].value);
+  assert.equal(parsed.service, null);
+  assert.deepEqual(parsed.results.map(({ method, result }) => method + '=' + result), ['spf=pass', 'dkim=pass', 'dmarc=pass', 'compauth=pass']);
+  assert.deepEqual((await dmarc.verify(microsoft, null, [])).reported, { result: 'pass', authServId: null });
+  const microsoftSpf = await spf.verify(microsoft);
+  assert.deepEqual([microsoftSpf.result, microsoftSpf.senderIp, microsoftSpf.ipSource], ['pass', '198.51.100.4', 'Received-SPF']);
+
+  // Without any Received header nothing shows which server wrote it.
+  const pasted = DeliveryRecords.assess(parseEmail('Authentication-Results: mx.example.net; spf=pass\r\nFrom: a@b.test\r\n\r\n'));
+  assert.deepEqual(pasted.records.map(record => record.reason), ['no-trace']);
+});
+
+test('registrable domains follow the public suffix list', () => {
+  const cases = {
+    'mail.shop.com.vn': 'shop.com.vn', 'news.example.co.id': 'example.co.id', 'mail.example.gov.au': 'example.gov.au',
+    'a.b.example.co.uk': 'example.co.uk', 'evil.github.io': 'evil.github.io', 'mx.google.com': 'google.com',
+    'BN8NAM12FT034.mail.protection.outlook.com.': 'outlook.com', 'foo.www.ck': 'www.ck', 'a.b.ck': 'a.b.ck',
+    'news.example.test': 'example.test', 'co.uk': null, 'eaas-34.svc.cluster.local': null, '10.0.0.1': null,
+    '[IPv6:2001:db8::1]': null, 'localhost': null
+  };
+  for (const [host, expected] of Object.entries(cases)) assert.equal(PublicSuffix.registrableDomain(host), expected, host);
+  // Registration lookups want the domain bought from a registrar, not a customer's name under a private suffix.
+  assert.equal(PublicSuffix.registrableDomain('evil.github.io', { icannOnly: true }), 'github.io');
+  assert.equal(PublicSuffix.publicSuffix('x.s3.amazonaws.com'), 's3.amazonaws.com');
+  assert.match(PublicSuffix.version, /^\d{4}-\d{2}-\d{2}/);
+  assert.equal(DeliveryRecords.organization('SN6PR11MB5678.namprd11.prod.outlook.com'), 'outlook.com');
+  assert.equal(DeliveryRecords.organization('mail-sor-f41.gmail.com'), 'google.com');
+});
+
+test('each DNS question is asked once per check, failures included, until the cache is cleared', async () => {
+  const realFetch = global.fetch;
+  const asked = [];
+  global.fetch = async url => {
+    const name = new URL(url).searchParams.get('name');
+    asked.push(name);
+    if (name === 'down.example.test') throw new Error('network down');
+    return { ok: true, json: async () => ({ Status: 0, Answer: [{ name: name + '.', type: 16, data: '"v=spf1 -all"' }] }) };
+  };
+  try {
+    EmailDns.clearCache();
+    const [first, second] = await Promise.all([EmailDns.lookup('example.test', 'TXT'), EmailDns.lookup('Example.test.', 'TXT')]);
+    assert.deepEqual(first, ['"v=spf1 -all"']);
+    first.push('changed by one caller');
+    assert.deepEqual(second, ['"v=spf1 -all"']);
+    await assert.rejects(EmailDns.lookup('down.example.test', 'TXT'), /network down/);
+    await assert.rejects(EmailDns.lookup('down.example.test', 'TXT'), /network down/);
+    assert.deepEqual(asked, ['example.test', 'down.example.test']);
+    EmailDns.clearCache();
+    await EmailDns.lookup('example.test', 'TXT');
+    assert.equal(asked.length, 3);
+  } finally {
+    global.fetch = realFetch;
+    EmailDns.clearCache();
+  }
+});
+
+test('DNS tells a name that doesn\'t exist from one that only lacks mail records', async () => {
+  const realFetch = global.fetch;
+  const asked = [];
+  global.fetch = async url => {
+    const name = new URL(url).searchParams.get('name');
+    asked.push(name);
+    const status = name === 'gone.example.test' ? 3 : 0;
+    return { ok: true, json: async () => ({ Status: status, Answer: [] }) };
+  };
+  try {
+    EmailDns.clearCache();
+    assert.equal(await EmailDns.exists('gone.example.test'), false);
+    assert.equal(await EmailDns.exists('quiet.example.test'), true);
+    assert.deepEqual(await EmailDns.lookup('gone.example.test', 'MX'), []);
+    // The existence check is the MX question, so it costs no extra request.
+    assert.deepEqual(asked, ['gone.example.test', 'quiet.example.test']);
+  } finally {
+    global.fetch = realFetch;
+    EmailDns.clearCache();
+  }
+});
+
+test('DMARC records each policy question and why it was asked; DKIM keeps its key answer', async () => {
+  const email = parseEmail('From: news@news.example.test\r\n\r\nHi\r\n');
+  const validator = new DmarcValidator();
+  validator.queryDns = async name => name === '_dmarc.example.test' ? ['"v=DMARC1; p=quarantine"'] : [];
+  const spf = { domain: 'bounce.example.net', result: 'pass', source: 'headers' };
+  const dkim = [{ dkim: { tags: { d: 'example.test', s: 'one' } }, result: { valid: true } }];
+  const dto = await validator.verify(email, spf, dkim);
+  assert.equal(dto.result, 'pass');
+  assert.deepEqual(dto.operations.map(({ purpose, name, records }) => [purpose, name, records.length]), [
+    ['policy', '_dmarc.news.example.test', 0], ['policy', '_dmarc.example.test', 1], ['policy', '_dmarc.test', 0],
+    ['organization', '_dmarc.bounce.example.net', 0], ['organization', '_dmarc.example.net', 0], ['organization', '_dmarc.net', 0]
+  ]);
+
+  const signer = new DkimValidator();
+  signer.queryDns = async () => [];
+  const signature = new DkimParser().parse('v=1; a=rsa-sha256; d=example.test; s=gone; h=from; bh=' + hash('').toString('base64') + '; b=AAAA', 0);
+  const result = await signer.verify(parseEmail('DKIM-Signature: ' + 'v=1; a=rsa-sha256; d=example.test; s=gone; h=from; bh=' +
+    hash('').toString('base64') + '; b=AAAA\r\nFrom: a@example.test\r\n\r\n'), signature);
+  assert.equal(result.keyError, 'No DKIM key record');
+  // The lookup itself worked and came back empty; "no key" is the conclusion, shown apart from the answer.
+  assert.deepEqual(signature.dnsQuestion, { type: 'TXT', name: 'gone._domainkey.example.test', records: [], error: null });
+});
+
+test('DMARC looks up each policy name once for the verdict and its explanation', async () => {
+  const email = parseEmail('From: a@example.test\r\n\r\nHi\r\n');
+  const asked = [];
+  const validator = new DmarcValidator();
+  validator.queryDns = async name => {
+    asked.push(name);
+    return name === '_dmarc.example.test' ? ['v=DMARC1; p=reject'] : [];
+  };
+  const spf = { result: 'pass', domain: 'bounce.example.test', source: 'smtp', senderIp: '192.0.2.1' };
+  const dkim = [{ dkim: { tags: { d: 'example.test', s: 'one' } }, result: { valid: true } },
+    { dkim: { tags: { d: 'esp-mail.example', s: 'two' } }, result: { valid: true } }];
+  assert.equal((await validator.verify(email, spf, dkim)).result, 'pass');
+  assert.deepEqual(asked.filter((name, index) => asked.indexOf(name) !== index), []);
+});
+
+test('a leading mbox separator line is not read as a header', () => {
+  const email = parseEmail('From MAILER-DAEMON Tue Nov 17 12:00:01 2026\r\nFrom: a@example.test\r\nSubject: Hi\r\n\r\nBody\r\n');
+  assert.deepEqual(Object.keys(email.headers), ['From', 'Subject']);
+  assert.equal(parseEmail('From : a@example.test\r\n\r\n').headers.From, 'a@example.test');
 });

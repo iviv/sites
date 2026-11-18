@@ -26,7 +26,32 @@
     }
   }
 
-  async function lookup(name, type) {
+  // Answers (and failures) are kept until clearCache(), which the page calls for each new check, so every
+  // panel sees the same answer and a name asked for by several checks is looked up once.
+  const cache = new Map();
+
+  function answer(name, type) {
+    const key = type + ' ' + normalizeName(name, true);
+    if (!cache.has(key)) cache.set(key, query(name, type));
+    return cache.get(key);
+  }
+
+  function lookup(name, type) {
+    // A copy each time, so no caller can change what the others see.
+    return answer(name, type).then(result => [...result.records]);
+  }
+
+  // False when DNS has no record of the name at all (NXDOMAIN), rather than the name existing without mail records.
+  // It reuses the MX question, which the Sender Domain checks ask anyway.
+  function exists(name) {
+    return answer(name, 'MX').then(result => !result.missing);
+  }
+
+  function clearCache() {
+    cache.clear();
+  }
+
+  async function query(name, type) {
     name = normalizeName(name, true);
     if (!name || !Object.hasOwn(types, type)) throw new Error('Invalid DNS question');
     const url = new URL(endpoint);
@@ -37,7 +62,8 @@
     });
     if (!response.ok) throw new Error('DNS HTTP error ' + response.status);
     const data = await response.json();
-    if (data.Status === 3) return [];
+    // An alias to a missing name still means the name itself exists.
+    if (data.Status === 3) return { records: [], missing: !(data.Answer || []).length };
     if (data.Status !== 0 || data.TC) throw new Error('DNS lookup failed for ' + name);
     const answers = data.Answer || [];
     const seen = new Set();
@@ -45,9 +71,9 @@
       seen.add(name);
       const records = answers.filter(record => normalizeName(record.name, true) === name);
       const matches = records.filter(record => record.type === types[type]);
-      if (matches.length) return matches.map(record => record.data);
+      if (matches.length) return { records: matches.map(record => record.data), missing: false };
       const alias = records.find(record => record.type === 5);
-      if (!alias) return [];
+      if (!alias) return { records: [], missing: false };
       name = normalizeName(alias.data, true);
       if (!name) throw new Error('Invalid DNS alias');
     }
@@ -77,5 +103,5 @@
     return { tags, error };
   }
 
-  return { lookup, normalizeName, mailboxDomain, txt, parseTags };
+  return { lookup, exists, clearCache, normalizeName, mailboxDomain, txt, parseTags };
 }));

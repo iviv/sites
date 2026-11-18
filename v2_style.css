@@ -1,4 +1,4 @@
-/* Email Parser & DKIM Validator
+/* Email Inspector
  *
  * Each theme is a body class that sets the palette variables below. The
  * default, theme-auto, follows the system setting: Ayu Light or Ayu Mirage.
@@ -1234,6 +1234,7 @@ h4::after {
 .status-icon.pass { color: var(--success-color); }
 .status-icon.fail { color: var(--fail-color); }
 .status-icon.warn { color: var(--pending-color); }
+.status-icon.alert { color: var(--pending-color); }
 .status-icon.ring { color: var(--success-color); }
 .status-icon.unknown { color: var(--faint); }
 
@@ -1292,6 +1293,98 @@ h4::after {
 .summary-verdict.is-warn {
     border-color: color-mix(in srgb, var(--pending-color) 42%, var(--container-bg));
     background: color-mix(in srgb, var(--pending-color) 11%, var(--container-bg));
+}
+
+/* At a glance: the overall status beside the Summary heading, and as the Summary link's mark in the jump bar.
+   Strong states fill the shield; neutral ones stay outlined. */
+:is(.glance, .jump-glance) { --tone: color-mix(in srgb, var(--text-color) 45%, var(--container-bg)); }
+:is(.glance, .jump-glance).is-pass { --tone: var(--success-color); }
+:is(.glance, .jump-glance).is-warn { --tone: var(--pending-color); }
+:is(.glance, .jump-glance).is-fail { --tone: var(--fail-color); }
+
+.glance {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 11px 3px 6px;
+    border: 1px solid color-mix(in srgb, var(--tone) 34%, var(--container-bg));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tone) 12%, var(--container-bg));
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1.4;
+    letter-spacing: 0;
+    color: var(--muted);
+}
+
+.glance[hidden] { display: none; }
+.glance.is-pass { color: var(--ok-text); }
+.glance.is-warn { color: var(--warn-text); }
+.glance.is-fail { color: var(--bad-text); }
+.glance.is-neutral,
+.glance.is-checking {
+    border-color: var(--line);
+    background: var(--surface-2);
+}
+
+.glance-icon {
+    display: block;
+    flex: none;
+    color: var(--tone);
+}
+
+.glance-shield { fill: none; }
+
+:is(.glance, .jump-glance):is(.is-pass, .is-warn, .is-fail) .glance-shield { fill: currentColor; }
+:is(.glance, .jump-glance):is(.is-pass, .is-warn, .is-fail) .glance-mark {
+    stroke: var(--container-bg);
+    stroke-width: 2.4;
+}
+
+:is(.glance, .jump-glance).is-checking .glance-icon { animation: jump-pulse 1.2s ease-in-out infinite; }
+
+.jump-glance {
+    display: inline-flex;
+    flex: none;
+    margin: -2px 0 -2px -3px;
+}
+
+.glance-reasons {
+    display: grid;
+    gap: 6px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.86rem;
+    color: var(--text-color);
+}
+
+.glance-reasons li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.glance-reasons .status-icon { margin-top: 2px; }
+
+.glance-link {
+    margin-left: auto;
+    padding-left: 10px;
+    font-size: 0.78rem;
+    color: var(--link);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.glance-link:hover { text-decoration: underline; }
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .summary-head {
@@ -2608,19 +2701,321 @@ h4::after {
 }
 
 .dmarc-verdict-text {
+    min-width: 0;
     font-size: 0.95rem;
     color: var(--heading);
 }
 
-.dmarc-reported {
+/* Long generated domains (throwaway envelope senders) wrap instead of running past the card. */
+.dmarc-verdict-text,
+.dmarc-reported,
+.notice,
+.explain { overflow-wrap: anywhere; }
+
+/* --- How it was decided: a step-by-step account of a check --- */
+.explain-view[hidden] { display: none; }
+
+.explain { animation: fadeIn 0.25s ease both; }
+
+.explain-intro {
+    margin: 0 0 16px;
+    color: var(--muted);
+}
+
+.explain-steps {
+    display: grid;
+    gap: 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.explain-step {
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--container-bg);
+}
+
+.explain-step-head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    gap: 6px 10px;
+    margin-bottom: 8px;
+}
+
+.explain-step-head h4 {
+    margin: 0;
+    font-size: 0.95rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--heading);
+}
+
+.explain-step-head h4::after { display: none; }
+
+.explain-step-number {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent-color) 16%, var(--container-bg));
+    color: var(--accent-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.explain-refs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin-left: auto;
+}
+
+.rfc-link {
+    padding: 1px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--link);
+}
+
+.rfc-link:hover { border-color: var(--link); }
+
+.explain-step-body > p,
+.explain-rule > p {
+    margin: 6px 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.explain-muted { color: var(--muted); }
+.explain-stop { color: var(--warn-text); }
+
+.explain-facts { margin: 10px 0 4px; }
+
+.explain-ops {
+    display: grid;
+    gap: 4px;
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.82rem;
+}
+
+.explain-op {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-2);
+}
+
+.explain-op .spf-dns-cmd {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--heading);
+}
+
+.explain-arrow { color: var(--faint); }
+
+.explain-answer {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+
+.explain-policy-head {
+    margin: 12px 0 6px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--heading);
+}
+
+.explain-record { display: block; }
+
+.explain-rules {
+    display: grid;
+    gap: 8px;
+    margin: 10px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.explain-rule {
+    padding: 8px 12px;
+    border-left: 3px solid var(--line);
+    border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+    background: var(--surface-2);
+}
+
+.explain-rule.is-matched { border-left-color: var(--success-color); }
+.explain-rule.is-error { border-left-color: var(--fail-color); }
+.explain-rule.is-not-reached { opacity: 0.7; }
+
+.explain-rule-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+.explain-token { font-size: 0.82rem; }
+
+.explain-effect { font-weight: 550; }
+
+.explain-nested {
+    margin: 8px 0 2px;
+    padding-left: 12px;
+    border-left: 1px dashed var(--line);
+}
+
+.explain-decided {
+    margin: 8px 0 0;
+    font-size: 0.88rem;
+}
+
+.explain-commands { white-space: pre-wrap; }
+
+.explain-standards {
+    display: grid;
     gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.86rem;
+}
+
+.explain-standards .rfc-link { margin-right: 8px; }
+
+.explain-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin: -4px 0 8px;
+}
+
+.explain-toolbar .btn {
+    padding: 4px 10px;
+    font-size: 0.78rem;
+}
+
+/* Term hints: a dotted underline, and the definition below on hover or keyboard focus. */
+.term {
+    position: relative;
+    border-bottom: 1px dotted currentColor;
+    cursor: help;
+}
+
+.term:focus-visible {
+    outline: none;
+    border-radius: 2px;
+    box-shadow: var(--ring);
+}
+
+.term:hover::after,
+.term:focus-visible::after {
+    content: attr(data-hint);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: var(--hint-shift, 0);
+    z-index: 40;
+    width: max-content;
+    max-width: min(300px, calc(100vw - 32px));
+    padding: 8px 10px;
+    border-radius: var(--radius-xs);
+    background: var(--heading);
+    color: var(--container-bg);
+    box-shadow: var(--shadow-sm);
+    font: 400 0.8rem/1.45 var(--font-sans);
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: normal;
+    pointer-events: none;
+}
+
+/* Every signal behind the overall status, and similar check lists. */
+.explain-signals {
+    display: grid;
+    gap: 6px;
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.86rem;
+}
+
+.explain-signals li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.explain-signals .status-icon { margin-top: 2px; }
+.explain-signals li.is-pending,
+.explain-signals li.is-info { color: var(--muted); }
+
+.explain-rule-list li.is-applied {
+    font-weight: 600;
+    color: var(--heading);
+}
+
+/* A signature's or key's tags: name, value, what it means. */
+.explain-tags {
+    width: 100%;
+    margin: 8px 0;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+
+.explain-tags th,
+.explain-tags td {
+    padding: 5px 8px;
+    border-top: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+}
+
+.explain-tags th { width: 3.5em; font-weight: 500; }
+.explain-tags td.mono { width: 40%; font-size: 0.8rem; overflow-wrap: anywhere; }
+.explain-tags td:last-child { color: var(--muted); }
+
+.explain-picks {
+    display: grid;
+    gap: 3px;
+    margin: 8px 0;
+    padding-left: 22px;
+    font-size: 0.86rem;
+}
+
+.explain-signed-data {
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 640px) {
+    .explain-tags td.mono { width: auto; }
+    .explain-tags td:last-child { display: none; }
+}
+
+/* Ordinary text flow, so punctuation stays next to the pill and the sentence wraps between words. */
+.dmarc-reported {
     margin-top: 8px;
     font-size: 0.82rem;
+    line-height: 1.9;
     color: var(--muted);
 }
+
+.dmarc-reported > [class^="status-"] { vertical-align: middle; }
 
 .dmarc-checks {
     width: 100%;

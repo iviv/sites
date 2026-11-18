@@ -1,10 +1,11 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./v2_dns'), require('./v2_email_parser').EmailAddress);
+    const parser = require('./v2_email_parser');
+    module.exports = factory(require('./v2_dns'), parser.EmailAddress, parser.DeliveryRecords, parser.ServerValidationParser);
   } else {
-    Object.assign(root, factory(root.EmailDns, root.EmailAddress));
+    Object.assign(root, factory(root.EmailDns, root.EmailAddress, root.DeliveryRecords, root.ServerValidationParser));
   }
-}(typeof self !== 'undefined' ? self : this, function (dns, address) {
+}(typeof self !== 'undefined' ? self : this, function (dns, address, delivery, ResultsParser) {
   class DmarcDTO {
     constructor(domain) {
       this.domain = domain;
@@ -23,22 +24,22 @@
       this.expiredAlignedDkim = [];
       this.reported = null;
       this.checks = [];
+      // Every _dmarc question asked, in order: { purpose: 'policy' | 'organization', type, name, records, error }.
+      this.operations = [];
     }
   }
 
-  // The DMARC verdict the topmost receiver recorded for this author domain, if any.
-  function reportedDmarc(headers, domain) {
-    const value = address.getHeader(headers, 'Authentication-Results');
-    for (const header of Array.isArray(value) ? value : value ? [value] : []) {
-      let text = header;
-      while (/\([^()]*\)/.test(text)) text = text.replace(/\([^()]*\)/g, ' ');
-      const [authServId, ...clauses] = text.split(';');
-      for (const clause of clauses) {
-        const match = clause.match(/^\s*dmarc\s*=\s*([a-z]+)/i);
-        if (!match) continue;
-        const headerFrom = clause.match(/\bheader\.from\s*=\s*"?([^\s";]+)/i)?.[1];
+  // The DMARC verdict the topmost receiving server recorded for this author domain, if any. Only records the
+  // Received chain ties to a receiving server count; a sender can write its own.
+  function reportedDmarc(email, domain) {
+    const parser = new ResultsParser();
+    for (const record of delivery.assess(email).trusted('authentication-results')) {
+      const header = parser.parseOne(record.value);
+      for (const entry of header.results) {
+        if (entry.method !== 'dmarc') continue;
+        const headerFrom = entry.props['header.from'];
         if (headerFrom && dns.normalizeName(headerFrom) !== dns.normalizeName(domain)) continue;
-        return { result: match[1].toLowerCase(), authServId: authServId.trim().split(/\s+/)[0] };
+        return { result: entry.result, authServId: header.service };
       }
     }
     return null;
@@ -55,7 +56,18 @@
           const name = '_dmarc.' + domain;
           // A valid author domain can be too long to have a _dmarc child.
           if (!dns.normalizeName(name, true)) return null;
-          const records = (await this.queryDns(name, 'TXT')).map(rawDns => ({ rawDns, record: dns.txt(rawDns) }))
+          // A cache that keeps a log records each question for the step-by-step explanation, with why it was asked.
+          const entry = cache.log ? { purpose: cache.purpose || 'policy', type: 'TXT', name, records: null, error: null } : null;
+          if (entry) cache.log.push(entry);
+          let answers;
+          try {
+            answers = await this.queryDns(name, 'TXT');
+          } catch (error) {
+            if (entry) entry.error = error.message;
+            throw error;
+          }
+          if (entry) entry.records = answers;
+          const records = answers.map(rawDns => ({ rawDns, record: dns.txt(rawDns) }))
             .filter(({ record }) => /^[ \t]*v[ \t]*=[ \t]*DMARC1[ \t]*(?:;|$)/.test(record));
           if (records.length !== 1) return null;
           const { tags, error } = dns.parseTags(records[0].record);
@@ -112,10 +124,14 @@
     }
 
     async verify(email, spfResult, dkimResults) {
-      const dto = await this.evaluate(email, spfResult, dkimResults);
+      // One cache for the verdict and the explanation, so each _dmarc name is looked up once.
+      const cache = new Map();
+      cache.log = [];
+      const dto = await this.evaluate(email, spfResult, dkimResults, cache);
+      dto.operations = cache.log;
       if (dto.domain) {
         try {
-          dto.checks = await this.describeChecks(dto, spfResult, dkimResults || []);
+          dto.checks = await this.describeChecks(dto, spfResult, dkimResults || [], cache);
         } catch {
           // The table is explanatory; the verdict above stands without it.
         }
@@ -140,8 +156,7 @@
 
     // One row per DKIM signature and one for SPF: does the domain match From, did it authenticate,
     // and does it count toward DMARC.
-    async describeChecks(dto, spfResult, dkimResults) {
-      const cache = new Map();
+    async describeChecks(dto, spfResult, dkimResults, cache = new Map()) {
       const aligned = match => match === 'exact' || match === 'relaxed';
       const checks = [];
       for (const { dkim, result } of dkimResults) {
@@ -166,7 +181,7 @@
       return checks;
     }
 
-    async evaluate(email, spfResult, dkimResults) {
+    async evaluate(email, spfResult, dkimResults, cache = new Map()) {
       const from = address.getHeader(email.headers, 'From');
       const domains = [...new Set(address.parseMailboxes(from).map(mailbox => mailbox.domain))];
       const dto = new DmarcDTO(domains.length === 1 ? domains[0] : null);
@@ -175,10 +190,12 @@
         dto.error = 'Expected one From header with a single author domain';
         return dto;
       }
-      const cache = new Map();
-      dto.reported = reportedDmarc(email.headers, dto.domain);
+      dto.reported = reportedDmarc(email, dto.domain);
       try {
+        cache.purpose = 'policy';
         const record = await this.fetchDMARC(dto.domain, cache);
+        // Later questions find organizational domains, to compare the signing and envelope domains with From.
+        cache.purpose = 'organization';
         if (!record) {
           dto.dnsCommand = 'dig TXT _dmarc.' + dto.domain;
           return dto;
@@ -231,8 +248,13 @@
             }
           }
         }
-        // Display alignment for header-derived inputs while keeping it out of the verified verdict.
-        const verifiedSpfAlignment = dto.spfFromHeaders ? 'unavailable' : dto.spfAlignment;
+        // Display alignment for header-derived inputs while keeping it out of the verified verdict. The envelope
+        // domain alone can rule SPF out, though: when it doesn't match From, SPF can't count whatever the session was.
+        let verifiedSpfAlignment = dto.spfFromHeaders ? 'unavailable' : dto.spfAlignment;
+        if (dto.spfFromHeaders && spfResult.domain) {
+          const match = await this.matchKind(spfResult.domain, dto.domain, dto.tags.aspf, cache);
+          if (match === 'none' || match === 'strict') verifiedSpfAlignment = 'fail';
+        }
         if (verifiedSpfAlignment === 'pass') dto.passedBy.push('SPF');
         if (dto.dkimAlignment === 'pass') dto.passedBy.push('DKIM');
         const outcomes = [verifiedSpfAlignment, dto.dkimAlignment];

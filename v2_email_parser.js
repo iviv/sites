@@ -2,10 +2,10 @@
   if (typeof module === 'object' && module.exports) {
     // Node.js
     const dkim = require('./v2_dkim_validator');
-    module.exports = factory(require('./v2_dns'), dkim);
+    module.exports = factory(require('./v2_dns'), require('./v2_public_suffix'), dkim);
   } else {
     // Browser globals
-    const modules = factory(root.EmailDns);
+    const modules = factory(root.EmailDns, root.PublicSuffix);
     root.EmailDTO = modules.EmailDTO;
     root.EmailParser = modules.EmailParser;
     root.parseEmail = modules.parseEmail;
@@ -15,12 +15,13 @@
     root.parseMailDate = modules.parseMailDate;
     root.MimeParser = modules.MimeParser;
     root.HeaderInsights = modules.HeaderInsights;
+    root.DeliveryRecords = modules.DeliveryRecords;
     root.RelayParser = modules.RelayParser;
     root.RelayDTO = modules.RelayDTO;
     root.ServerValidationParser = modules.ServerValidationParser;
     root.ServerValidationDTO = modules.ServerValidationDTO;
   }
-}(typeof self !== 'undefined' ? self : this, function(dns, dkimModule) {
+}(typeof self !== 'undefined' ? self : this, function(dns, suffixes, dkimModule) {
 
   /**
    * Data Transfer Object for the parsed email.
@@ -49,6 +50,8 @@
     }
 
     parse(rawText, wireBytes = false) {
+      // Messages saved from an mbox start with a "From sender date" separator line, which isn't a header.
+      rawText = rawText.replace(/^From (?![ \t]*:)[^\r\n]*\r?\n/, '');
       const match = rawText.match(/\r\n\r\n|\n\n/);
       let rawHeaders = rawText;
       let body = '';
@@ -408,12 +411,19 @@
       .filter(clause => clause.text || clause.comment);
   }
 
+  // "spf=pass ..." rather than a server name such as "mx.google.com 1".
+  function isResultClause(text) {
+    return /^[a-z0-9_.-]+(?:\/\d+)?\s*=/i.test(text || '');
+  }
+
   class ServerValidationParser {
     parseOne(header) {
-      const [first, ...rest] = resultClauses(header);
-      const [service = null, version = null] = (first?.text || '').split(/\s+/);
+      const clauses = resultClauses(header);
+      // Microsoft leaves out the server name and starts with the first result.
+      const named = clauses.length && !isResultClause(clauses[0].text);
+      const [service = null, version = null] = named ? clauses[0].text.split(/\s+/) : [];
       const results = [];
-      for (const clause of rest) {
+      for (const clause of named ? clauses.slice(1) : clauses) {
         const match = clause.text.match(/^([a-z0-9_.-]+)(?:\/\d+)?\s*=\s*([a-z0-9_-]+)\s*(.*)$/i);
         if (!match) continue;
         const props = {};
@@ -436,6 +446,137 @@
       return dto;
     }
   }
+
+  // --- Delivery records: what a receiving server concluded (Authentication-Results, Received-SPF). Anyone can
+  // write these headers, the sender included, so a record counts only where the Received chain shows the server it
+  // names handling the message: from that server's topmost Received header down to the next one written by another
+  // organization. Below that, the record was already in the message when it arrived. Microsoft's records name no
+  // server, so they're placed against the receiving organization: the one that wrote the topmost Received header
+  // with a domain. A sender can still write a record next to the receiver's own hop when the receiver adds none;
+  // nothing in the message can rule that out.
+  const DeliveryRecords = (() => {
+    // Domains one provider uses for its own servers.
+    const aliases = {
+      'office365.com': 'outlook.com', 'exchangelabs.com': 'outlook.com', 'office.com': 'outlook.com', 'hotmail.com': 'outlook.com',
+      'live.com': 'outlook.com', 'gmail.com': 'google.com', 'googlemail.com': 'google.com', 'me.com': 'icloud.com', 'mac.com': 'icloud.com'
+    };
+
+    function organization(host) {
+      const domain = suffixes.registrableDomain(host);
+      return aliases[domain] || domain;
+    }
+
+    // Header fields in order, split the way the DKIM verifier splits them, so indexes match the Headers view.
+    function traceFields(rawHeaders) {
+      const fields = [];
+      let current = null;
+      for (const line of String(rawHeaders || '').split(/\r?\n/)) {
+        if (/^[ \t]/.test(line)) {
+          if (current) current.value += ' ' + line.trim();
+          continue;
+        }
+        const colon = line.indexOf(':');
+        current = colon > 0 ? { index: fields.length, name: line.slice(0, colon).trim().toLowerCase(), value: line.slice(colon + 1).trim() } : null;
+        if (current) fields.push(current);
+      }
+      return fields;
+    }
+
+    // The server a Received header names in its "by" (who wrote it) or "from" (who handed the message over) clause.
+    function receivedClause(value, name) {
+      const host = withoutComments(value.replace(/\s+/g, ' ')).match(new RegExp('(?:^|[\\s;])' + name + '\\s+([^\\s;]+)', 'i'))?.[1];
+      return host ? host.replace(/\.$/, '').toLowerCase() : null;
+    }
+
+    // The server a record names: Authentication-Results' first word, or Received-SPF's receiver= (or the
+    // "(google.com: domain of ...)" comment).
+    function serverName(field) {
+      let name;
+      if (field.name === 'authentication-results') {
+        const first = resultClauses(field.value)[0]?.text || '';
+        name = isResultClause(first) ? null : first.split(/\s+/)[0];
+      } else {
+        name = field.value.match(/\breceiver\s*=\s*([^\s;()]+)/i)?.[1] || field.value.match(/^\s*[a-z]+\s*\(([^\s:()]+):/i)?.[1];
+      }
+      return name && /^[a-z0-9_.-]+$/i.test(name) ? name.replace(/\.$/, '').toLowerCase() : null;
+    }
+
+    // "mx1" in a Received header and "mx1.example.net" in a record are the same server.
+    function sameHost(a, b) {
+      return a === b || (!a.includes('.') && b.split('.')[0] === a) || (!b.includes('.') && a.split('.')[0] === b);
+    }
+
+    function place(field, hops, receiving) {
+      const server = serverName(field);
+      const serverOrg = server ? organization(server) : null;
+      const record = { index: field.index, name: field.name, value: field.value, server, trusted: false, reason: null, below: null, suspicious: false };
+      if (!hops.length) return { ...record, reason: 'no-trace' };
+      let own = server ? hops.filter(hop => hop.by && (sameHost(hop.by, server) || (serverOrg && hop.org === serverOrg))) : [];
+      let org = serverOrg || own.find(hop => hop.org)?.org || null;
+      if (!own.length && serverOrg) return { ...record, org: serverOrg, reason: 'unknown-server' };
+      // Records that name no server are placed against the receiving organization.
+      const byReceiver = !own.length;
+      if (!own.length) {
+        own = receiving ? hops.filter(hop => hop.org === receiving) : [];
+        org = receiving;
+      }
+      if (!own.length) return { ...record, reason: 'unplaced' };
+      // For the explanation: the hop that ties the record to its server, and the organization compared against.
+      const placed = { ...record, org, byReceiver, via: { index: own[0].index, by: own[0].by } };
+      const next = hops.find(hop => hop.index > own[0].index && hop.org && hop.org !== org);
+      if (next && field.index > next.index) {
+        // Claiming to be the receiver while sitting below another organization's hop is a warning sign.
+        return { ...placed, reason: 'below-other', below: next.by, suspicious: Boolean(serverOrg) && serverOrg === receiving };
+      }
+      return { ...placed, trusted: true };
+    }
+
+    function assess(email) {
+      if (email.deliveryRecords) return email.deliveryRecords;
+      const fields = traceFields(email.rawHeaders);
+      const hops = fields.filter(field => field.name === 'received').map(field => {
+        const by = receivedClause(field.value, 'by');
+        const from = receivedClause(field.value, 'from');
+        return { index: field.index, by, org: by ? organization(by) : null, from, fromOrg: from ? organization(from) : null, value: field.value };
+      });
+      const receiving = hops.find(hop => hop.org)?.org || null;
+      const records = fields.filter(field => field.name === 'authentication-results' || field.name === 'received-spf')
+        .map(field => place(field, hops, receiving));
+      // A server writes one record per pass. A second copy naming it, below the oldest hop, came with the message.
+      const oldest = hops.at(-1);
+      const seen = new Set();
+      for (const record of records) {
+        const key = record.name + ' ' + record.server;
+        if (record.trusted && record.server && seen.has(key) && oldest && record.index > oldest.index) {
+          Object.assign(record, { trusted: false, reason: 'repeated', suspicious: true });
+        }
+        if (record.server) seen.add(key);
+      }
+      // Where the receiving organization took the message from another one. The Received header right below that hop
+      // was written before the message reached it, so one claiming the receiving organization wrote it is forged.
+      const entry = receiving && hops.find(hop => hop.org === receiving && hop.fromOrg && hop.fromOrg !== receiving);
+      const next = entry && hops.find(hop => hop.index > entry.index);
+      const forgedHops = next && next.org === receiving ? [{ index: next.index, by: next.by, entryBy: entry.by, entryFrom: entry.from }] : [];
+      const result = { records, receiving, forgedHops, hops, trusted: name => records.filter(record => record.trusted && record.name === name) };
+      Object.defineProperty(email, 'deliveryRecords', { value: result, configurable: true, writable: true });
+      return result;
+    }
+
+    // Why a record isn't used, in a sentence.
+    function explain(record) {
+      const server = record.server || 'the receiving server';
+      switch (record.reason) {
+        case 'unknown-server': return `It names ${record.server}, which doesn't appear in any Received header.`;
+        case 'below-other': return `It sits below the Received header added by ${record.below || 'another server'}, so it was already in the message before ${server} handled it.`;
+        case 'repeated': return `${server} recorded results higher up, and this copy sits below the oldest Received header, where the sender's software writes.`;
+        case 'no-trace': return 'There\'s no Received header to show which server added it.';
+        case 'unplaced': return 'No Received header shows which server added it.';
+        default: return '';
+      }
+    }
+
+    return { assess, explain, organization };
+  })();
 
   // Exact IPv6 parsing, so addresses that carry an IPv4 inside them can be unwrapped.
   function parseIpv6(text) {
@@ -518,22 +659,32 @@
     if (!ip) return Promise.resolve(null);
     if (hooks || !ownerCache.has(ip.text)) {
       const pending = (async () => {
+        // The questions asked and their answers, for the step-by-step explanation; kept out of the result's own fields.
+        const lookups = { dns: [], rdap: null, rdapOk: false };
+        const ask = async name => {
+          const records = await lookup(name, 'TXT');
+          lookups.dns.push({ type: 'TXT', name, records, error: null });
+          return records;
+        };
         const reversed = ip.v6
           ? ip.words.map(word => word.toString(16).padStart(4, '0')).join('').split('').reverse().join('.') + '.origin6.asn.cymru.com'
           : ip.text.split('.').reverse().join('.') + '.origin.asn.cymru.com';
-        const origin = parseCymru((await lookup(reversed, 'TXT'))[0]);
+        const origin = parseCymru((await ask(reversed))[0]);
         const asn = origin ? origin[0].split(/\s+/)[0] : null;
         const result = { ip: ip.text, asn, prefix: origin?.[1] || null, country: origin?.[2] || null,
           registry: registryNames[origin?.[3]] || origin?.[3] || null, asName: null, organization: null, network: null, range: null };
+        Object.defineProperty(result, 'lookups', { value: lookups, enumerable: false });
         if (asn) {
-          const details = parseCymru((await lookup('AS' + asn + '.asn.cymru.com', 'TXT'))[0]);
+          const details = parseCymru((await ask('AS' + asn + '.asn.cymru.com'))[0]);
           // "MAILGUN-US - Mailgun Technologies Inc., US" -> "Mailgun Technologies Inc."
           result.asName = details?.[4]?.replace(/^[^ ]+ - /, '').replace(/, [A-Z]{2}$/, '') || null;
         }
         const base = rdapBases[origin?.[3]];
+        lookups.rdap = base ? base + encodeURIComponent(ip.text) : null;
         if (base) {
           try {
-            Object.assign(result, rdapSummary(await getJson(base + encodeURIComponent(ip.text))));
+            Object.assign(result, rdapSummary(await getJson(lookups.rdap)));
+            lookups.rdapOk = true;
           } catch {
             // The registry is optional; the routing data above still names the network.
           }
@@ -710,7 +861,7 @@
   const HeaderInsights = (() => {
     // RFC 5322 allows at most one of each of these.
     const singletons = ['from', 'sender', 'reply-to', 'to', 'cc', 'bcc', 'subject', 'date', 'message-id', 'in-reply-to', 'references'];
-    const spamHeader = /^(x-ms-exchange-organization-scl|x-microsoft-antispam(-mailbox-delivery)?|x-forefront-antispam-report|x-spam-[a-z-]+|x-ham-report)$/;
+    const spamHeader = /^(x-ms-exchange-organization-scl|x-microsoft-antispam(-mailbox-delivery)?|x-forefront-antispam-report|x-spam-[a-z-]+|x-ham-report|x-gmail-labels)$/;
 
     const groups = [
       { id: 'people', title: 'Sender and recipients', match: name => /^(from|sender|reply-to|to|cc|bcc|return-path|delivered-to|x-original-to|envelope-to|resent-[a-z-]+)$/.test(name) },
@@ -783,7 +934,8 @@
       'x-spam-status': 'A spam filter\'s verdict and score, usually SpamAssassin.',
       'x-spam-flag': 'A spam filter\'s yes or no verdict.',
       'x-spam-score': 'A spam filter\'s score.',
-      'x-incomingtopheadermarker': 'Microsoft internal marker.'
+      'x-incomingtopheadermarker': 'Microsoft internal marker.',
+      'x-gmail-labels': 'Gmail labels, added by a Google Takeout export. "Spam" means Gmail filed it in Spam.'
     };
 
     function describe(name) {
@@ -874,12 +1026,18 @@
         items.push({ label: spam ? 'Spam' : 'Not spam', tone: spam ? 'fail' : 'pass', detail: score ? `score ${score}${required ? ` of ${required}` : ''}` : '',
           title: 'X-Spam-Status, usually from SpamAssassin. Any server on the way could have added it.' });
       }
+      // Gmail doesn't write its spam decision into the message; a Google Takeout export adds the message's labels.
+      const labels = (value('x-gmail-labels') || '').split(',').map(label => label.trim().toLowerCase());
+      if (labels.includes('spam')) {
+        provider = provider || 'Gmail';
+        items.push({ label: 'In Spam', tone: 'fail', detail: 'X-Gmail-Labels', title: 'Gmail filed the message in Spam (label from a Google Takeout export)' });
+      }
       const untrusted = fields.filter(field => /^x-(microsoft|forefront)-.*-untrusted$/.test(field.key)).map(field => field.name || field.key);
       return items.length ? { provider, items, untrusted } : null;
     }
 
     // Signs that a header was added to mislead: repeated single-use headers, and receiver results written where only the sender writes.
-    function anomalies(fields, { covered = new Set(), receiver = null } = {}) {
+    function anomalies(fields, { covered = new Set(), delivery = null } = {}) {
       const issues = [];
       for (const key of singletons) {
         const copies = fields.filter(field => field.key === key);
@@ -891,16 +1049,15 @@
             ? `There are ${copies.length} ${name} headers and only ${signed === 1 ? 'one is' : `${signed} are`} signed. A mail client may show you the unsigned one.`
             : `There are ${copies.length} ${name} headers, where a message should have one. Mail clients may show a different one than the checks used.` });
       }
-      const oldestHop = fields.filter(field => field.key === 'received').at(-1);
-      const results = fields.filter(field => field.key === 'authentication-results');
-      if (oldestHop && receiver) {
-        for (const field of results.slice(1)) {
-          const service = field.value.split(';')[0].trim().split(/\s+/)[0].toLowerCase();
-          if (field.index > oldestHop.index && service === receiver.toLowerCase()) {
-            issues.push({ kind: 'forged-results', key: field.key, indexes: [field.index],
-              message: `An Authentication-Results header naming ${receiver} sits below the oldest Received header, where the sender's software writes. It may be forged.` });
-          }
-        }
+      for (const record of delivery?.records || []) {
+        if (!record.suspicious) continue;
+        const name = fields.find(field => field.index === record.index)?.name || record.name;
+        issues.push({ kind: 'forged-results', key: record.name, indexes: [record.index],
+          message: `${/^[aeiou]/i.test(name) ? 'An' : 'A'} ${name} header naming ${record.server} may be forged. ${DeliveryRecords.explain(record)}` });
+      }
+      for (const hop of delivery?.forgedHops || []) {
+        issues.push({ kind: 'forged-hop', key: 'received', indexes: [hop.index],
+          message: `A Received header claims ${hop.by} handled the message before ${hop.entryFrom} handed it to ${hop.entryBy}. That can't happen, so the sender wrote it.` });
       }
       return issues;
     }
@@ -908,7 +1065,7 @@
     return { singletons, groups, category, describe, spamVerdicts, anomalies };
   })();
 
-  const exports = { EmailDTO, EmailParser, parseEmail, decodeMimeWords, EmailAddress, IpAddress, parseMailDate, MimeParser, HeaderInsights, RelayDTO, RelayParser, ServerValidationDTO, ServerValidationParser };
+  const exports = { EmailDTO, EmailParser, parseEmail, decodeMimeWords, EmailAddress, IpAddress, parseMailDate, MimeParser, HeaderInsights, DeliveryRecords, RelayDTO, RelayParser, ServerValidationDTO, ServerValidationParser };
 
   if (dkimModule) {
     Object.assign(exports, dkimModule);

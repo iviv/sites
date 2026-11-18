@@ -374,7 +374,7 @@ const copyFailedIcon = `<svg width="16" height="16" ${iconAttrs}><path d="M6 6l1
 const clockIcon = `<svg width="18" height="18" ${iconAttrs}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
 
 // Filled status dot shared by header badges and DKIM check cards.
-const statusMarks = { pass: 'm4.75 8.25 2.1 2.1 4.4-4.6', fail: 'M5.6 5.6l4.8 4.8m0-4.8-4.8 4.8', warn: 'M8 4.5V8l2.25 1.5',
+const statusMarks = { pass: 'm4.75 8.25 2.1 2.1 4.4-4.6', fail: 'M5.6 5.6l4.8 4.8m0-4.8-4.8 4.8', warn: 'M8 4.5V8l2.25 1.5', alert: 'M8 4.4v4.2M8 11.5v.05',
     unknown: 'M6.2 6.2a1.9 1.9 0 1 1 2.6 1.75c-.5.2-.8.6-.8 1.1v.35M8 11.3v.05' };
 // "ring" draws the pass mark in an outline circle, for "verifies, with a caveat".
 function statusIcon(kind, size = 16) {
@@ -632,6 +632,10 @@ function startRun() {
     clearTimeout(pasteTimeout);
     currentEmail = null;
     bimiCache.clear();
+    EmailDns.clearCache();
+    // Each message opens every panel on its result.
+    explainViews.clear();
+    if (relayState.view === 'explain') relayState.view = storedRelayView();
     network.requests = [];
     scheduleNetworkUpdate();
     errorMsg.classList.add('hidden');
@@ -665,14 +669,20 @@ async function processRawEmail(input, run, source = null) {
         summaryState.arc = null;
         summaryState.reported = reportedAtDelivery(email);
         summaryState.spam = HeaderInsights.spamVerdicts(headerFieldList(email));
-        Object.assign(summaryState, { bimi: null, dmarcDto: null, logoImg: null, logoFailed: false });
+        Object.assign(summaryState, { bimi: null, dmarcDto: null, logoImg: null, logoFailed: false,
+            contentSignals: [], domainSignals: [], domainDone: false, glance: null });
         for (const id of Object.keys(jumpState)) delete jumpState[id];
         for (const id of ['dkim', 'spf', 'dmarc', 'arc']) jumpState['section-' + id] = { result: 'pending', note: 'checking' };
         jumpActive = null;
         headersSearch.value = '';
         displaySummary();
         displayContent(email);
-        displayDomain(email, run);
+        // The overall status waits for the domain checks, so it doesn't turn from green to amber a moment later.
+        displayDomain(email, run).catch(error => console.error(error)).finally(() => {
+            if (run !== latestRun || summaryState.domainDone) return;
+            summaryState.domainDone = true;
+            displaySummary();
+        });
         displayHeaders();
         displayRelay(traceHeaders(email), getHeaderValue(email.headers, 'Date'), relayHints(email));
         displayDkim(email.dkim);
@@ -732,8 +742,12 @@ function renderJumpBar() {
         const state = jumpState[section.id];
         const tone = jumpTone(state?.result);
         const said = state ? state.note || verdictLabel(state.result).toLowerCase() : '';
+        // The Summary link carries the overall status as a small shield, so it stays in view while scrolling.
+        const glance = section.id === 'section-summary' && summaryState.glance;
+        const mark = glance ? `<span class="jump-glance is-${glance.tone}">${glanceIcon(glance.state, 15)}</span>`
+            : tone ? `<span class="jump-dot is-${tone}" aria-hidden="true"></span>` : '';
         return `<a class="jump-link" href="#${section.id}" data-target="${section.id}"${section.id === jumpActive ? ' aria-current="location"' : ''}
-            ${said ? ` aria-label="${label}, ${escapeHtml(said)}" title="${label}: ${escapeHtml(said)}"` : ''}>${tone ? `<span class="jump-dot is-${tone}" aria-hidden="true"></span>` : ''}${label}</a>`;
+            ${said ? ` aria-label="${label}, ${escapeHtml(said)}" title="${label}: ${escapeHtml(said)}"` : ''}>${mark}${label}</a>`;
     }).join('') + `<button type="button" class="jump-offline"${network.offline ? '' : ' hidden'} title="Offline mode is on. Open the network settings">
         <span class="network-dot" aria-hidden="true"></span>Offline</button>`;
 }
@@ -800,10 +814,14 @@ function firstHeader(email, name) {
     return Array.isArray(value) ? value[0] : value;
 }
 
-// What the receiving server recorded, from the topmost (most recent) Authentication-Results header.
+// What the receiving server recorded: the topmost Authentication-Results header the Received chain ties to a
+// receiving server. Others are still listed, each with why it isn't used.
 function reportedAtDelivery(email) {
-    const dto = new ServerValidationParser().parse(getHeaderValue(email.headers, 'Authentication-Results'));
-    const top = dto.headers[0] || null;
+    const parser = new ServerValidationParser();
+    const headers = DeliveryRecords.assess(email).records.filter(record => record.name === 'authentication-results')
+        .map(record => ({ ...parser.parseOne(record.value), trusted: record.trusted, why: record.trusted ? null : DeliveryRecords.explain(record) }));
+    const dto = { headers };
+    const top = headers.find(header => header.trusted) || null;
     const byMethod = {};
     for (const method of ['dkim', 'spf', 'dmarc']) {
         const entries = top ? top.results.filter(entry => entry.method === method) : [];
@@ -816,7 +834,7 @@ function reportedAtDelivery(email) {
             : (first.comment?.match(/\bp=(\w+)/i)?.[1] ? 'policy ' + first.comment.match(/\bp=(\w+)/i)[1].toLowerCase() : '');
         byMethod[method] = { result: passed ? 'pass' : first.result, note };
     }
-    return { dto, top, byMethod };
+    return { dto, top, byMethod, unconfirmed: headers.filter(header => !header.trusted) };
 }
 
 function fromDomainOf(email) {
@@ -861,6 +879,10 @@ function updateBimiNote() {
     const slot = document.getElementById('bimi-eligibility');
     if (!slot) return;
     const status = bimiStatus();
+    // The Domain walkthrough repeats the same verdict once DMARC is in.
+    queueMicrotask(() => {
+        for (const note of document.querySelectorAll('.explain-bimi-eligibility')) note.textContent = slot.textContent || note.dataset.fallback || '';
+    });
     slot.textContent = !status ? ''
         : status.show ? 'This message qualifies: DMARC passed under a policy that blocks failures, so mail clients that support BIMI can show the logo.'
         : status.failed ? 'This message failed DMARC, so mail clients won\'t show the logo.'
@@ -953,7 +975,11 @@ function summaryVerdict(fromDomain, reported) {
     if (network.offline) return ['is-neutral', offlineVerdict(`Nothing was looked up, so DKIM, SPF and DMARC can't be confirmed.${atDelivery}`)];
     switch (dmarc.result) {
         case 'pass': return ['is-pass', `Authenticated: DMARC passed for ${domain}, ${escapeHtml(dmarc.note.replace(/^Passed/, 'passed').replace(/^passed via/, 'via'))}.${atDelivery}`];
-        case 'fail': return ['is-fail', `Not authenticated: DMARC failed for ${domain}.${atDelivery}`];
+        case 'fail': {
+            const genuine = signedButChanged(summaryState.dmarcDto);
+            return genuine ? ['is-warn', `DMARC fails for ${domain}, but ${escapeHtml(genuine.text)}.${atDelivery}`]
+                : ['is-fail', `Not authenticated: DMARC failed for ${domain}.${atDelivery}`];
+        }
         case 'unavailable': return ['is-warn', `Couldn't be fully verified from this email.${atDelivery}`];
         case 'none': return ['is-neutral', `${domain} publishes no DMARC policy, so only DKIM and SPF apply.${atDelivery}`];
         case 'temperror': return ['is-warn', 'A DNS lookup failed, so the checks are incomplete. <button type="button" class="link-toggle recheck-btn">Recheck</button>'];
@@ -961,9 +987,256 @@ function summaryVerdict(fromDomain, reported) {
     }
 }
 
+// DMARC can fail for a message its domain really did sign: the body changed after signing (Outlook and Exchange
+// rebuild it when saving a message), or the signature expired. The signed headers still verify then.
+function signedButChanged(dmarc) {
+    const check = (dmarc?.checks || []).find(item => item.kind === 'DKIM' && ['exact', 'relaxed'].includes(item.match) &&
+        (item.auth.state === 'body-changed' || (item.auth.state === 'expired' && item.auth.signatureValid)));
+    if (!check) return null;
+    return { domain: check.domain, text: check.auth.state === 'body-changed'
+        ? `${check.domain}'s signature on the headers still verifies; the body changed after signing, as often happens when Outlook or Exchange saves a message`
+        : `${check.domain}'s signature still verifies but has expired` };
+}
+
+// --- At a glance: one overall status beside the Summary heading, from every check and warning sign ---
+const glanceShield = 'M12 21.6s7.6-3.5 7.6-9.7V5.7L12 2.9 4.4 5.7v6.2c0 6.2 7.6 9.7 7.6 9.7z';
+const glanceMarks = {
+    pass: '<path d="m8.6 12.1 2.3 2.3 4.5-4.6"/>',
+    warn: '<path d="M12 7.8v4.6M12 15.9h.01"/>',
+    fail: '<path d="m9.6 9.7 4.8 4.8m0-4.8-4.8 4.8"/>',
+    spam: '<circle cx="12" cy="12" r="4"/><path d="m9.2 9.2 5.6 5.6"/>',
+    unknown: '<path d="M9.9 9.8a2.2 2.2 0 1 1 3 2.05c-.6.25-.9.7-.9 1.3v.25M12 15.9h.01"/>',
+    offline: '<path d="M8.5 12.2h7"/>',
+    checking: '<path d="M8.6 12.2h.01M12 12.2h.01M15.4 12.2h.01"/>'
+};
+
+function glanceIcon(state, size = 20) {
+    return `<svg class="glance-icon" width="${size}" height="${size}" ${iconAttrs}><path class="glance-shield" d="${glanceShield}"/>
+        <g class="glance-mark">${glanceMarks[state] || ''}</g></svg>`;
+}
+
+const phishingCategories = /^CAT:(PHSH|HPHSH|SPOOF|DIMP|GIMP|UIMP|INTOS)$/;
+
+// What decides the overall status: each reason is fail (not authentic, forged, dangerous), spam (the receiving
+// provider's filter flagged it) or warn (worth a look). The worst level present sets the status.
+// Every signal the overall status looks at, each with its finding: ok, info (nothing to judge), pending, or a
+// sign that sets the status (fail, spam, warn). The status uses the signs; the walkthrough lists everything.
+function glanceChecks(email) {
+    const checks = [];
+    const add = (level, text, section, extra = {}) => checks.push({ level, text, section, ...extra });
+    const dmarc = summaryState.dmarcDto;
+    const reported = summaryState.reported;
+    const delivered = reported?.byMethod.dmarc?.result;
+    const deliveredFail = delivered === 'fail';
+    const server = reported?.top?.service || 'the receiving server';
+    if (summaryState.checks.dmarc && dmarc) {
+        const genuine = signedButChanged(dmarc);
+        if (dmarc.result === 'pass') {
+            add('ok', `DMARC passed for ${dmarc.domain}`, 'section-dmarc');
+            if (deliveredFail) add('warn', `At delivery ${server} reported that DMARC failed`, 'section-summary', { inVerdict: true });
+        } else if (dmarc.result === 'fail') {
+            if (genuine) add('warn', `DMARC fails, but ${genuine.text}`, 'section-dkim', { inVerdict: true });
+            else add('fail', `Nothing authenticates ${dmarc.domain}: no signature or envelope domain matches it`, 'section-dmarc', { label: 'Not authentic', inVerdict: true });
+        } else {
+            add('info', network.offline ? 'DMARC wasn\'t looked up: offline mode is on'
+                : { none: `${dmarc.domain || 'The From domain'} publishes no DMARC policy`, temperror: 'DMARC: a DNS lookup failed' }[dmarc.result]
+                    || 'DMARC couldn\'t be confirmed from this message alone', 'section-dmarc');
+            if (deliveredFail) add('fail', `At delivery ${server} reported that DMARC failed`, 'section-summary', { label: 'Failed DMARC', inVerdict: true });
+        }
+        if (delivered === 'pass') add('ok', `At delivery ${server} reported that DMARC passed`, 'section-summary');
+        else if (!delivered) add('info', 'No server that received the message recorded a DMARC result', 'section-summary');
+    } else {
+        add('pending', 'Checking DKIM, SPF and DMARC', 'section-dmarc');
+    }
+    const fromDomain = fromDomainOf(email);
+    if (fromDomain && !PublicSuffix.knownTld(fromDomain)) {
+        add('fail', `${fromDomain} can't be a real domain: .${fromDomain.split('.').pop()} isn't a top-level domain`, 'section-domain', { label: 'Fake sender domain' });
+    } else if (fromDomain) {
+        add('ok', `${fromDomain} ends in a real top-level domain (.${fromDomain.split('.').pop()})`, 'section-domain');
+    } else {
+        add('info', 'The From header doesn\'t name a single domain to check', 'section-summary');
+    }
+    for (const signal of summaryState.domainSignals || []) add(signal.level, signal.text, 'section-domain', { label: signal.label });
+    if (fromDomain && PublicSuffix.knownTld(fromDomain) && !summaryState.domainDone) add('pending', `Checking ${fromDomain} in DNS and with its registry`, 'section-domain');
+    const ownName = ownNameAsSender(email);
+    if (ownName) add('warn', `The sender's name, "${ownName}", is taken from your own address`, 'section-summary');
+    else if (firstHeader(email, 'Delivered-To') || firstHeader(email, 'X-Original-To')) add('ok', 'The sender\'s name isn\'t borrowed from your address', 'section-summary');
+    const fields = headerFieldList(email);
+    const issues = HeaderInsights.anomalies(fields, { delivery: DeliveryRecords.assess(email) });
+    for (const issue of issues) {
+        if (issue.kind === 'forged-results') add('fail', 'A results header may be forged', 'section-headers', { label: 'Suspicious' });
+        else if (issue.kind === 'forged-hop') add('fail', 'A Received header was faked to look like the receiving server wrote it', 'section-headers', { label: 'Suspicious' });
+        else add('warn', `${issue.indexes.length} ${fields.find(field => field.index === issue.indexes[0])?.name || issue.key} headers, where there should be one`, 'section-headers');
+    }
+    if (!issues.length) add('ok', 'No forged or repeated headers', 'section-headers');
+    // Mail software always writes a real date; spam templates sometimes leave a placeholder ("_smtpDate . 629371249").
+    const date = firstHeader(email, 'Date');
+    if (!date) {
+        if (email.headersOnly) add('info', 'No Date header among the headers given', 'section-headers');
+        else add('warn', 'The message has no Date header', 'section-headers');
+    } else if (Number.isNaN(parseMailDate(date)) && Number.isNaN(Date.parse(date))) {
+        add('warn', `The Date header isn't a date: "${date.length > 40 ? date.slice(0, 40) + '…' : date}"`, 'section-headers');
+    } else {
+        add('ok', 'The Date header is a real date', 'section-headers');
+    }
+    const spam = summaryState.spam;
+    const flagged = (spam?.items || []).filter(item => item.tone === 'fail');
+    for (const item of flagged) {
+        add('spam', `${spam.provider ? spam.provider + ': ' : ''}${item.label}${item.detail && !item.detail.startsWith('CAT:') ? ` (${item.detail})` : ''}`, 'section-summary',
+            { phishing: phishingCategories.test(item.detail), malware: item.detail === 'CAT:MALW' });
+    }
+    if (!flagged.length) {
+        add(spam ? 'ok' : 'info', spam ? `${spam.provider || 'The spam filter'} didn't mark it as spam`
+            : 'No spam filter verdict in the headers (Gmail doesn\'t write one into the message)', 'section-summary');
+    }
+    for (const signal of summaryState.contentSignals || []) add(signal.level, signal.text, 'section-content', { label: signal.label });
+    return checks;
+}
+
+// A sender that borrows the recipient's own name ("alex" for alex@example.com) while writing from another address.
+function ownNameAsSender(email) {
+    const from = firstHeader(email, 'From');
+    const recipient = EmailAddress.parseMailboxes(firstHeader(email, 'Delivered-To') || firstHeader(email, 'X-Original-To') || '')[0];
+    const sender = from ? EmailAddress.parseMailboxes(from)[0] : null;
+    const name = from?.includes('<') ? decodeMimeWords(from.slice(0, from.lastIndexOf('<'))).trim().replace(/^"(.*)"$/, '$1').trim() : '';
+    if (!recipient || !sender || !name || sender.address.toLowerCase() === recipient.address.toLowerCase()) return null;
+    const lower = name.toLowerCase();
+    return lower === recipient.localPart.toLowerCase() || lower === recipient.address.toLowerCase() ? name : null;
+}
+
+function glanceStatus() {
+    const email = currentEmail;
+    const reasons = glanceChecks(email);
+    const first = level => reasons.find(reason => reason.level === level);
+    const done = Boolean(summaryState.checks.dmarc) && summaryState.domainDone;
+    const result = summaryState.dmarcDto?.result;
+    // Worst first, so the reason behind the status heads the list.
+    const rank = { fail: 0, spam: 1, warn: 2 };
+    const sorted = reasons.filter(reason => reason.level in rank).sort((a, b) => rank[a.level] - rank[b.level]);
+    const status = (state, tone, label) => ({ state, tone, label, reasons: sorted });
+    if (first('fail')) return status('fail', 'fail', first('fail').label || 'Not authentic');
+    if (first('spam')) {
+        const flagged = reasons.filter(reason => reason.level === 'spam');
+        if (flagged.some(reason => reason.malware)) return status('spam', 'fail', 'Marked as malware');
+        if (flagged.some(reason => reason.phishing)) return status('spam', 'fail', 'Marked as phishing');
+        return status('spam', 'warn', 'Marked as spam');
+    }
+    if (!done) return status('checking', 'checking', 'Checking');
+    if (first('warn')) return status('warn', 'warn', 'Warning signs');
+    if (result === 'pass') return status('pass', 'pass', 'Verified');
+    if (network.offline) return status('offline', 'neutral', 'Not checked');
+    return status('unknown', 'neutral', { none: 'No DMARC policy', temperror: 'Lookup failed' }[result] || 'Not fully checked');
+}
+
+function renderGlance(glance) {
+    const slot = document.getElementById('summary-glance');
+    const reasons = glance.reasons.map(reason => reason.text).join('\n');
+    slot.className = `glance is-${glance.tone}`;
+    slot.title = reasons || glance.label;
+    slot.innerHTML = `${glanceIcon(glance.state)}<span class="visually-hidden">Overall: </span><span class="glance-label">${escapeHtml(glance.label)}</span>`;
+    slot.hidden = false;
+}
+
+// The reasons the verdict box above doesn't already give.
+function glanceReasonList(glance) {
+    const listed = glance.reasons.filter(reason => !reason.inVerdict);
+    if (!['fail', 'spam', 'warn'].includes(glance.state) || !listed.length) return '';
+    const icon = reason => statusIcon(reason.level === 'fail' || (reason.level === 'spam' && glance.tone === 'fail') ? 'fail' : 'alert', 15);
+    const names = { 'section-summary': '', 'section-dmarc': 'DMARC', 'section-dkim': 'DKIM', 'section-headers': 'Headers',
+        'section-content': 'Content', 'section-domain': 'Domain' };
+    return `<ul class="glance-reasons" aria-label="Why: ${escapeHtml(glance.label)}">${listed.map(reason => `
+        <li>${icon(reason)}<span>${escapeHtml(reason.text)}</span>${names[reason.section]
+            ? `<a class="glance-link" href="#${reason.section}">${names[reason.section]}</a>` : ''}</li>`).join('')}</ul>`;
+}
+
+// --- The overall status, step by step: every signal, the rule that picks the status, and the delivery record used ---
+const sectionNames = { 'section-summary': 'Summary', 'section-dmarc': 'DMARC', 'section-dkim': 'DKIM', 'section-spf': 'SPF', 'section-headers': 'Headers',
+    'section-content': 'Content', 'section-domain': 'Domain', 'section-relay': 'Hops', 'section-arc': 'ARC' };
+
+function checkIcon(level) {
+    return statusIcon({ ok: 'pass', fail: 'fail', spam: 'fail', warn: 'alert' }[level] || 'unknown', 15);
+}
+
+function signalList(checks) {
+    return `<ul class="explain-signals">${checks.map(check => `
+        <li class="is-${check.level}">${checkIcon(check.level)}<span>${escapeHtml(check.text)}${check.level === 'pending' ? '…' : ''}</span>${sectionNames[check.section] && check.section !== 'section-summary'
+            ? `<a class="glance-link" href="#${check.section}">${sectionNames[check.section]}</a>` : ''}</li>`).join('')}</ul>`;
+}
+
+function deliveryExplain(email) {
+    const delivery = DeliveryRecords.assess(email);
+    const hopNumber = index => delivery.hops.findIndex(hop => hop.index === index) + 1;
+    const nth = index => `the ${ordinal(hopNumber(index))} Received header from the top`;
+    const receiving = delivery.receiving
+        ? `The receiving organization is <code>${escapeHtml(delivery.receiving)}</code>: it wrote the topmost Received header that names a domain.`
+        : delivery.hops.length ? 'No Received header names a domain, so the receiving organization is unknown.' : 'The message has no Received headers.';
+    const items = delivery.records.map(record => {
+        const name = record.name === 'received-spf' ? 'Received-SPF' : 'Authentication-Results';
+        const server = record.server ? `<code>${escapeHtml(record.server)}</code>` : null;
+        const org = `<code>${escapeHtml(record.org || record.server || '')}</code>`;
+        const who = record.byReceiver ? `It names no server (Microsoft writes them this way), so it's placed against the receiving organization, ${org}, which`
+            : record.org && record.org !== record.server ? `${server} belongs to ${org}, which` : server;
+        const placement = record.trusted
+            ? `${who} wrote ${record.via ? `${nth(record.via.index)} (by <code>${escapeHtml(record.via.by)}</code>)` : 'a Received header'}, and no other
+               organization's Received header sits between them, so a receiving server wrote it.`
+            : escapeHtml(DeliveryRecords.explain(record));
+        return `<li class="explain-rule is-${record.trusted ? 'matched' : 'no-match'}">
+            <div class="explain-rule-head"><b>${name}</b>${server ? ` naming ${server}` : ''}${record.trusted ? pill('status-pass', 'Used') : record.suspicious ? pill('status-fail', 'May be forged') : pill('status-neutral', 'Not used')}</div>
+            <p>${placement}</p></li>`;
+    }).join('');
+    const used = summaryState.reported?.top;
+    return `
+        <p>Authentication-Results and Received-SPF headers say what a receiving server concluded, but anyone can write them,
+        the sender included. A record counts only where the ${term('received header', 'Received headers')} show the server it names handling the
+        message, with no other organization's Received header between them. Below that point the record was already in the
+        message when it arrived.</p>
+        <p>${receiving}</p>
+        ${items ? `<ol class="explain-rules">${items}</ol>` : '<p>The message has no Authentication-Results or Received-SPF headers.</p>'}
+        <p>${used ? `The "At delivery" results come from the ${used.service ? `<code>${escapeHtml(used.service)}</code>` : 'unnamed'} Authentication-Results header above.`
+            : 'No Authentication-Results header can be used, so the Summary shows the results at delivery as not recorded or not confirmed.'}
+        ${delivery.forgedHops.length ? ` Separately, a Received header claims <code>${escapeHtml(delivery.forgedHops[0].by)}</code> handled the message before
+            <code>${escapeHtml(delivery.forgedHops[0].entryFrom)}</code> handed it over, which can't happen.` : ''}</p>`;
+}
+
+function summaryWalkthrough(glance) {
+    const email = currentEmail;
+    const checks = glanceChecks(email);
+    const rules = [
+        ['fail', 'Any red sign makes the status red, named after the first one: Not authentic, Failed DMARC, Fake sender domain, Suspicious or Risky attachment.'],
+        ['spam', 'Otherwise, a spam verdict from the receiving provider: Marked as spam, or in red, Marked as phishing or malware.'],
+        ['checking', 'Otherwise, while checks are still running: Checking.'],
+        ['warn', 'Otherwise, any amber sign: Warning signs.'],
+        ['pass', 'Otherwise, if DMARC passed: Verified.'],
+        ['rest', 'Otherwise gray: Not fully checked, No DMARC policy, Lookup failed, or Not checked when offline mode is on.']
+    ];
+    const applied = ['fail', 'spam', 'checking', 'warn', 'pass'].includes(glance.state) ? glance.state : 'rest';
+    const steps = [
+        explainStep(1, 'Every signal', [], `
+            <p>The status beside the heading looks at these, in this order. Green marks a check that found nothing wrong, gray one
+            that had nothing to judge, and amber or red a sign that sets the status.</p>${signalList(checks)}`),
+        explainStep(2, 'The rule', [], `
+            <p>The worst sign decides:</p>
+            <ol class="explain-picks explain-rule-list">${rules.map(([id, text]) => `<li${id === applied ? ' class="is-applied"' : ''}>${escapeHtml(text)}${id === applied ? ' <b>← this message</b>' : ''}</li>`).join('')}</ol>
+            <p>So the status is <span class="glance is-${glance.tone}">${glanceIcon(glance.state, 16)}<span class="glance-label">${escapeHtml(glance.label)}</span></span>.</p>`),
+        explainStep(3, 'Which delivery record was used', [rfcLink(8601, '5'), rfcLink(8601, '7.1'), rfcLink(5321, '4.4')], deliveryExplain(email))
+    ];
+    return explainWrap('How the overall status beside the heading was decided: every signal it looked at, what each found, and the rule that picks the status.',
+        steps, [], [`${rfcLink(7489)} DMARC, the main authentication signal`, `${rfcLink(8601)} Authentication-Results, and why forged ones are a risk`,
+            `${rfcLink(5321)} SMTP, whose Received headers trace the route`]);
+}
+
+// Results headers exist, but none can be tied to a server that received the message.
+function unconfirmedNote(reported) {
+    const count = reported.unconfirmed.length;
+    return `<p class="note summary-unreported">${count === 1 ? 'The Authentication-Results header can\'t' : `None of the ${count} Authentication-Results headers can`}
+        be tied to a server that received this message, so ${count === 1 ? 'it isn\'t' : 'they aren\'t'} used as the result at delivery.
+        ${escapeHtml(reported.unconfirmed[0].why)}</p>`;
+}
+
 function reportedDetails(reported) {
-    return reported.dto.headers.map((header, position) => `
-        <h4>${escapeHtml(header.service || 'Unknown server')}${position === 0 && reported.dto.headers.length > 1 ? ' · most recent' : ''}</h4>
+    return reported.dto.headers.map(header => `
+        <h4>${escapeHtml(header.service || 'Server not named')}${header === reported.top && reported.dto.headers.length > 1 ? ' · used here' : ''}</h4>
+        ${header.trusted ? '' : `<p class="note reported-unused">Not used: ${escapeHtml(header.why)}</p>`}
         <table class="reported-results"><tbody>
             ${header.results.map(entry => `
             <tr>
@@ -993,9 +1266,10 @@ function displaySummary() {
     const replyElsewhere = showReplyTo && fromDomain && replyMailbox.domain.toLowerCase() !== fromDomain.toLowerCase();
     const sentAt = date ? parseMailDate(date) : NaN;
     const [tone, verdict] = summaryVerdict(fromDomain, reported);
-    const checked = Boolean(summaryState.checks.dmarc);
-    setJumpStatus('section-summary', checked ? { 'is-pass': 'pass', 'is-fail': 'fail', 'is-warn': 'warn' }[tone] || 'neutral' : 'pending',
-        checked ? plainText(verdict).replace(/\s+(Turn it off and recheck|Recheck)$/, '') : 'checking');
+    const glance = glanceStatus();
+    summaryState.glance = glance;
+    renderGlance(glance);
+    setJumpStatus('section-summary', { pass: 'pass', fail: 'fail', warn: 'warn', checking: 'pending' }[glance.tone] || 'neutral', glance.label.toLowerCase());
     const wasOpen = document.getElementById('summary-reported') && !document.getElementById('summary-reported').classList.contains('hidden');
 
     const tiles = [['dkim', 'DKIM'], ['spf', 'SPF'], ['dmarc', 'DMARC']].map(([id, label]) => {
@@ -1010,7 +1284,7 @@ function displaySummary() {
                 <span class="summary-check-note">${escapeHtml(now?.note || 'Checking…')}</span>
                 <span class="summary-check-then">At delivery ${then
                     ? `<span class="${verdictClass(then.result)}">${escapeHtml(verdictLabel(then.result))}</span>${then.note ? ` <span class="summary-then-note">${escapeHtml(then.note)}</span>` : ''}`
-                    : '<span class="summary-then-note">not recorded</span>'}</span>
+                    : `<span class="summary-then-note">${reported.unconfirmed.length && !reported.top ? 'not confirmed' : 'not recorded'}</span>`}</span>
             </a>`;
     }).join('');
 
@@ -1018,7 +1292,7 @@ function displaySummary() {
     const subjectHtml = `<div class="subject-text" title="${escapeHtml(subject ? decodeMimeWords(subject) : '')}">${escapeHtml(subject ? decodeMimeWords(subject) : '(No subject)')}</div>`;
     const logoNote = logo?.show ? `Brand logo (BIMI) for <code>${escapeHtml(logo.bimi.domain)}</code> · ${summaryState.logoFailed ? 'the image couldn\'t be loaded'
         : logo.bimi.authority ? 'mark certificate published, not verified here' : 'no mark certificate, so Gmail and Apple Mail won\'t show it'}` : '';
-    summaryOutput.innerHTML = `
+    summaryOutput.innerHTML = explainHost('Summary view', `
         ${logo?.show ? `
         <div class="summary-head">
             ${summaryState.logoFailed ? '' : '<span class="summary-logo" data-logo-slot></span>'}
@@ -1035,17 +1309,22 @@ function displaySummary() {
         </dl>
         ${email.headersOnly ? '<p class="note summary-headers-only">Only headers were provided, so checks that need the message body are skipped.</p>' : ''}
         <div class="summary-verdict ${tone}">${verdict}</div>
+        ${glanceReasonList(glance)}
         ${logo?.failed ? `<p class="note summary-bimi-warning"><code>${escapeHtml(logo.bimi.domain)}</code> publishes a brand logo, but this message failed DMARC,
             so mail clients won't show it. Be wary of anything in it that looks branded.</p>` : ''}
         <div class="summary-checks">${tiles}</div>
         ${spamSummary(summaryState.spam)}
-        ${reported.top ? `
+        ${reported.dto.headers.length ? `
+        ${reported.top ? '' : unconfirmedNote(reported)}
         <button type="button" class="dkim-advanced-toggle" aria-controls="summary-reported" aria-expanded="${wasOpen}">
             ${detailDisclosureIcon}<span>Reported at delivery</span>
-            <span class="toggle-meta">${escapeHtml(reported.top.service || '')} · ${reported.top.results.length} results${reported.dto.headers.length > 1 ? ` · ${reported.dto.headers.length} headers` : ''}${arcSealed(reported) ? ' · ARC-sealed' : ''}</span>
+            <span class="toggle-meta">${escapeHtml([reported.top ? reported.top.service : 'not confirmed', reported.top && `${reported.top.results.length} results`,
+                reported.dto.headers.length > 1 && `${reported.dto.headers.length} headers`, arcSealed(reported) && 'ARC-sealed'].filter(Boolean).join(' · '))}</span>
         </button>
         <div id="summary-reported" class="${wasOpen ? '' : 'hidden'}">${reportedDetails(reported)}</div>`
-            : '<p class="note summary-unreported">No Authentication-Results header, so there\'s no record of what the receiving server decided.</p>'}`;
+            : '<p class="note summary-unreported">No Authentication-Results header, so there\'s no record of what the receiving server decided.</p>'}`,
+        summaryWalkthrough(glance));
+    selectExplainView(summaryOutput.firstElementChild);
     if (logo?.show && !summaryState.logoFailed) attachSummaryLogo(logo.bimi.logo);
 }
 
@@ -1071,7 +1350,9 @@ async function buildReport() {
     if (header('Reply-To')) lines.push(`Reply-To: ${header('Reply-To')}`);
     lines.push(`Sent:     ${Number.isNaN(sentAt) ? header('Date') || 'Unknown' : new Date(sentAt).toLocaleString()}`);
     if (email.headersOnly) lines.push('', 'Only headers were provided; checks that need the body were skipped.');
-    lines.push('', `Verdict: ${plainText(summaryVerdict(fromDomain, reported)[1])}`, '');
+    const glance = summaryState.glance || glanceStatus();
+    lines.push('', `Overall: ${glance.label}`, ...glance.reasons.map(reason => `  - ${reason.text}`));
+    lines.push(`Verdict: ${plainText(summaryVerdict(fromDomain, reported)[1])}`, '');
     for (const [id, label] of [['dkim', 'DKIM'], ['spf', 'SPF'], ['dmarc', 'DMARC']]) {
         const now = summaryState.checks[id];
         const then = reported.byMethod[id];
@@ -1105,7 +1386,7 @@ async function buildReport() {
             lines.push('', `Sending network: ${normalizeIp(entry.ip)}${name ? ` - ${name}${owner.asn ? ' (AS' + owner.asn + ')' : ''}` : ''}`);
         }
     }
-    lines.push('', `Checked ${new Date().toLocaleString()} with Email Parser & DKIM Validator; DNS records as published at that time.`);
+    lines.push('', `Checked ${new Date().toLocaleString()} with Email Inspector; DNS records as published at that time.`);
     return lines.join('\n');
 }
 
@@ -1124,6 +1405,17 @@ const clickTrackers = [
     ['sparkpostmail.com', 'SparkPost'], ['ct.sendgrid.net', 'SendGrid'], ['safelinks.protection.outlook.com', 'Microsoft Safe Links'],
     ['urldefense.com', 'Proofpoint URL Defense'], ['cmail19.com', 'Campaign Monitor'], ['cmail20.com', 'Campaign Monitor']
 ];
+// Services where anyone can publish a page or file for free. Fake sign-in and payment pages are often put there,
+// since the service's own good name gets them past filters.
+const freeHosting = ['storage.googleapis.com', 'firebasestorage.googleapis.com', 'web.app', 'firebaseapp.com', 'r2.dev', 'pages.dev',
+    'workers.dev', 'blob.core.windows.net', 'web.core.windows.net', 'azurewebsites.net', 'netlify.app', 'vercel.app', 'glitch.me',
+    'onrender.com', 'replit.app', 'surge.sh', 'ipfs.io', 'dweb.link', 'w3s.link', 'nftstorage.link', '000webhostapp.com', 'weebly.com',
+    'wixsite.com', 'square.site', 'godaddysites.com', 'webflow.io', 'framer.app', 'sites.google.com', 'forms.gle'];
+
+function isFreeHosting(host) {
+    return freeHosting.some(domain => host === domain || host.endsWith('.' + domain)) || /(^|\.)s3([.-][a-z0-9-]+)*\.amazonaws\.com$/.test(host);
+}
+
 const riskyExtensions = {
     code: ['exe', 'scr', 'js', 'jse', 'vbs', 'vbe', 'bat', 'cmd', 'com', 'msi', 'ps1', 'jar', 'hta', 'lnk', 'wsf', 'cpl', 'reg', 'app', 'dmg', 'pkg'],
     browser: ['html', 'htm', 'shtml', 'svg', 'xhtml'],
@@ -1194,6 +1486,7 @@ function linkGroups(links, fromDomain) {
         if (isIp) group.flags.add('ip');
         if (url.protocol === 'http:') group.flags.add('http');
         if (host.includes('xn--')) group.flags.add('punycode');
+        if (isFreeHosting(host)) group.flags.add('hosting');
         const shown = looksLikeDomain(link.text);
         if (shown && (registrableDomain(shown) || shown) !== domain) {
             group.flags.add('mismatch');
@@ -1224,8 +1517,34 @@ function attachmentWarning(name) {
     return null;
 }
 
+// Warning signs in the content, for the overall status beside the Summary heading.
+function contentSignals(attachments, groups, mismatches) {
+    const signals = [];
+    if (mismatches.length) {
+        signals.push({ level: 'warn', text: mismatches.length === 1 ? 'A link shows one domain but goes to another' : `${mismatches.length} links show one domain but go to another` });
+    }
+    if (groups.some(group => group.flags.has('ip'))) signals.push({ level: 'warn', text: 'A link goes to a raw IP address' });
+    if (groups.some(group => group.flags.has('punycode'))) signals.push({ level: 'warn', text: 'A link\'s domain uses look-alike characters' });
+    const hosted = groups.filter(group => group.flags.has('hosting') && !group.isFrom);
+    if (hosted.length) {
+        signals.push({ level: 'warn', text: `Links go to a page on a free hosting service (${[...hosted[0].hosts][0]}${hosted.length > 1 ? ` and ${hosted.length - 1} more` : ''})` });
+    }
+    for (const part of attachments) {
+        const warning = attachmentWarning(part.filename || '');
+        if (!warning) continue;
+        const text = `${part.filename}: ${warning[1].toLowerCase()}`;
+        signals.push(warning[0] === 'status-fail' ? { level: 'fail', label: 'Risky attachment', text } : { level: 'warn', text });
+    }
+    if (!signals.length) {
+        const links = groups.reduce((sum, group) => sum + group.links.length, 0);
+        signals.push({ level: 'ok', text: `No warning signs in ${links} ${links === 1 ? 'link' : 'links'} and ${attachments.length} ${attachments.length === 1 ? 'attachment' : 'attachments'}` });
+    }
+    return signals;
+}
+
 function displayContent(email) {
     if (email.headersOnly) {
+        summaryState.contentSignals = [{ level: 'info', text: 'Only headers were given, so links and attachments weren\'t checked' }];
         contentOutput.innerHTML = '<p class="note">Only headers were provided, so there\'s no message content to show.</p>';
         return;
     }
@@ -1254,7 +1573,8 @@ function displayContent(email) {
 
     const flagLabels = {
         mismatch: ['status-fail', 'Text shows another domain'], ip: ['status-fail', 'Raw IP address'],
-        http: ['status-pending', 'Not encrypted (http)'], punycode: ['status-pending', 'Look-alike characters (punycode)']
+        http: ['status-pending', 'Not encrypted (http)'], punycode: ['status-pending', 'Look-alike characters (punycode)'],
+        hosting: ['status-pending', 'Free page hosting']
     };
     const groupRows = groups.map((group, index) => `
         <tr${group.flags.has('mismatch') || group.flags.has('ip') ? ' class="is-risky"' : ''}>
@@ -1272,9 +1592,10 @@ function displayContent(email) {
         </tr>`).join('');
 
     const attachmentFlags = attachments.map(part => attachmentWarning(part.filename || '')?.[0]).filter(Boolean);
+    summaryState.contentSignals = contentSignals(attachments, groups, mismatches);
     if (mismatches.length || groups.some(group => group.flags.has('ip')) || attachmentFlags.includes('status-fail')) {
         setJumpStatus('section-content', 'fail', 'has warning signs');
-    } else if (attachmentFlags.length || groups.some(group => group.flags.has('punycode'))) {
+    } else if (attachmentFlags.length || groups.some(group => group.flags.has('punycode') || (group.flags.has('hosting') && !group.isFrom))) {
         setJumpStatus('section-content', 'warn', 'has items to check');
     }
 
@@ -1331,19 +1652,102 @@ function domainRow(label, cls, status, detail) {
     return `<tr><th scope="row">${label}</th><td><span class="${cls}">${escapeHtml(status)}</span></td><td>${detail || ''}</td></tr>`;
 }
 
+// The registry's answer, plus the request and its outcome for the step-by-step explanation.
 async function domainRegistration(domain) {
+    const url = 'https://rdap.org/domain/' + encodeURIComponent(domain);
     try {
-        const response = await fetch('https://rdap.org/domain/' + encodeURIComponent(domain),
-            { headers: { Accept: 'application/rdap+json' }, signal: AbortSignal.timeout(8000) });
-        if (!response.ok) return null;
+        const response = await fetch(url, { headers: { Accept: 'application/rdap+json' }, signal: AbortSignal.timeout(8000) });
+        if (!response.ok) return { url, status: response.status, registered: null };
         const json = await response.json();
         const event = action => json.events?.find(item => item.eventAction === action)?.eventDate;
         const registrar = json.entities?.find(entity => entity.roles?.includes('registrar'))
             ?.vcardArray?.[1]?.find(item => item[0] === 'fn')?.[3];
-        return { registered: event('registration'), expires: event('expiration'), registrar: registrar || null };
-    } catch {
-        return null;
+        return { url, status: response.status, registered: event('registration') || null, expires: event('expiration') || null, registrar: registrar || null };
+    } catch (error) {
+        return { url, status: null, error: error.message, registered: null };
     }
+}
+
+// The same DNS question again: answered from this check's cache, so nothing new is sent.
+async function askAgain(name, type) {
+    try {
+        return { type, name, records: await EmailDns.lookup(name, type), error: null };
+    } catch (error) {
+        return { type, name, records: null, error: error.message };
+    }
+}
+
+// --- Sender domain, step by step ---
+function domainWalkthrough(ctx) {
+    const { domain, org, registered, questions } = ctx;
+    const code = value => `<code>${breakable(value)}</code>`;
+    const tld = domain.split('.').pop();
+    const suffix = PublicSuffix.publicSuffix(domain);
+    const pick = (type, name) => questions.filter(entry => entry.type === type && entry.name === name);
+    const steps = [explainStep(1, 'Is it a real domain?', [docLink('https://publicsuffix.org/', 'Public Suffix List'), docLink('https://www.iana.org/domains/root/db', 'IANA root zone')], `
+        <p>${ctx.tldKnown ? `${code('.' + tld)} is a real top-level domain.` : `${code('.' + tld)} isn't a top-level domain, so nobody can own ${code(domain)}: it can only have been made up for the From line. Nothing was looked up.`}
+        ${ctx.tldKnown ? `The ${term('public suffix')} here is ${code(suffix || tld)}, so the domain someone registered is ${code(registered)}${org !== registered ? `, and ${code(org)} counts as the organization` : ''}.` : ''}</p>`)];
+    if (!ctx.tldKnown) return explainWrap('How this page checked the sender\'s domain.', steps, [], domainStandards());
+
+    const mxQuestions = pick('MX', domain);
+    steps.push(explainStep(2, 'Does it exist?', [rfcLink(8020), rfcLink(1035, '4.1.1')], `
+        <p>DNS answers every question either with records, with "this name exists but has none of those", or with
+        ${term('nxdomain', 'NXDOMAIN')}: no such name at all. The mail-server question below tells them apart.</p>
+        ${explainQuestions(mxQuestions)}
+        <p>${ctx.exists === false ? `NXDOMAIN: DNS has no record of ${code(domain)}. Nobody uses the name, so it was borrowed for the From line, and replies to it go nowhere.`
+            : ctx.exists ? `${code(domain)} exists.` : 'The lookup failed, so it\'s unknown whether the domain exists.'}</p>`));
+
+    const addressQuestions = [...pick('A', domain), ...pick('AAAA', domain)];
+    const hosts = (ctx.mx || []).map(value => value.trim().split(/\s+/)[1]?.replace(/\.$/, '')).filter(Boolean);
+    steps.push(explainStep(3, 'Can it receive mail?', [rfcLink(5321, '5.1')], `
+        <p>Replies go to the servers in the domain's ${term('mx record', 'MX records')}. With none, mail goes to the domain's own address (A or AAAA records).</p>
+        ${explainQuestions(addressQuestions)}
+        <p>${ctx.exists === false ? 'No: the domain doesn\'t exist.'
+            : hosts.length ? `Yes: ${hosts.slice(0, 4).map(code).join(', ')}${hosts.length > 4 ? ` and ${hosts.length - 4} more` : ''} accept${hosts.length === 1 ? 's' : ''} its mail.`
+            : ctx.unreachable ? 'No: it has no mail servers and no address, so replies can\'t reach it.'
+            : ctx.mx === null ? 'Unknown: the lookup failed.' : 'Only through its own address: it has no MX records.'}</p>`));
+
+    const registration = ctx.registration || {};
+    const date = registration.registered ? new Date(registration.registered) : null;
+    const days = date ? (Date.now() - date.getTime()) / 86400000 : null;
+    steps.push(explainStep(4, 'When was it registered?', [rfcLink(9082, '3.1.3'), rfcLink(9083), docLink('https://about.rdap.org/', 'rdap.org')], `
+        <p>The domain's registry answers ${term('rdap', 'RDAP')} requests with when ${code(registered)} was registered and by which
+        registrar. This page asks through rdap.org, which forwards to the right registry. Phishing often uses domains a few days or weeks old.</p>
+        <ul class="explain-ops"><li class="explain-op"><span class="spf-dns-cmd">GET ${escapeHtml(registration.url || 'https://rdap.org/domain/' + registered)}</span>
+            <span class="explain-arrow" aria-hidden="true">→</span><span class="explain-answer">${date ? `registered <code>${escapeHtml(registration.registered)}</code>${registration.registrar ? `, registrar <code>${escapeHtml(registration.registrar)}</code>` : ''}${registration.expires ? `, expires <code>${escapeHtml(registration.expires)}</code>` : ''}`
+            : registration.status ? `<span class="explain-muted">HTTP ${registration.status}${registration.status === 404 ? ': no such registration' : ''}</span>`
+            : `<span class="explain-muted">${escapeHtml(registration.error || 'No answer')}</span>`}</span></li></ul>
+        <p>${date ? `Registered ${escapeHtml(ageText(date))}, on ${escapeHtml(date.toLocaleDateString())}. ${days < 30 ? 'Under 30 days old: red in the Domain panel, amber in the overall status.' : days < 180 ? 'Under six months old: a warning sign.' : 'Old enough not to be a warning sign.'}`
+            : ctx.exists === false && registered === domain ? `Nobody has registered ${code(domain)}.` : 'The registration date is unknown, so the domain\'s age isn\'t judged.'}</p>`));
+
+    const bimiQuestions = [...pick('TXT', 'default._bimi.' + domain), ...(org !== domain ? pick('TXT', 'default._bimi.' + org) : [])];
+    const bimi = ctx.bimi || {};
+    steps.push(explainStep(5, 'Brand logo (BIMI)', [docLink('https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/', 'BIMI draft'), rfcLink(7489, '6.3')], `
+        <p>A domain can publish a logo for mail clients to show next to its messages, at <code>default._bimi.</code> plus the domain,
+        or its organization's. Clients show it only when the message passes DMARC under a policy that quarantines or rejects
+        failing mail, and the big ones also want a mark certificate (<code>a=</code>) proving the brand owns the logo.</p>
+        ${explainQuestions(bimiQuestions)}
+        <p>${bimi.record ? `Found: ${bimi.logo ? `the logo is at <code>${breakable(bimi.logo)}</code>` : 'a record without a logo'}${bimi.authority ? ', with a mark certificate (not checked here)' : ', without a mark certificate'}.`
+            : bimi.error ? 'The lookup failed.' : 'No BIMI record, so no logo.'}</p>
+        ${bimi.logo ? '<p class="explain-bimi-eligibility" data-fallback="Whether this message qualifies depends on its DMARC result, which isn\'t in yet."></p>' : ''}`));
+
+    const sts = pick('TXT', '_mta-sts.' + domain);
+    const tlsrpt = pick('TXT', '_smtp._tls.' + domain);
+    steps.push(explainStep(6, 'Encrypted delivery (MTA-STS and TLS reporting)', [rfcLink(8461, '3.1'), rfcLink(8460, '3')], `
+        <p>These protect mail sent <em>to</em> the domain, not this message: MTA-STS tells senders to insist on verified TLS, and
+        TLS reporting tells them where to report failures. Many domains have neither.</p>
+        ${explainQuestions([...sts, ...tlsrpt])}
+        <p>${ctx.stsRecord ? `MTA-STS is announced. The policy itself is a file at ${code('https://mta-sts.' + domain + '/.well-known/mta-sts.txt')}; this page can't read it (that site doesn't allow pages opened from a file), so open it to see the rules.`
+            : 'No MTA-STS policy.'} ${ctx.tlsRecord ? `TLS reports go to ${code(EmailDns.parseTags(ctx.tlsRecord).tags.rua || 'an unspecified address')}.` : 'No TLS reporting address.'}</p>`));
+
+    const commands = [...questions.map(entry => `dig +short ${entry.type} ${entry.name}`), `curl -s ${registration.url || 'https://rdap.org/domain/' + registered}`];
+    return explainWrap('How this page checked the sender\'s domain, step by step.', steps, [], domainStandards())
+        .replace('<h4>Standards</h4>', `<h4>Repeat it yourself</h4><pre class="tech-value code explain-commands">${escapeHtml([...new Set(commands)].join('\n'))}</pre><h4>Standards</h4>`);
+}
+
+function domainStandards() {
+    return [`${rfcLink(1035)} DNS`, `${rfcLink(8020)} NXDOMAIN: there really is nothing underneath`, `${rfcLink(9083)} RDAP responses from registries`,
+        `${rfcLink(8461)} MTA-STS`, `${rfcLink(8460)} SMTP TLS reporting`];
 }
 
 function ageText(date) {
@@ -1362,7 +1766,18 @@ async function displayDomain(email, run) {
     }
     const domain = mailboxes[0].domain.toLowerCase();
     const org = registrableDomain(domain) || domain;
+    const registered = registrableDomain(domain, { icannOnly: true }) || org;
+    if (!PublicSuffix.knownTld(domain)) {
+        const tld = domain.split('.').pop();
+        setJumpStatus('section-domain', 'fail', 'not a real domain');
+        domainOutput.innerHTML = explainHost('Domain view', `<table class="content-table domain-checks"><tbody>${domainRow('Domain', 'status-fail', 'Not a real domain',
+            checkNote(`<code>.${escapeHtml(tld)}</code> isn't a top-level domain, so nobody can own <code>${escapeHtml(domain)}</code> and replies to it go nowhere. Nothing was looked up.`))}</tbody></table>`,
+            domainWalkthrough({ domain, org, registered, tldKnown: false, questions: [] }));
+        selectExplainView(domainOutput.firstElementChild);
+        return;
+    }
     if (network.offline) {
+        summaryState.domainSignals.push({ level: 'info', text: `${domain} wasn't looked up: offline mode is on` });
         domainOutput.innerHTML = `<p class="note">${offlineVerdict(`The checks for <code>${escapeHtml(domain)}</code> (registration, MX, BIMI, MTA-STS and TLS reporting) need lookups.`)}</p>`;
         return;
     }
@@ -1371,21 +1786,42 @@ async function displayDomain(email, run) {
 
     const [mx, bimi, sts, tlsrpt, registration] = await Promise.all([
         EmailDns.lookup(domain, 'MX').catch(() => null), bimiLookup(domain),
-        txtRecords('_mta-sts.' + domain), txtRecords('_smtp._tls.' + domain), domainRegistration(org)
+        txtRecords('_mta-sts.' + domain), txtRecords('_smtp._tls.' + domain), domainRegistration(registered)
     ]);
+    // When DNS has no record of the domain at all, nobody uses it now: it was only borrowed for the From line.
+    const exists = mx === null ? null : await EmailDns.exists(domain).catch(() => null);
+    // Without MX records mail goes to the domain's own address; with neither, replies can't arrive.
+    const noMx = exists !== false && Array.isArray(mx) && !mx.some(value => value.trim().split(/\s+/)[1]?.replace(/\.$/, ''));
+    const addresses = noMx ? await Promise.all(['A', 'AAAA'].map(type => EmailDns.lookup(domain, type).catch(() => null))) : null;
+    const unreachable = Boolean(addresses) && addresses.every(list => Array.isArray(list) && !list.length);
     if (run !== latestRun) return;
 
     const rows = [];
     setJumpStatus('section-domain', null);
-    if (registration?.registered) {
+    if (exists === false) {
+        setJumpStatus('section-domain', 'fail', 'doesn\'t exist');
+        summaryState.domainSignals.push({ level: 'fail', label: 'Fake sender domain', text: `${domain} doesn't exist: DNS has no record of it` });
+        rows.push(domainRow('Exists', 'status-fail', 'No', checkNote(`DNS has no record of <code>${escapeHtml(domain)}</code>, so nobody uses it and replies to the From address go nowhere`)));
+    } else {
+        summaryState.domainSignals.push(exists ? { level: 'ok', text: `${domain} exists in DNS` } : { level: 'info', text: `Couldn't tell whether ${domain} exists: the lookup failed` });
+    }
+    if (!registration?.registered && exists === false && registered === domain) {
+        rows.push(domainRow('Registered', 'status-fail', 'No', checkNote(`Nobody has registered <code>${escapeHtml(domain)}</code>`)));
+    } else if (registration?.registered) {
         const date = new Date(registration.registered);
         const days = (Date.now() - date.getTime()) / 86400000;
-        if (days < 180) setJumpStatus('section-domain', days < 30 ? 'fail' : 'warn', `registered ${ageText(date)}`);
+        if (days < 180) {
+            setJumpStatus('section-domain', days < 30 ? 'fail' : 'warn', `registered ${ageText(date)}`);
+            summaryState.domainSignals.push({ level: 'warn', text: `${registered} was registered ${ageText(date)}` });
+        } else {
+            summaryState.domainSignals.push({ level: 'ok', text: `${registered} was registered ${ageText(date)}` });
+        }
         rows.push(domainRow('Registered', days < 30 ? 'status-fail' : days < 180 ? 'status-pending' : 'status-pass', ageText(date),
-            `<code>${escapeHtml(org)}</code> on ${escapeHtml(date.toLocaleDateString())}${registration.registrar ? ` · ${escapeHtml(registration.registrar)}` : ''}`
+            `<code>${escapeHtml(registered)}</code> on ${escapeHtml(date.toLocaleDateString())}${registration.registrar ? ` · ${escapeHtml(registration.registrar)}` : ''}`
             + (days < 180 ? checkNote('Newly registered domains are often used for phishing') : '')));
     } else {
-        rows.push(domainRow('Registered', 'status-neutral', 'Unknown', checkNote('The registry didn\'t answer for <code>' + escapeHtml(org) + '</code>')));
+        summaryState.domainSignals.push({ level: 'info', text: `${registered}'s registration date is unknown: the registry didn't answer` });
+        rows.push(domainRow('Registered', 'status-neutral', 'Unknown', checkNote('The registry didn\'t answer for <code>' + escapeHtml(registered) + '</code>')));
     }
 
     const exchanges = (mx || []).map(value => value.trim().split(/\s+/)).filter(parts => parts.length === 2)
@@ -1394,8 +1830,15 @@ async function displayDomain(email, run) {
         rows.push(domainRow('Receives mail', 'status-pending', 'Lookup failed', ''));
     } else if (exchanges.length && !(exchanges.length === 1 && exchanges[0].host === '')) {
         const provider = spfProvider(registrableDomain(exchanges[0].host) || exchanges[0].host) || null;
+        summaryState.domainSignals.push({ level: 'ok', text: `${domain} receives mail, so replies can reach it` });
         rows.push(domainRow('Receives mail', 'status-pass', 'Yes', `${exchanges.slice(0, 3).map(item => `<span class="spf-token">${escapeHtml(item.host)}</span>`).join(', ')}`
             + (exchanges.length > 3 ? ` +${exchanges.length - 3}` : '') + (provider ? checkNote(`Mail handled by ${escapeHtml(provider)}`) : '')));
+    } else if (exists === false) {
+        rows.push(domainRow('Receives mail', 'status-fail', 'No', ''));
+    } else if (unreachable) {
+        if (jumpState['section-domain']?.result !== 'fail') setJumpStatus('section-domain', 'warn', 'can\'t receive mail');
+        summaryState.domainSignals.push({ level: 'warn', text: `${domain} has no mail server or address in DNS, so replies can't reach it` });
+        rows.push(domainRow('Receives mail', 'status-fail', 'No', checkNote(`<code>${escapeHtml(domain)}</code> has no mail server and no address in DNS. It may not exist, and replies to the From address won't arrive`)));
     } else {
         rows.push(domainRow('Receives mail', 'status-neutral', 'No', checkNote(`<code>${escapeHtml(domain)}</code> has no MX record, so replies to the From address won't arrive`)));
     }
@@ -1423,9 +1866,16 @@ async function displayDomain(email, run) {
         ? domainRow('TLS reporting', 'status-pass', 'Published', checkNote('Reports of TLS delivery problems go to ' + escapeHtml(EmailDns.parseTags(tlsRecord).tags.rua || 'an unspecified address')))
         : domainRow('TLS reporting', 'status-neutral', 'None', checkNote('Servers sending to this domain have nowhere to report TLS delivery problems')));
 
-    domainOutput.innerHTML = `
+    // The questions behind each row, answered again from this check's DNS cache for the walkthrough.
+    const questions = await Promise.all([[domain, 'MX'], ...(noMx ? [[domain, 'A'], [domain, 'AAAA']] : []), ['default._bimi.' + domain, 'TXT'],
+        ...(org !== domain ? [['default._bimi.' + org, 'TXT']] : []), ['_mta-sts.' + domain, 'TXT'], ['_smtp._tls.' + domain, 'TXT']]
+        .map(([name, type]) => askAgain(name, type)));
+    if (run !== latestRun) return;
+    domainOutput.innerHTML = explainHost('Domain view', `
         <p class="domain-intro">Checks for <code>${escapeHtml(domain)}</code>${org !== domain ? `, part of <code>${escapeHtml(org)}</code>` : ''}. SPF, DKIM and DMARC have their own sections.</p>
-        <table class="content-table domain-checks"><tbody>${rows.join('')}</tbody></table>`;
+        <table class="content-table domain-checks"><tbody>${rows.join('')}</tbody></table>`,
+        domainWalkthrough({ domain, org, registered, tldKnown: true, questions, mx, exists, unreachable, registration, bimi, stsRecord, tlsRecord }));
+    selectExplainView(domainOutput.firstElementChild);
     domainOutput.querySelector('.bimi-show')?.addEventListener('click', event => {
         const button = event.currentTarget;
         // An <img> never runs scripts inside an SVG, so the logo is safe to show.
@@ -1490,6 +1940,96 @@ function arcVerdict(result) {
     }
 }
 
+// --- ARC, step by step (RFC 8617) ---
+function arcSealSentence(set) {
+    const sealer = `<code>${breakable(set.sealer || 'unknown')}</code>`;
+    const key = set.seal.key ? ` with ${set.seal.key.type === 'rsa' ? `a ${set.seal.key.bits}-bit RSA key` : 'an Ed25519 key'}` : '';
+    if (set.seal.valid === true) return `It verifies${key}: sets 1 to ${set.instance} are exactly as ${sealer} sealed them.`;
+    if (set.seal.valid === false) return `It doesn't verify${set.seal.error ? ` (${escapeHtml(set.seal.error)})` : ''}: the ARC headers changed after sealing, or ${sealer} changed its key since.`;
+    return `It couldn't be checked${set.seal.error ? `: ${escapeHtml(set.seal.error)}` : ''}.`;
+}
+
+function arcSignatureSentence(set, newest) {
+    const ams = set.ams;
+    const missing = missingSignedHeaders(ams.dkim);
+    const expected = newest ? '' : ' That\'s expected for an older set: later servers may change the message.';
+    if (ams.valid) return 'It verifies: the message hasn\'t changed since this set was added.';
+    if (ams.bodyMissing) return `The body wasn't provided, so only the signed headers could be checked${ams.headersVerified ? ', and they verify' : ''}.`;
+    if (ams.headersVerified === true) return `The signed headers verify, but the body changed after this set was added.${expected}`;
+    if (ams.headersVerified === false && missing.length) {
+        return `It doesn't verify: this copy is missing ${missing.length === 1 ? 'a header' : `${missing.length} headers`} it signed (${missing.map(name => `<code>${escapeHtml(name)}</code>`).join(', ')}).${expected}`;
+    }
+    if (ams.headersVerified === false) return `It doesn't verify: the signed headers changed after this set was added.${expected}`;
+    return `It couldn't be checked${ams.error ? `: ${escapeHtml(ams.error)}` : ''}.`;
+}
+
+function arcWalkthrough(result) {
+    const sets = result.sets;
+    const intro = 'How this page checked the ARC chain, step by step.';
+    const standards = [`${rfcLink(8617)} Authenticated Received Chain (ARC)`, `${rfcLink(6376)} DKIM, which ARC's signatures are modeled on`,
+        `${rfcLink(8601)} Authentication-Results, the format of the recorded results`];
+    const steps = [explainStep(1, 'Find the ARC sets', [rfcLink(8617, '4.1'), rfcLink(8617, '4.2.1')], `
+        <p>When a server passes a message on (a mailing list, a forwarding address, or a provider such as Gmail when mail
+        arrives), it can add an ${term('arc set', 'ARC set')}: three headers numbered with the same <code>i=</code>.
+        ARC-Authentication-Results records what that server concluded, ARC-Message-Signature signs the message like DKIM,
+        and ARC-Seal signs all the ARC headers so far.</p>
+        ${sets.length ? `<ol class="explain-picks">${sets.map(set => `<li>Set <code>i=${set.instance}</code>, sealed by <code>${breakable(set.sealer || 'unknown')}</code>${set.time ? ` on ${escapeHtml(formatUnixTime(set.time))}` : ''}</li>`).join('')}</ol>` : ''}
+        ${result.error ? `<p class="explain-stop">${escapeHtml(result.error)}, so the chain is broken and nothing else was checked.</p>` : ''}`)];
+    if (!sets.length) return explainWrap(intro, steps, [], standards);
+
+    const parser = new ServerValidationParser();
+    steps.push(explainStep(2, 'What each server recorded', [rfcLink(8617, '4.1.1')], `
+        <p>Each set keeps the authentication results its server saw when the message reached it. If the chain holds, they show
+        what was true before later servers changed the message, such as a mailing list adding a footer.</p>
+        <ul class="explain-ops">${sets.map(set => {
+            const recorded = parser.parseOne(set.recorded);
+            return `<li class="explain-op"><span><b>i=${set.instance}</b>${recorded.service ? ` <code>${escapeHtml(recorded.service)}</code>` : ''}</span>
+                <span class="explain-answer">${recorded.results.map(entry => `<code>${escapeHtml(entry.method)}=${escapeHtml(entry.result)}</code>`).join(' ') || '<span class="explain-muted">No results</span>'}</span></li>`;
+        }).join('')}</ul>`));
+
+    steps.push(explainStep(3, 'Check each seal', [rfcLink(8617, '4.1.3'), rfcLink(8617, '5.1.1')], `
+        <p>The seal of set <code>i</code> covers the ARC headers of sets 1 to <code>i</code>, in order (results, message signature,
+        seal), with relaxed ${term('canonicalization')} and its own <code>b=</code> emptied. Its key is fetched like a DKIM key,
+        from the sealer's ${term('selector')}.</p>
+        <ol class="explain-rules">${sets.map(set => `<li class="explain-rule is-${set.seal.valid === true ? 'matched' : set.seal.valid === false ? 'error' : 'no-match'}">
+            <div class="explain-rule-head"><b>Seal i=${set.instance}</b>${set.seal.valid === true ? pill('status-pass', 'Verifies') : set.seal.valid === false ? pill('status-fail', 'Doesn\'t verify') : pill('status-pending', 'Not checked')}</div>
+            ${set.seal.question?.name ? explainQuestions([set.seal.question]) : ''}<p>${arcSealSentence(set)}</p></li>`).join('')}</ol>`));
+
+    steps.push(explainStep(4, 'Check the message signatures', [rfcLink(8617, '4.1.2'), rfcLink(8617, '5.2')], `
+        <p>Each ARC-Message-Signature is checked like a DKIM signature over the message. Only the newest has to verify: the
+        older ones are expected to break as later servers change the message, which is the point of sealing them.</p>
+        <ol class="explain-rules">${sets.map((set, index) => {
+            const newest = index === sets.length - 1;
+            const state = set.ams.valid ? 'matched' : newest ? 'error' : 'no-match';
+            return `<li class="explain-rule is-${state}">
+                <div class="explain-rule-head"><b>Message signature i=${set.instance}</b>${newest ? ' <span class="explain-muted">newest</span>' : ''}${set.ams.valid ? pill('status-pass', 'Verifies') : pill(newest ? 'status-fail' : 'status-neutral', 'Doesn\'t verify')}</div>
+                ${set.ams.dkim?.dnsQuestion?.name ? explainQuestions([set.ams.dkim.dnsQuestion]) : ''}<p>${arcSignatureSentence(set, newest)}</p></li>`;
+        }).join('')}</ol>`));
+
+    steps.push(explainStep(5, 'Check the chain rules', [rfcLink(8617, '4.4'), rfcLink(8617, '5.2')], `
+        <p>Each seal also records, in <code>cv=</code>, what its server found for the chain before it. The first set must say
+        <code>none</code>, since nothing came before it, and every later one <code>pass</code>. A <code>fail</code> anywhere breaks
+        the chain for good.</p>
+        <ul class="explain-signals">${sets.map((set, index) => {
+            const expected = index === 0 ? 'none' : 'pass';
+            const ok = set.cv === expected;
+            return `<li class="is-${ok ? 'ok' : 'fail'}">${checkIcon(ok ? 'ok' : 'fail')}<span>Set <code>i=${set.instance}</code> says <code>cv=${escapeHtml(set.cv || '?')}</code>${ok ? '' : `, where <code>${expected}</code> is required`}</span></li>`;
+        }).join('')}</ul>`));
+
+    const status = offlineStatus(result.status);
+    const meaning = { pass: 'The chain holds: the results each server recorded haven\'t been altered since it sealed them.',
+        fail: 'The chain is broken, so the recorded results can\'t be relied on.',
+        unavailable: 'Part of the chain couldn\'t be checked, so it can\'t be called intact or broken.',
+        offline: 'Offline mode is on, so the keys weren\'t looked up.' }[status] || '';
+    steps.push(explainStep(6, 'The result', [rfcLink(8617, '4.4')], `
+        <p><span class="${verdictClass(status)}">${escapeHtml(verdictLabel(status))}</span> ${meaning}</p>
+        <p>An intact chain proves the recorded results weren't changed, not that they were right: each receiver decides which
+        sealers to trust. A large provider's seal usually counts; an unknown forwarder's says little.</p>`));
+
+    const questions = sets.flatMap(set => [set.seal.question, set.ams.dkim?.dnsQuestion]).filter(question => question?.name);
+    return explainWrap(intro, steps, questions, standards);
+}
+
 function displayArc(result) {
     const rows = result.sets.map(set => {
         const recorded = new ServerValidationParser().parseOne(set.recorded);
@@ -1507,7 +2047,7 @@ function displayArc(result) {
                         .map(entry => `<span class="${['none', 'neutral'].includes(entry.result) ? 'status-neutral' : verdictClass(entry.result)}" title="${escapeHtml(entry.raw)}">${escapeHtml(entry.method.toUpperCase())} ${escapeHtml(verdictLabel(entry.result))}</span>`).join('')}</span></td>
             </tr>`;
     }).join('');
-    arcOutput.innerHTML = `
+    const resultView = `
         <div class="dmarc-verdict">
             <span class="${result.status === 'none' ? 'status-neutral' : verdictClass(offlineStatus(result.status))} summary-pill">${escapeHtml(verdictLabel(offlineStatus(result.status)))}</span>
             <span class="dmarc-verdict-text">${arcVerdict(result)}</span>
@@ -1522,6 +2062,9 @@ function displayArc(result) {
             ${detailDisclosureIcon}<span>ARC headers</span><span class="toggle-meta">${result.sets.length * 3} headers</span>
         </button>
         <div id="arc-raw" class="hidden"><pre class="tech-value code scrollable-pre">${escapeHtml(result.sets.flatMap(set => set.raw).join('\r\n'))}</pre></div>` : ''}`;
+    // A message without ARC has nothing to walk through.
+    arcOutput.innerHTML = result.status === 'none' ? resultView : explainHost('ARC view', resultView, arcWalkthrough(result));
+    selectExplainView(arcOutput.querySelector(':scope > .explain-host'));
 }
 
 // What a signature's result says about the headers it lists.
@@ -1607,7 +2150,7 @@ function headerLocalTime(field) {
     return Number.isNaN(time) ? null : new Date(time).toLocaleString();
 }
 
-function headerRow(field, { coverage, issues, query, hop }) {
+function headerRow(field, { coverage, issues, query, hop, unused }) {
     const badge = signatureBadges[coverage];
     const open = headersUi.openRows.has(field.index);
     const decoded = decodeMimeWords(field.value);
@@ -1626,6 +2169,7 @@ function headerRow(field, { coverage, issues, query, hop }) {
                 ${issues.map(issue => `<p class="hdr-issue">${escapeHtml(issue.message)}</p>`).join('')}
                 ${note || section ? `<p class="hdr-note">${note ? escapeHtml(note) : ''}${section ? ` <a class="hdr-link" href="#${section[0]}">See ${section[1]}</a>` : ''}</p>` : ''}
                 ${badge ? `<p class="hdr-note">${badge.label}.</p>` : ''}
+                ${unused ? `<p class="hdr-note">Not used as a result at delivery. ${escapeHtml(DeliveryRecords.explain(unused))}</p>` : ''}
                 <pre class="tech-value code hdr-full" data-copy="${escapeHtml(field.name + ': ' + field.value)}">${escapeHtml(field.raw)}</pre>
                 ${decoded !== field.value ? `<p class="hdr-extra"><span class="tech-label">Decoded</span>${escapeHtml(decoded)}</p>` : ''}
                 ${time ? `<p class="hdr-extra"><span class="tech-label">Your time</span>${escapeHtml(time)}</p>` : ''}
@@ -1664,7 +2208,9 @@ function displayHeaders() {
         }
     }
     const covered = new Set([...coverageByHeader].filter(([, kind]) => kind !== 'failed').map(([id]) => id));
-    const issues = HeaderInsights.anomalies(fields, { covered, receiver: summaryState.reported?.top?.service || null });
+    const delivery = DeliveryRecords.assess(currentEmail);
+    const issues = HeaderInsights.anomalies(fields, { covered, delivery });
+    const unusedRecords = new Map(delivery.records.filter(record => !record.trusted && !record.suspicious).map(record => [record.index, record]));
     setJumpStatus('section-headers', issues.length ? 'fail' : null, issues.length ? `${issues.length} warning ${issues.length === 1 ? 'sign' : 'signs'}` : null);
     const issuesFor = index => issues.filter(issue => issue.indexes.includes(index));
     const warnings = issues.length ? `
@@ -1699,7 +2245,8 @@ function displayHeaders() {
     const visible = pool.filter(matches);
     const hops = fields.filter(field => field.key === 'received');
     const hopNumber = field => field.key === 'received' ? hops.length - hops.indexOf(field) : null;
-    const row = field => headerRow(field, { coverage: coverageOf(field), issues: issuesFor(field.index), query, hop: hopNumber(field) });
+    const row = field => headerRow(field, { coverage: coverageOf(field), issues: issuesFor(field.index), query, hop: hopNumber(field),
+        unused: unusedRecords.get(field.index) });
     const kinds = Object.keys(signatureBadges).filter(kind => visible.some(field => coverageOf(field) === kind));
     let html = warnings + (kinds.length ? `<div class="header-legend">${kinds.map(kind =>
         `<span class="header-legend-item signature-badge ${kind}">${signatureBadges[kind].icon}${escapeHtml(signatureBadges[kind].short)}</span>`).join('')}</div>` : '');
@@ -1755,8 +2302,10 @@ function traceHeaders(email) {
 // (where it took the message from outside), and Microsoft's delayed-delivery flag.
 function relayHints(email) {
     const values = name => [getHeaderValue(email.headers, name)].flat().filter(value => typeof value === 'string');
-    const clientIp = values('Received-SPF').map(value => value.match(/\bclient-ip\s*=\s*([0-9a-fA-F:.]+)/i)?.[1]).find(Boolean) ||
-        values('Authentication-Results').map(value => value.match(/\bsender IP is ([0-9a-fA-F:.]+)/i)?.[1] ||
+    // Only records a receiving server wrote: a sender could name any IP.
+    const trusted = name => DeliveryRecords.assess(email).trusted(name).map(record => record.value);
+    const clientIp = trusted('received-spf').map(value => value.match(/\bclient-ip\s*=\s*([0-9a-fA-F:.]+)/i)?.[1]).find(Boolean) ||
+        trusted('authentication-results').map(value => value.match(/\bsender IP is ([0-9a-fA-F:.]+)/i)?.[1] ||
             value.match(/\bsmtp\.remote-ip\s*=\s*([0-9a-fA-F:.]+)/i)?.[1]).find(Boolean) || null;
     const delayedDelivery = values('X-MS-DelayedDelivery').some(value => /^\s*true\b/i.test(value));
     return { clientIp, delayedDelivery };
@@ -1829,20 +2378,15 @@ function displayRelay(trace, dateHeader, hints = {}) {
 const relayState = { route: null, spfIp: null, selected: null, view: storedRelayView() };
 const relayViews = [
     { id: 'route', label: 'Route', icon: `<svg width="15" height="15" ${iconAttrs}><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M11 5h9M11 12h6M11 19h9"/></svg>` },
-    { id: 'map', label: 'Path map', icon: `<svg width="15" height="15" ${iconAttrs}><rect x="2" y="8" width="7" height="8" rx="1.5"/><rect x="15" y="8" width="7" height="8" rx="1.5"/><path d="M9 12h6"/></svg>` }
+    { id: 'map', label: 'Path map', icon: `<svg width="15" height="15" ${iconAttrs}><rect x="2" y="8" width="7" height="8" rx="1.5"/><rect x="15" y="8" width="7" height="8" rx="1.5"/><path d="M9 12h6"/></svg>` },
+    { id: 'explain', label: 'How it was read', icon: `<svg width="15" height="15" ${iconAttrs}><path d="M4 5h11M4 12h8M4 19h11"/><path d="m16 15 2 2 4-4"/></svg>` }
 ];
 const smallLockIcon = `<svg width="11" height="11" ${iconAttrs}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>`;
 const arrowRightIcon = `<svg width="14" height="14" ${iconAttrs}><path d="M5 12h14m-5-5 5 5-5 5"/></svg>`;
-// Domains one provider uses for its own servers, shown under one name.
-const organizationAliases = {
-    'office365.com': 'outlook.com', 'exchangelabs.com': 'outlook.com', 'office.com': 'outlook.com', 'hotmail.com': 'outlook.com',
-    'live.com': 'outlook.com', 'gmail.com': 'google.com', 'googlemail.com': 'google.com'
-};
-const twoLevelSuffixes = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'co.jp', 'ne.jp',
-    'com.br', 'com.cn', 'com.mx', 'co.in', 'co.za', 'com.tr', 'co.kr', 'com.sg', 'com.hk', 'com.tw', 'com.ar', 'co.il']);
 
 function storedRelayView() {
     try {
+        // Route or Path map is remembered; the walkthrough is never where Hops opens.
         return localStorage.getItem('emailParserRelayView') === 'map' ? 'map' : 'route';
     } catch {
         return 'route';
@@ -1861,19 +2405,15 @@ function ipScope(ip) {
     return 'public';
 }
 
-function registrableDomain(host) {
-    const name = (host || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
-    if (!name.includes('.') || name.includes(':') || /^[\d.]+$/.test(name)) return null;
-    // Names inside private networks (eaas-34.….svc.cluster.local) say nothing about the company.
-    if (/\.(local|localdomain|internal|lan|intranet|corp|home|arpa)$/.test(name)) return null;
-    const labels = name.split('.');
-    const size = twoLevelSuffixes.has(labels.slice(-2).join('.')) ? 3 : 2;
-    return labels.length >= size ? labels.slice(-size).join('.') : null;
+// The registrable domain of a host, from the public suffix list. { icannOnly: true } gives the domain someone
+// registered with a registrar (someone.github.io is under github.io), for registration lookups.
+function registrableDomain(host, options) {
+    return PublicSuffix.registrableDomain(host, options);
 }
 
+// Domains one provider uses for its own servers are shown under one name.
 function organizationOf(host) {
-    const domain = registrableDomain(host);
-    return organizationAliases[domain] || domain;
+    return DeliveryRecords.organization(host);
 }
 
 function buildRoute(hops, dateHeader, hints = {}) {
@@ -1908,7 +2448,8 @@ function buildRoute(hops, dateHeader, hints = {}) {
 
     // The Date header is set by the sender's software when it marks the message ready to send.
     // Each gap is measured from the step before it; the first recorded step from the Date header.
-    const sentAt = Date.parse(dateHeader || '');
+    const parsed = parseMailDate(dateHeader || '');
+    const sentAt = Number.isNaN(parsed) ? Date.parse(dateHeader || '') : parsed;
     const sent = Number.isNaN(sentAt) ? null : { timestamp: sentAt, date: dateHeader };
     let previous = sent;
     for (const step of recorded) {
@@ -2148,6 +2689,112 @@ function renderMapDetail(route) {
         <pre class="tech-value code">${reported ? 'Received' : step.source}: ${escapeHtml(step.raw)}</pre>`;
 }
 
+// --- Hops, step by step: how the Received headers were read into the route ---
+function hopSentence(step, route) {
+    const code = value => `<code>${breakable(value)}</code>`;
+    if (step.source === 'Reported') {
+        return `No Received header of its own: ${code(step.reportedBy)} named it as the server that handed the message over${step.ip ? `, from ${code(normalizeIp(step.ip))}` : ''}.`;
+    }
+    const parts = [];
+    parts.push(step.source === 'X-Received' ? `An internal step inside the provider (an X-Received header), at ${code(step.host)}.`
+        : `${code(step.host)} took the message from ${step.from ? code(step.from) : 'a server that gave no name'}${step.ip ? ` at ${code(normalizeIp(step.ip))}` : ''}.`);
+    if (step.protocol || step.tls) {
+        // ESMTPS, ESMTPSA and HTTPS name an encrypted connection; plain SMTP or ESMTP don't.
+        const encrypted = Boolean(step.tls) || /^(?:(?:E|UTF8)?(?:SMTP|LMTP)SA?|HTTPS)$/i.test(step.protocol || '');
+        parts.push(`It used ${step.protocol ? code(step.protocol) : 'an unnamed protocol'}${step.tls ? `, over ${escapeHtml(step.tls)}${step.cipher ? ` (${code(step.cipher)})` : ''}` : ''}${encrypted || step.source === 'X-Received' || !(step.from || step.ip) ? '' : ', without encryption as far as the header says'}.`);
+    }
+    if (step.timestamp) {
+        parts.push(`Time: ${escapeHtml(hopTime(step, route))}${step.delay !== null && step.delay !== undefined
+            ? `, ${escapeHtml(formatDuration(step.delay))} after ${step.firstRecorded ? 'the time in the Date header' : 'the previous step'}${step.delay < 0 ? '. A negative gap means the two clocks disagree' : ''}` : ''}.`);
+    } else if (step.source !== 'Reported') {
+        parts.push('The header has no readable date.');
+    }
+    if (step.delayedDelivery) parts.push('Microsoft held the message before this step (X-MS-DelayedDelivery).');
+    return parts.join(' ');
+}
+
+function hopsWalkthrough(route) {
+    const email = currentEmail;
+    const received = route.steps.filter(step => step.source === 'Received').length;
+    const internal = route.steps.filter(step => step.source === 'X-Received').length;
+    const entry = route.steps.find(step => step.entry);
+    const hints = email ? relayHints(email) : {};
+    const delivery = email ? DeliveryRecords.assess(email) : null;
+    const ownerIp = entry?.ip || route.steps.find(step => step.ip && ipScope(step.ip) === 'public')?.ip;
+    const gaps = route.steps.filter(step => typeof step.delay === 'number');
+    const longest = gaps.length ? gaps.reduce((a, b) => (Math.abs(b.delay) > Math.abs(a.delay) ? b : a)) : null;
+    // Received lines the sender wrote to look like the receiving server's, matched by their text.
+    const squash = value => String(value || '').replace(/\s+/g, ' ').trim();
+    const forged = new Set((delivery?.forgedHops || []).map(hop => squash(delivery.hops.find(entry => entry.index === hop.index)?.value)));
+    const isForged = step => step.source === 'Received' && forged.has(squash(step.raw));
+    const steps = [
+        explainStep(1, 'Read the Received headers', [rfcLink(5321, '4.4'), rfcLink(5322, '3.6.7')], `
+            <p>Every server that accepts a message adds a ${term('received header', 'Received header')} above the ones already there, so they're read
+            from the bottom up. This message has ${received} Received ${received === 1 ? 'header' : 'headers'}${internal ? ` and ${internal} X-Received
+            ${internal === 1 ? 'header' : 'headers'} (internal steps inside a provider)` : ''}.</p>
+            <p>A Received header is only as trustworthy as the server that wrote it. The ones your provider added are reliable; the
+            ones below the point where it took the message were written by the sending side and can be made up.</p>`),
+        explainStep(2, 'Each step, oldest first', [rfcLink(5321, '4.4')], `
+            <p>In <code>from X (Y [IP])</code>, <code>X</code> is the name the other server gave for itself (its ${term('helo', 'HELO')}), <code>Y</code>
+            usually the reverse DNS name of its address, and <code>IP</code> the address this server saw connecting: the one part the
+            other side can't make up. <code>with</code> names the protocol: ESMTPS and ESMTPSA mean the connection was encrypted.</p>
+            <ol class="explain-rules">${route.steps.map(step => `
+                <li class="explain-rule${step.entry ? ' is-matched' : isForged(step) ? ' is-error' : ''}">
+                    <div class="explain-rule-head"><b>${step.index}.</b> <code>${breakable(step.host)}</code>${step.org ? ` <span class="explain-muted">${escapeHtml(step.org)}</span>` : ''}${step.entry ? pill('status-pass', 'Entered your provider') : ''}${isForged(step) ? pill('status-fail', 'Forged') : ''}</div>
+                    <p>${hopSentence(step, route)}${isForged(step) ? ' <b>The sender wrote this line:</b> it sits below the step where the receiving server took the message from outside, yet claims that server.' : ''}</p>
+                    ${step.raw && step.source !== 'Reported' ? `<pre class="tech-value code explain-signed-data">${escapeHtml(`${step.source}: ${step.raw}`)}</pre>` : ''}
+                </li>`).join('')}</ol>`),
+        explainStep(3, 'Where your provider took it from outside', [rfcLink(7208, '9.1'), rfcLink(8601, '2.7.2')], `
+            <p>${hints.clientIp ? `The Received-SPF or Authentication-Results record your provider wrote names the sending IP <code>${escapeHtml(normalizeIp(hints.clientIp))}</code>.
+                ${entry ? `That's step ${entry.index}, where <code>${breakable(entry.host)}</code> took the message from it: steps from there on were recorded by your provider, the ones before by the sending side.`
+                    : 'No Received header shows that address, so the boundary isn\'t marked.'}`
+                : 'No delivery record your provider wrote names the sending IP, so the boundary between the sending side and your provider isn\'t marked. The Route view separates the steps by organization instead.'}</p>
+            ${delivery?.forgedHops.length ? `<p class="explain-stop">One Received header below that point claims <code>${escapeHtml(delivery.forgedHops[0].by)}</code> handled the message before
+                <code>${escapeHtml(delivery.forgedHops[0].entryFrom)}</code> handed it over, which can't happen: the sender wrote it.</p>` : ''}`),
+        explainStep(4, 'Group by organization', [docLink('https://publicsuffix.org/', 'Public Suffix List')], `
+            <p>Steps are grouped by the organization that wrote them: the registered domain of the server's name, from the
+            ${term('public suffix')} list, with a few providers' domains merged (outlook.com and office365.com are Microsoft's,
+            gmail.com and google.com are Google's). A server known only by an ID or an internal name joins the step it hands to.
+            A new group also starts where your provider took the message from outside, even within one organization.</p>
+            <ul class="explain-picks">${route.groups.map(group => {
+                const first = group.steps[0].index, last = group.steps.at(-1).index;
+                return `<li><b>${escapeHtml(group.org || 'Unknown organization')}</b> <span class="explain-muted">step${first === last ? ` ${first}` : `s ${first}–${last}`}</span></li>`;
+            }).join('')}</ul>`),
+        explainStep(5, 'Who runs the sending network', [docLink('https://www.team-cymru.com/ip-asn-mapping', 'Team Cymru IP to ASN'), rfcLink(9083)], `
+            <p>The network that announces an address on the internet (its autonomous system) comes from Team Cymru's DNS zone, and
+            the organization it's registered to from the regional registry's ${term('rdap', 'RDAP')} service.</p>
+            ${ownerIp ? `<div class="explain-owner" data-ip="${escapeHtml(normalizeIp(ownerIp))}"><p class="explain-muted">Looking up <code>${escapeHtml(normalizeIp(ownerIp))}</code>…</p></div>`
+                : '<p>No public sending address to look up.</p>'}`),
+        explainStep(6, 'Timing', [], `
+            <p>${route.total !== null ? `From the first to the last dated step took ${escapeHtml(formatDuration(route.total, false))}.` : 'Too few steps have dates to time the route.'}
+            ${route.sent ? `The Date header, set when the sender's software marked the message ready, says ${escapeHtml(hopTime(route.sent, route))}.` : ''}
+            ${longest ? `The longest gap is ${escapeHtml(formatDuration(longest.delay))}, before step ${longest.index}.` : ''}
+            ${gaps.some(step => step.delay < 0) ? 'Some gaps are negative: those servers\' clocks disagree, which is common and harmless.' : ''}</p>`)
+    ];
+    return explainWrap('How this page read the Received headers into the route, step by step.', steps, [],
+        [`${rfcLink(5321)} SMTP, which defines Received headers`, `${rfcLink(5322)} Message format, including trace fields`, `${rfcLink(9083)} RDAP, for who an address is registered to`]);
+}
+
+// The network-owner step: the lookups the owner check made, with their answers.
+function fillExplainOwner(root) {
+    for (const slot of root.querySelectorAll('.explain-owner[data-ip]')) {
+        const ip = slot.dataset.ip;
+        IpAddress.networkOwner(ip).then(owner => {
+            if (!slot.isConnected) return;
+            if (!owner) {
+                slot.innerHTML = `<p>No routing data for <code>${escapeHtml(ip)}</code>: it's private, or the lookup failed.</p>`;
+                return;
+            }
+            const lookups = owner.lookups || { dns: [], rdap: null };
+            slot.innerHTML = `${explainQuestions(lookups.dns)}
+                ${lookups.rdap ? `<ul class="explain-ops"><li class="explain-op"><span class="spf-dns-cmd">GET ${escapeHtml(lookups.rdap)}</span><span class="explain-arrow" aria-hidden="true">→</span>
+                    <span class="explain-answer">${lookups.rdapOk ? [owner.organization, owner.network, owner.range].filter(Boolean).map(value => `<code>${escapeHtml(value)}</code>`).join(' ') || '<span class="explain-muted">No details</span>'
+                        : '<span class="explain-muted">No answer</span>'}</span></li></ul>` : ''}
+                <p><code>${escapeHtml(ip)}</code> is announced by ${owner.asn ? `AS${escapeHtml(owner.asn)}${owner.asName ? ` (${escapeHtml(owner.asName)})` : ''}` : 'an unknown network'}${owner.country ? ` in ${escapeHtml(owner.country)}` : ''}${owner.registry ? `, registered with ${escapeHtml(owner.registry)}` : ''}${owner.organization ? ` to ${escapeHtml(owner.organization)}` : ''}.</p>`;
+        });
+    }
+}
+
 function renderRelay() {
     const container = document.getElementById('relay-output');
     const route = relayState.route;
@@ -2163,24 +2810,27 @@ function renderRelay() {
                 aria-controls="relay-panel-${id}" aria-selected="${id === view}" tabindex="${id === view ? 0 : -1}">${icon}<span>${label}</span></button>`).join('')}
         </div>
         <div class="relay-panel" id="relay-panel-route" role="tabpanel" aria-labelledby="relay-tab-route"${view === 'route' ? '' : ' hidden'}>${renderRouteView(route)}</div>
-        <div class="relay-panel" id="relay-panel-map" role="tabpanel" aria-labelledby="relay-tab-map"${view === 'map' ? '' : ' hidden'}>${renderPathMap(route)}</div>`;
+        <div class="relay-panel" id="relay-panel-map" role="tabpanel" aria-labelledby="relay-tab-map"${view === 'map' ? '' : ' hidden'}>${renderPathMap(route)}</div>
+        <div class="relay-panel" id="relay-panel-explain" role="tabpanel" aria-labelledby="relay-tab-explain"${view === 'explain' ? '' : ' hidden'}>${hopsWalkthrough(route)}</div>`;
     fillNetworkOwners(container);
+    fillExplainOwner(container);
 }
 
 function selectRelayView(view, focus) {
     relayState.view = view;
     try {
-        localStorage.setItem('emailParserRelayView', view);
+        if (view !== 'explain') localStorage.setItem('emailParserRelayView', view);
     } catch {
         // The view still switches; only the preference isn't kept.
     }
-    for (const tab of document.querySelectorAll('.relay-tab')) {
+    // Scoped to the Hops panel: the Headers view switcher reuses the tab style.
+    for (const tab of document.querySelectorAll('#relay-output .relay-tab')) {
         const active = tab.dataset.view === view;
         tab.setAttribute('aria-selected', String(active));
         tab.tabIndex = active ? 0 : -1;
         if (active && focus) tab.focus();
     }
-    for (const panel of document.querySelectorAll('.relay-panel')) panel.hidden = panel.id !== 'relay-panel-' + view;
+    for (const panel of document.querySelectorAll('#relay-output .relay-panel')) panel.hidden = panel.id !== 'relay-panel-' + view;
 }
 
 function selectMapStep(index) {
@@ -2199,14 +2849,14 @@ function markRelaySpfIp(ip) {
 }
 
 resultsDiv.addEventListener('click', event => {
-    const tab = event.target.closest('.relay-tab');
+    const tab = event.target.closest('#relay-output .relay-tab');
     if (tab) selectRelayView(tab.dataset.view, false);
     const node = event.target.closest('.map-node');
     if (node) selectMapStep(Number(node.dataset.step));
 });
 
 resultsDiv.addEventListener('keydown', event => {
-    if (!event.target.classList?.contains('relay-tab') || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    if (!event.target.matches?.('#relay-output .relay-tab') || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const ids = relayViews.map(view => view.id);
     const current = ids.indexOf(event.target.dataset.view);
@@ -2390,7 +3040,7 @@ function spfRules(spfDto) {
 
 function spfSummary(spfDto) {
     const ip = `<code>${escapeHtml(normalizeIp(spfDto.senderIp) || '')}</code>`;
-    const domain = `<code>${escapeHtml(spfDto.domain || '')}</code>`;
+    const domain = `<code>${breakable(spfDto.domain || '')}</code>`;
     const matched = spfDto.trace?.matchMechanism ? spfTerm(spfDto.trace.matchMechanism) : null;
     const allToken = (spfDto.mechanisms || []).find(token => /^[-~?+]?all$/i.test(token));
     switch (spfDto.result) {
@@ -2422,13 +3072,682 @@ function spfFromNote(spfDto) {
     }
     return {
         chip: '<span class="status-neutral">Different from From</span>',
-        note: `<div class="notice">The envelope sender's domain <code>${escapeHtml(envelope)}</code> isn't <code>${escapeHtml(fromDomain)}</code>, `
+        note: `<div class="notice">The envelope sender's domain <code>${breakable(envelope)}</code> isn't <code>${breakable(fromDomain)}</code>, `
             + `so this SPF result doesn't count toward DMARC for the From address.</div>`
     };
 }
 
 function countTraceRecords(node) {
     return node ? 1 + (node.children || []).reduce((sum, child) => sum + countTraceRecords(child.trace), 0) : 0;
+}
+
+// --- How it was decided: the SPF check step by step, with every DNS question it asked and the RFC section behind
+// each step, so the conclusion in the Result view can be followed and repeated by hand ---
+function rfcLink(rfc, section = null) {
+    return `<a class="rfc-link" href="https://www.rfc-editor.org/rfc/rfc${rfc}${section ? '#section-' + section : ''}" target="_blank" rel="noopener noreferrer">RFC ${rfc}${section ? ' §' + section : ''}</a>`;
+}
+
+function explainStep(number, title, refs, body) {
+    return `<li class="explain-step">
+        <div class="explain-step-head"><span class="explain-step-number" aria-hidden="true">${number}</span><h4>${title}</h4><span class="explain-refs">${refs.join('')}</span></div>
+        <div class="explain-step-body">${body}</div></li>`;
+}
+
+// One DNS question and its answer, as a dig command anyone can run.
+function explainQuestion(entry) {
+    const answer = entry.error ? `<span class="status-fail">Lookup failed</span> <span class="explain-muted">${escapeHtml(entry.error)}</span>`
+        : !entry.records?.length ? '<span class="explain-muted">No records</span>'
+        : entry.records.map(record => `<code>${breakable(entry.type === 'TXT' ? EmailDns.txt(record) : record.replace(/\.$/, ''))}</code>`).join(' ');
+    return `<li class="explain-op"><span class="spf-dns-cmd" title="Click to copy">dig +short ${entry.type} ${escapeHtml(entry.name)}</span>
+        <span class="explain-arrow" aria-hidden="true">→</span><span class="explain-answer">${answer}</span></li>`;
+}
+
+function explainQuestions(entries) {
+    return entries.length ? `<ul class="explain-ops">${entries.map(explainQuestion).join('')}</ul>` : '';
+}
+
+// --- Term hints: a short definition on hover or focus, read out by screen readers right after the term ---
+const glossary = {
+    'envelope sender': 'The bounce address given in the SMTP conversation (MAIL FROM), not the From line you see. SPF checks its domain.',
+    'alignment': 'Whether a domain that passed DKIM or SPF matches the From domain, exactly or by organization. DMARC only counts checks that match.',
+    'organizational domain': 'The domain an organization registered, such as example.co.uk for mail.example.co.uk. Relaxed matching compares these.',
+    'selector': 'The name of one of a domain\'s DKIM keys. A domain can publish several, each at selector._domainkey.domain.',
+    'canonicalization': 'How strictly a signature treats whitespace and line breaks: simple keeps them as written, relaxed tolerates harmless changes.',
+    'helo': 'The name the sending server gave for itself when it connected (HELO or EHLO in SMTP). The sender chooses it freely.',
+    'qualifier': 'The sign before an SPF rule: + pass (the default), - fail, ~ softfail, ? neutral. It sets the result when the rule matches.',
+    'void lookup': 'A DNS lookup for an SPF rule that comes back empty. More than two make the policy fail with a PermError.',
+    'arc set': 'The three ARC headers one server adds: the results it recorded, a signature of the message, and a seal over all sets so far.',
+    'tree walk': 'DMARCbis\'s way to find a policy and an organization: ask for DMARC records at each level of the name, from the full name up.',
+    'nxdomain': 'A DNS answer meaning the name doesn\'t exist at all, as opposed to existing without the record asked for.',
+    'rdap': 'Registration Data Access Protocol: the JSON-based successor to WHOIS, run by domain and IP address registries.',
+    'received header': 'A trace line each mail server adds above the others when it accepts a message: who handed it over, when, and how.',
+    'mx record': 'A DNS record naming the servers that accept mail for a domain. Without one, mail goes to the domain\'s own address.',
+    'public suffix': 'A name under which anyone can register, such as com, co.uk or github.io. The registrable domain is one label below it.'
+};
+
+function term(key, text = key) {
+    const hint = glossary[key.toLowerCase()];
+    if (!hint) return escapeHtml(text);
+    return `<span class="term" tabindex="0" data-hint="${escapeHtml(hint)}">${escapeHtml(text)}<span class="visually-hidden"> (${escapeHtml(hint)})</span></span>`;
+}
+
+// Keep a hint on screen: shift it left when the term sits near the right edge.
+function placeTermHint(event) {
+    const element = event.target.closest?.('.term');
+    if (!element) return;
+    const width = Math.min(300, innerWidth - 32);
+    const overflow = element.getBoundingClientRect().left + width - (innerWidth - 16);
+    element.style.setProperty('--hint-shift', overflow > 0 ? `${-overflow}px` : '0px');
+}
+document.addEventListener('mouseover', placeTermHint);
+document.addEventListener('focusin', placeTermHint);
+
+// --- Copy explanation: a walkthrough as Markdown, to paste into a ticket next to the report ---
+const explainToolbar = `<div class="explain-toolbar"><button type="button" class="btn btn-secondary explain-copy" title="Copy this explanation as Markdown">Copy explanation</button></div>`;
+
+function explainToMarkdown(root) {
+    const lines = [];
+    const tight = text => text.replace(/\s+/g, ' ').trim();
+    const inline = node => [...node.childNodes].map(child => {
+        if (child.nodeType === Node.TEXT_NODE) return child.textContent;
+        if (child.nodeType !== Node.ELEMENT_NODE || child.classList.contains('visually-hidden') || child.classList.contains('explain-arrow')) return '';
+        if (child.tagName === 'CODE') return '`' + child.textContent.trim() + '`';
+        // Links within the page would turn into this computer's file path, so they stay plain text.
+        if (child.tagName === 'A') return /^https?:/.test(child.getAttribute('href') || '') ? `[${child.textContent.trim()}](${child.href})` : ` (see ${child.textContent.trim()})`;
+        if (['B', 'STRONG'].includes(child.tagName)) return `**${inline(child).trim()}**`;
+        if (child.classList.contains('spf-dns-cmd')) return '`' + child.textContent.trim() + '` →';
+        if (/^status-/.test(child.className) || child.classList.contains('summary-pill')) return ` [${child.textContent.trim()}] `;
+        return inline(child);
+    }).join('');
+    const walk = (node, indent = '') => {
+        for (const child of node.children) {
+            if (child.classList.contains('explain-toolbar') || child.classList.contains('visually-hidden')) continue;
+            const tag = child.tagName;
+            if (child.classList.contains('explain-steps')) {
+                walk(child, indent);
+            } else if (child.classList.contains('explain-step')) {
+                const number = child.querySelector('.explain-step-number')?.textContent.trim();
+                const title = child.querySelector('.explain-step-head h4')?.textContent.trim();
+                const refs = [...child.querySelectorAll(':scope > .explain-step-head .rfc-link')].map(link => `[${link.textContent.trim()}](${link.href})`);
+                lines.push('', `## ${number}. ${title}`, ...(refs.length ? [`*${refs.join(', ')}*`] : []), '');
+                walk(child.querySelector('.explain-step-body'), indent);
+            } else if (tag === 'H4') {
+                lines.push('', `### ${child.textContent.trim()}`, '');
+            } else if (tag === 'P' || child.classList.contains('explain-rule-head') || child.classList.contains('explain-policy-head')) {
+                const text = tight(inline(child));
+                if (text) lines.push(indent + text, ...(indent ? [] : ['']));
+            } else if (tag === 'PRE') {
+                lines.push(indent + '```', ...child.textContent.split('\n').map(line => indent + line), indent + '```', '');
+            } else if (tag === 'DL') {
+                for (const item of child.querySelectorAll(':scope > div')) {
+                    const notes = [...item.querySelectorAll('dd')].map(dd => tight(inline(dd))).filter(Boolean);
+                    lines.push(`${indent}- **${item.querySelector('dt')?.textContent.trim()}**: ${notes.join(' — ')}`);
+                }
+                lines.push('');
+            } else if (tag === 'TABLE') {
+                for (const row of child.querySelectorAll('tr')) lines.push(`${indent}- ${[...row.children].map(cell => tight(inline(cell))).filter(Boolean).join(' — ')}`);
+                lines.push('');
+            } else if (tag === 'UL' || tag === 'OL') {
+                [...child.children].forEach((item, index) => {
+                    const marker = tag === 'OL' ? `${index + 1}.` : '-';
+                    if (item.querySelector(':scope > p, :scope > div, :scope > ul, :scope > ol')) {
+                        lines.push(`${indent}${marker} ${tight(inline(item.querySelector('.explain-rule-head') || item.firstElementChild))}`);
+                        const rest = document.createElement('div');
+                        for (const part of item.children) if (!part.classList.contains('explain-rule-head')) rest.appendChild(part.cloneNode(true));
+                        walk(rest, indent + '   ');
+                    } else {
+                        lines.push(`${indent}${marker} ${tight(inline(item))}`);
+                    }
+                });
+                lines.push('');
+            } else {
+                walk(child, indent);
+            }
+        }
+    };
+    // The heading's own text, without the status badge some headings carry.
+    const section = root.closest('.section')?.querySelector('.section-heading > span')?.firstChild?.textContent.trim();
+    lines.push(`# How it was decided${section ? ': ' + section : ''}`, '');
+    walk(root);
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+resultsDiv.addEventListener('click', async event => {
+    const button = event.target.closest('.explain-copy');
+    if (!button) return;
+    const copied = await writeClipboard(explainToMarkdown(button.closest('.explain')));
+    showToast(copied, copied ? 'Explanation copied' : 'Couldn\'t copy the explanation');
+});
+
+const spfVerdictNames = { '+': 'Pass', '-': 'Fail', '~': 'SoftFail', '?': 'Neutral' };
+const spfRuleSections = { all: '5.1', include: '5.2', a: '5.3', mx: '5.4', ptr: '5.5', ip4: '5.6', ip6: '5.6', exists: '5.7', redirect: '6.1' };
+const spfResultMeanings = {
+    pass: ['2.6.3', 'The domain says this IP may send mail for it.'],
+    fail: ['2.6.4', 'The domain says this IP may not send mail for it.'],
+    softfail: ['2.6.5', 'The domain says this IP probably may not send for it, but asks receivers not to reject the message for that alone.'],
+    neutral: ['2.6.2', 'The domain makes no statement about this IP.'],
+    none: ['2.6.1', 'There is no SPF policy to check against, so SPF says nothing about this message.'],
+    temperror: ['2.6.6', 'A DNS lookup failed for now; checking again later may give a result.'],
+    permerror: ['2.6.7', 'The domain\'s policy is broken, so it can\'t be evaluated.']
+};
+
+// What one rule means, what it looked at, and why it matched or not.
+function explainRule(token, node, spfDto, depth) {
+    const term = spfTerm(token);
+    const recorded = node.terms.find(entry => entry.token === token);
+    const outcome = recorded?.outcome || 'not-reached';
+    const detail = recorded?.detail || {};
+    const ip = `<code>${escapeHtml(normalizeIp(spfDto.senderIp) || '')}</code>`;
+    const target = `<code>${breakable(detail.target || term.target || node.domain)}</code>`;
+    const nodeDomain = String(node.domain || '').toLowerCase().replace(/\.$/, '');
+    const questions = spfDto.operations.filter(entry => entry.depth === depth && entry.domain === nodeDomain && entry.token === token);
+    const hit = outcome === 'matched';
+    let meaning;
+    switch (term.type) {
+        case 'ip4': case 'ip6':
+            meaning = `Matches senders in <code>${escapeHtml(term.target)}</code>. ${ip} ${hit ? 'is' : 'isn\'t'} in that range.`;
+            break;
+        case 'a':
+            meaning = `Matches the IP addresses of ${target}${detail.prefix && !/^(32|128)$/.test(String(detail.prefix)) ? `, widened to /${detail.prefix}` : ''}. ${ip} ${hit ? 'is' : 'isn\'t'} one of them.`;
+            break;
+        case 'mx':
+            meaning = `Matches the addresses of ${target}'s mail servers (its MX records${detail.hosts ? `: ${detail.hosts.map(host => `<code>${breakable(host)}</code>`).join(', ') || 'none'}` : ''}). ${ip} ${hit ? 'is' : 'isn\'t'} one of them.`;
+            break;
+        case 'include':
+            meaning = `Runs the policy of ${target} and matches only if that gives Pass.${detail.result ? ` It gave <b>${escapeHtml(detail.result)}</b>.` : ''}`;
+            break;
+        case 'exists':
+            meaning = `Matches if ${target} has an address (A) record. ${hit ? 'It has one.' : 'It has none.'}`;
+            break;
+        case 'ptr':
+            meaning = `Matches if the sending IP's reverse DNS name, confirmed by a forward lookup, is in ${target}. Senders shouldn't use it any more: it's slow and unreliable.`;
+            break;
+        case 'all':
+            meaning = 'Matches every sender, so it decides the result for anything no earlier rule matched.';
+            break;
+        case 'redirect':
+            meaning = `No rule matched, so the result comes from ${target}'s policy instead: <b>${escapeHtml(detail.result || '')}</b>.`;
+            break;
+        default:
+            meaning = 'An unknown rule.';
+    }
+    if (term.target && detail.target && term.target.includes('%')) {
+        meaning += ` The name ${target} comes from filling in the macros in <code>${escapeHtml(term.target)}</code> (${rfcLink(7208, '7')}).`;
+    }
+    const status = outcome === 'matched' ? (term.type === 'redirect' ? pill('status-neutral', 'Used') : pill('status-pass', 'Matched'))
+        : outcome === 'no-match' ? pill('status-neutral', 'No match')
+        : outcome === 'error' ? pill('status-fail', 'Error') : pill('status-neutral', 'Not checked');
+    const effect = outcome === 'matched' && term.type !== 'redirect'
+        ? `<p class="explain-effect">It matched, and its qualifier <code>${escapeHtml(term.qualifier)}</code> makes the result <b>${spfVerdictNames[term.qualifier]}</b>.</p>`
+        : outcome === 'error' ? `<p class="explain-effect">${escapeHtml(node.reason || 'It failed.')}, which stops the check.</p>`
+        : outcome === 'not-reached' ? '<p class="explain-effect explain-muted">Not checked: an earlier rule already decided the result.</p>' : '';
+    const child = ['include', 'redirect'].includes(term.type) && detail.target
+        ? node.children.find(entry => entry.type === term.type && entry.val === detail.target) : null;
+    return `<li class="explain-rule is-${outcome}">
+        <div class="explain-rule-head"><code class="explain-token">${breakable(token)}</code>${status}<span class="explain-refs">${rfcLink(7208, spfRuleSections[term.type] || '5')}</span></div>
+        <p>${meaning}</p>${explainQuestions(questions)}${effect}
+        ${child?.trace ? `<div class="explain-nested">${explainPolicy(child.trace, spfDto, depth + 1)}</div>` : ''}</li>`;
+}
+
+function explainPolicy(node, spfDto, depth = 0) {
+    const nodeDomain = String(node.domain || '').toLowerCase().replace(/\.$/, '');
+    const policyQuestions = spfDto.operations.filter(entry => entry.depth === depth && entry.domain === nodeDomain && entry.token === null);
+    if (!node.record) {
+        return `<p class="explain-policy-head">Policy of <code>${breakable(nodeDomain)}</code></p>${explainQuestions(policyQuestions)}
+            <p>${escapeHtml(node.reason || 'No SPF record found')}: <b>${escapeHtml(node.result)}</b>.</p>`;
+    }
+    // Modifiers other than redirect (exp=, unknown ones) don't affect the result; redirect is used last wherever it's written.
+    const tokens = node.record.split(/ +/).slice(1)
+        .filter(token => token && (!/^[a-z][a-z0-9_.-]*=/i.test(token) || /^redirect=/i.test(token)))
+        .sort((a, b) => /^redirect=/i.test(a) - /^redirect=/i.test(b));
+    const decided = node.result === 'Neutral' && node.reason === 'No mechanism matched'
+        ? `No rule matched and there's no <code>redirect</code>, so the result is <b>Neutral</b> (${rfcLink(7208, '4.7')}).`
+        : `Result of this policy: <b>${escapeHtml(node.result)}</b>.`;
+    // A nested policy shows its DNS answer, which is the record itself unless the domain has other TXT records too.
+    const showRecord = !depth || (policyQuestions[0]?.records?.length || 0) > 1;
+    return `<p class="explain-policy-head">Policy of <code>${breakable(nodeDomain)}</code></p>
+        ${depth ? explainQuestions(policyQuestions) : ''}
+        ${showRecord ? `<code class="spf-trace-record explain-record">${breakable(node.record)}</code>` : ''}
+        <ol class="explain-rules">${tokens.map(token => explainRule(token, node, spfDto, depth)).join('')}</ol>
+        <p class="explain-decided">${decided}</p>`;
+}
+
+function spfWalkthrough(spfDto) {
+    const email = currentEmail;
+    const reporter = spfDto.reportedBy ? `<code>${escapeHtml(spfDto.reportedBy)}</code>` : 'the receiving server';
+    const sources = {
+        'Return-Path': 'the Return-Path header, which the receiving server writes from the SMTP <code>MAIL FROM</code> command',
+        'Received-SPF': `the Received-SPF header ${reporter} wrote at delivery`,
+        'Authentication-Results': `the Authentication-Results header ${reporter} wrote at delivery`,
+        Received: 'the Received header where the receiving server took the message',
+        HELO: 'the HELO name, because the envelope sender was empty (as for bounces)',
+        SMTP: 'the SMTP session details you entered'
+    };
+    const ip = normalizeIp(spfDto.senderIp);
+    const steps = [];
+
+    steps.push(explainStep(1, 'The inputs', [rfcLink(7208, '4.1'), rfcLink(5321, '4.4'), rfcLink(7208, '9.1')], `
+        <p>SPF answers one question: may this IP send mail for the domain in the envelope sender? The ${term('envelope sender')} is the
+        address in the SMTP conversation, not the From line you see. That conversation isn't saved in the message, so these
+        inputs are read from what the receiving server recorded.</p>
+        <dl class="facts explain-facts">
+            <div><dt>Envelope sender</dt><dd class="mono">${spfDto.mailbox ? breakable(spfDto.mailbox) : 'Not found'}</dd>
+                ${spfDto.mailboxSource ? `<dd class="fact-note">From ${sources[spfDto.mailboxSource] || escapeHtml(spfDto.mailboxSource)}</dd>` : ''}</div>
+            <div><dt>Sending IP</dt><dd class="mono">${ip ? escapeHtml(ip) : 'Not found'}</dd>
+                ${spfDto.ipSource ? `<dd class="fact-note">From ${sources[spfDto.ipSource] || escapeHtml(spfDto.ipSource)}</dd>` : ''}</div>
+            <div><dt>${term('helo', 'HELO name')}</dt><dd class="mono">${spfDto.helo ? breakable(spfDto.helo) : 'Not recorded'}</dd>
+                <dd class="fact-note">Only used if the policy refers to it</dd></div>
+        </dl>
+        ${spfDto.ignoredReports ? `<p class="explain-muted">${spfDto.ignoredReports === 1 ? 'One SPF record' : `${spfDto.ignoredReports} SPF records`} in the headers couldn't be tied to a server that received the message, so ${spfDto.ignoredReports === 1 ? 'it wasn\'t' : 'they weren\'t'} used (see Headers).</p>` : ''}
+        ${!spfDto.trace ? `<p class="explain-stop">${escapeHtml(spfDto.error || 'The inputs are incomplete.')} The check stops here.</p>` : ''}`));
+
+    const policyQuestions = spfDto.operations.filter(entry => entry.depth === 0 && entry.token === null);
+    const top = spfDto.trace;
+    const multiple = /multiple spf records/i.test(top?.reason || spfDto.error || '');
+    steps.push(explainStep(2, 'Find the policy', [rfcLink(7208, '4.4'), rfcLink(7208, '4.5')], `
+        <p>The receiver asks DNS for the TXT records of <code>${breakable(spfDto.domain || '')}</code> and keeps the one that
+        starts with <code>v=spf1</code>.</p>
+        ${explainQuestions(policyQuestions)}
+        <p>${spfDto.record ? ((policyQuestions[0]?.records?.length || 0) > 1
+                ? `Of those, this is the domain's policy: <code class="spf-trace-record">${breakable(spfDto.record)}</code>` : 'That\'s the domain\'s policy.')
+            : multiple ? 'There\'s more than one SPF record, which is an error: the result is <b>PermError</b>.'
+            : `There's no record starting with <code>v=spf1</code>, so the result is <b>None</b> and the check stops here.`}</p>`));
+
+    if (top?.record) {
+        steps.push(explainStep(3, 'Check each rule in order', [rfcLink(7208, '4.6'), rfcLink(7208, '4.6.2'), rfcLink(7208, '5')], `
+            <p>Rules are tried left to right. The first one that matches decides the result through its ${term('qualifier')}:
+            <code>+</code> Pass (the default), <code>-</code> Fail, <code>~</code> SoftFail, <code>?</code> Neutral.
+            Rules after it aren't checked. An <code>include</code> runs another domain's policy as a sub-check.</p>
+            ${explainPolicy(top, spfDto)}`));
+        steps.push(explainStep(4, 'Stay within the limits', [rfcLink(7208, '4.6.4')], `
+            <p>To keep checks cheap, SPF allows at most 10 rules that need DNS (<code>include</code>, <code>a</code>,
+            <code>mx</code>, <code>ptr</code>, <code>exists</code> and <code>redirect</code>), and at most 2 of their lookups
+            may ${term('void lookup', 'come back empty')}. Going over either is a <b>PermError</b>.</p>
+            <p>This check used <b>${spfDto.lookups ?? 0} of 10</b>${spfDto.voidLookups ? `, and ${spfDto.voidLookups} came back empty` : ''}.
+            In all it asked DNS ${spfDto.operations.length} ${spfDto.operations.length === 1 ? 'question' : 'questions'}, listed above.</p>`));
+    }
+
+    const result = spfDto.result;
+    const [section, meaning] = spfResultMeanings[result] || [null, escapeHtml(spfDto.error || 'SPF couldn\'t be checked.')];
+    const reported = spfDto.headerResult;
+    const comparison = !reported ? `<p>No server that received the message recorded an SPF result, so there's nothing to compare with.</p>`
+        : reported === result ? `<p>At delivery ${reporter} recorded <b>${escapeHtml(verdictLabel(reported))}</b> too.</p>`
+        : `<p>At delivery ${reporter} recorded <b>${escapeHtml(verdictLabel(reported))}</b>. This check ran now, against today's DNS,
+            so the difference means the domain's DNS changed since. Senders do change their records, and domains used for a
+            single campaign often disappear soon after it.</p>`;
+    steps.push(explainStep(steps.length + 1, 'The result', section ? [rfcLink(7208, section)] : [], `
+        <p><span class="${verdictClass(result)}">${escapeHtml(verdictLabel(result || 'unavailable'))}</span> ${meaning}</p>${comparison}`));
+
+    const fromMailboxes = email ? EmailAddress.parseMailboxes(firstHeader(email, 'From') || '') : [];
+    const fromDomain = fromMailboxes.length === 1 ? fromMailboxes[0].domain.toLowerCase() : null;
+    const envelope = (spfDto.domain || '').toLowerCase();
+    const sameOrg = envelope && fromDomain && registrableDomain(envelope) && registrableDomain(envelope) === registrableDomain(fromDomain);
+    const dmarcBody = !fromDomain || !envelope ? '<p>The From domain or the envelope domain is unknown, so the two can\'t be compared.</p>'
+        : envelope === fromDomain || sameOrg
+            ? `<p>The envelope domain ${envelope === fromDomain ? 'is the From domain' : `<code>${breakable(envelope)}</code> belongs to the same organization as the From domain <code>${breakable(fromDomain)}</code>`},
+                so a Pass here can count toward DMARC (unless the From domain's DMARC policy asks for an exact match with <code>aspf=s</code>).
+                Because the SMTP session is only known from the headers, this page doesn't count it on its own; the DMARC section explains.</p>`
+            : `<p>The envelope domain <code>${breakable(envelope)}</code> isn't the From domain <code>${breakable(fromDomain)}</code> or part of
+                the same organization. So whatever SPF says, it can't count toward DMARC for the address you see in From; only a
+                DKIM signature from that domain could.</p>`;
+    steps.push(explainStep(steps.length + 1, 'What it means for the From address', [rfcLink(7489, '3.1'), rfcLink(7489, '3.1.2')], dmarcBody));
+
+    const commands = [...spfDto.operations.map(entry => `dig +short ${entry.type} ${entry.name}`), ...(ip ? [`dig +short -x ${ip}`] : [])];
+    return `
+        <div class="explain">${explainToolbar}
+            <p class="explain-intro">How this page reached the SPF result, step by step, with the DNS questions it asked and
+            the parts of the standard behind each step.</p>
+            <ol class="explain-steps">${steps.join('')}</ol>
+            ${commands.length ? `<h4>Repeat it yourself</h4>
+            <p class="explain-muted">Every DNS question above, plus the sending IP's reverse DNS name. Click to copy.</p>
+            <pre class="tech-value code explain-commands">${escapeHtml([...new Set(commands)].join('\n'))}</pre>` : ''}
+            <h4>Standards</h4>
+            <ul class="explain-standards">
+                <li>${rfcLink(7208)} Sender Policy Framework (SPF)</li>
+                <li>${rfcLink(7489)} DMARC, which decides whether SPF counts for the From address</li>
+                <li>${rfcLink(8601)} Authentication-Results, where receivers record their results</li>
+                <li>${rfcLink(5321)} SMTP, where the envelope sender and HELO come from</li>
+            </ul>
+        </div>`;
+}
+
+// --- Result / How it was decided: two views of one check, in each panel. Every panel opens on Result for each message.
+// A panel switched to the walkthrough stays there while that message's checks re-render it, keyed by the panel's id. ---
+const explainViews = new Map();
+
+// Earlier versions remembered the walkthrough across messages; drop those stored choices.
+try {
+    localStorage.removeItem('emailParserExplainView');
+    localStorage.removeItem('emailParserSpfView');
+    if (localStorage.getItem('emailParserRelayView') === 'explain') localStorage.removeItem('emailParserRelayView');
+} catch {
+    // Nothing to tidy without storage.
+}
+
+function explainKey(host) {
+    return host?.parentElement?.id || null;
+}
+
+function explainHost(label, resultHtml, explainHtml, resultClass = '') {
+    return `<div class="explain-host">
+        <div class="relay-tabs explain-tabs" role="group" aria-label="${escapeHtml(label)}">
+            <button type="button" class="relay-tab" data-explain-view="result" aria-pressed="true">Result</button>
+            <button type="button" class="relay-tab" data-explain-view="explain" aria-pressed="false">How it was decided</button>
+        </div>
+        <div class="explain-view" data-view="explain" hidden>${explainHtml}</div>
+        <div class="explain-view${resultClass ? ' ' + resultClass : ''}" data-view="result">${resultHtml}</div>
+    </div>`;
+}
+
+function selectExplainView(host, view = explainViews.get(explainKey(host)) || 'result') {
+    if (!host) return;
+    for (const button of host.querySelectorAll(':scope > .explain-tabs [data-explain-view]')) button.setAttribute('aria-pressed', String(button.dataset.explainView === view));
+    for (const panel of host.querySelectorAll(':scope > .explain-view')) panel.hidden = panel.dataset.view !== view;
+}
+
+resultsDiv.addEventListener('click', event => {
+    const button = event.target.closest('[data-explain-view]');
+    if (!button) return;
+    const host = button.closest('.explain-host');
+    explainViews.set(explainKey(host), button.dataset.explainView);
+    selectExplainView(host, button.dataset.explainView);
+});
+
+function docLink(href, label) {
+    return `<a class="rfc-link" href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+}
+
+const dmarcbisLink = () => docLink('https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/', 'DMARCbis');
+
+function ordinal(n) {
+    return n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+}
+
+// How a domain relates to the From domain: the same, the same organization, or another.
+function fromRelationKind(domain) {
+    const from = currentEmail ? EmailAddress.parseMailboxes(firstHeader(currentEmail, 'From') || '') : [];
+    const fromDomain = from.length === 1 ? from[0].domain.toLowerCase() : null;
+    const value = String(domain || '').toLowerCase();
+    if (!fromDomain || !value) return { kind: 'unknown', fromDomain };
+    if (value === fromDomain) return { kind: 'exact', fromDomain };
+    const org = registrableDomain(value);
+    return { kind: org && org === registrableDomain(fromDomain) ? 'relaxed' : 'none', fromDomain };
+}
+
+// --- DKIM, step by step (RFC 6376) ---
+const dkimTagMeanings = {
+    v: 'Version, always 1', a: 'Signing algorithm', c: 'How strictly headers/body must match (simple or relaxed)',
+    d: 'Signing domain: who vouches for the message', s: 'Selector: which of the domain\'s keys signed it', h: 'Headers the signature covers',
+    bh: 'Hash of the body', b: 'The signature itself', t: 'When it was signed', x: 'When it expires', l: 'How many bytes of the body are covered',
+    i: 'The user or agent the domain signed for', q: 'How to fetch the key', z: 'Copies of the original headers, for diagnosis'
+};
+const dkimKeyMeanings = { v: 'Version', k: 'Key type', p: 'The public key', t: 'Flags: y means testing, s means no subdomains in i=',
+    h: 'Hash algorithms the key may be used with', s: 'Services the key is for', n: 'Notes' };
+
+function shortValue(value, length = 40) {
+    const text = String(value).replace(/\s+/g, '');
+    return text.length > length ? text.slice(0, length) + '…' : text;
+}
+
+function tagTable(tags, meanings, long = []) {
+    return `<table class="explain-tags"><tbody>${Object.entries(tags).map(([tag, value]) => `
+        <tr><th scope="row"><code>${escapeHtml(tag)}=</code></th>
+            <td class="mono">${breakable(long.includes(tag) ? shortValue(value) : String(value).replace(/\s+/g, ' '))}</td>
+            <td>${escapeHtml(meanings[tag] || 'Not a standard tag')}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// The record a server that received the message wrote for this signature, matched by the start of b= (header.b)
+// or by its domain and selector.
+function deliveredDkim(dkim) {
+    if (!currentEmail) return null;
+    const parser = new ServerValidationParser();
+    const signature = String(dkim.tags.b || '').replace(/\s+/g, '');
+    for (const record of DeliveryRecords.assess(currentEmail).trusted('authentication-results')) {
+        const header = parser.parseOne(record.value);
+        for (const entry of header.results.filter(item => item.method === 'dkim')) {
+            const b = entry.props['header.b'];
+            const d = (entry.props['header.d'] || (entry.props['header.i'] || '').replace(/^.*@/, '')).toLowerCase();
+            const sameKey = d === String(dkim.tags.d || '').toLowerCase() && (!entry.props['header.s'] || entry.props['header.s'] === dkim.tags.s);
+            if (b ? signature.startsWith(b) : sameKey) return { result: entry.result, server: header.service };
+        }
+    }
+    return null;
+}
+
+// Which copy of each listed header the verifier signs: the bottom-most one not used yet, or none (signed as absent).
+function dkimHeaderPicks(dkim) {
+    const fields = headerFieldList(currentEmail).filter(field => !(field.key === 'dkim-signature' && field.instance === dkim.signatureIndex));
+    const used = new Set();
+    return dkim.signedHeaders.map(name => {
+        const key = name.toLowerCase();
+        const copies = fields.filter(field => field.key === key);
+        const pick = [...copies].reverse().find(field => !used.has(field.index));
+        if (pick) used.add(pick.index);
+        return { name, copies: copies.length, position: pick ? copies.indexOf(pick) + 1 : 0 };
+    });
+}
+
+function dkimWalkthrough(dkim, result) {
+    const tags = dkim.tags;
+    const [headerCanon, bodyCanon = 'simple'] = String(tags.c || 'simple').toLowerCase().split('/');
+    const domain = `<code>${breakable(tags.d || 'unknown')}</code>`;
+    const keyName = `${tags.s || ''}._domainkey.${tags.d || ''}`;
+    const algorithm = String(tags.a || '').toLowerCase();
+    // Rejected before any lookup: a missing tag, an unsupported algorithm, a broken value.
+    const invalid = !result.details && !result.bodyHash && Boolean(result.error);
+    const headers = dkimHeadersVerified(result);
+    const body = result.bodyHash || {};
+    const steps = [];
+
+    const algorithmNote = algorithm === 'rsa-sha256' ? 'RSA with SHA-256, the usual choice.'
+        : algorithm === 'ed25519-sha256' ? `Ed25519 with SHA-256 (${rfcLink(8463)}).`
+        : algorithm === 'rsa-sha1' ? `RSA with SHA-1. SHA-1 is broken, so signatures made with it are no longer accepted (${rfcLink(8301, '3.1')}), whatever else is right.`
+        : 'An algorithm DKIM doesn\'t define.';
+    steps.push(explainStep(1, 'Read the signature', [rfcLink(6376, '3.5'), rfcLink(8301, '3.1')], `
+        <p>A DKIM signature is a header a domain adds to vouch for a message. It names the headers it covers, carries a hash
+        of the body, and is signed with the domain's private key. Anyone can check it with the public key the domain
+        publishes in DNS. This one was added by ${domain}.</p>
+        ${tagTable(tags, dkimTagMeanings, ['b', 'bh', 'z'])}
+        <p>Algorithm: ${algorithmNote}</p>
+        ${invalid ? `<p class="explain-stop">The signature itself can't be used: ${escapeHtml(result.error)}. Nothing else was checked.</p>` : ''}`));
+
+    if (!invalid) {
+        const question = dkim.dnsQuestion;
+        const key = result.key;
+        const keyNote = result.keyError ? `The key can't be used: ${escapeHtml(result.keyError)}.`
+            : key ? `${key.type === 'rsa' ? `An RSA key of ${key.bits} bits` : 'An Ed25519 key'}.${key.type === 'rsa' && key.bits < 2048
+                ? ` Keys under 2048 bits are considered weak (${rfcLink(8301, '3.2')}).` : ''}`
+            : dkim.publicKey ? 'The key was found.' : '';
+        steps.push(explainStep(2, 'Fetch the public key', [rfcLink(6376, '3.6.2.1'), rfcLink(6376, '3.6.1'), rfcLink(8301, '3.2')], `
+            <p>The key lives in DNS under the ${term('selector')}: <code>${breakable(keyName)}</code>.</p>
+            ${question?.name ? explainQuestions([question]) : ''}
+            ${dkim.dnsTags ? tagTable(dkim.dnsTags, dkimKeyMeanings, ['p']) : ''}
+            ${/(^|:)\s*y\s*(:|$)/.test(dkim.dnsTags?.t || '') ? '<p>The key is marked as testing (<code>t=y</code>): the domain asks receivers not to treat a failure differently from an unsigned message.</p>' : ''}
+            <p>${keyNote || (network.offline ? 'Offline mode is on, so the key wasn\'t looked up.' : 'No key was found.')}</p>`));
+
+        const covered = body.signedBytes !== undefined && body.signedBytes < body.totalBytes
+            ? `Only the first ${body.signedBytes} of ${body.totalBytes} bytes are covered (<code>l=${escapeHtml(tags.l)}</code>), so anything added after them isn't protected (${rfcLink(6376, '8.2')}).` : '';
+        steps.push(explainStep(3, 'Hash the body', [rfcLink(6376, bodyCanon === 'relaxed' ? '3.4.4' : '3.4.3'), rfcLink(6376, '3.7')], `
+            <p>The body is ${term('canonicalization', 'canonicalized')} with <code>${escapeHtml(bodyCanon)}</code>
+            (${bodyCanon === 'relaxed' ? 'runs of spaces become one, spaces at line ends and empty lines at the end are ignored' : 'only empty lines at the end are ignored'}),
+            hashed with SHA-256, and compared with <code>bh=</code>.</p>
+            ${result.bodyMissing ? '<p class="explain-stop">The message was given without its body, so the body can\'t be checked.</p>' : `
+            <dl class="facts explain-facts">
+                <div><dt>Expected (bh=)</dt><dd class="mono">${breakable(body.expected || tags.bh || '')}</dd></div>
+                <div><dt>Calculated</dt><dd class="mono">${breakable(body.calculated || 'Not calculated')}</dd></div>
+            </dl>
+            <p>${body.valid ? 'They match: the body is exactly as it was signed.' : body.calculated
+                ? 'They differ: the body was changed after it was signed, by a forwarder, a mailing list, or a mail client that rebuilt the message when saving it.'
+                : escapeHtml(body.error || 'The body hash couldn\'t be calculated.')} ${covered}</p>`}`));
+
+        const picks = currentEmail ? dkimHeaderPicks(dkim) : [];
+        steps.push(explainStep(4, 'Rebuild the signed headers', [rfcLink(6376, '5.4.2'), rfcLink(6376, headerCanon === 'relaxed' ? '3.4.2' : '3.4.1'), rfcLink(6376, '3.7')], `
+            <p><code>h=</code> lists ${picks.length} ${picks.length === 1 ? 'header' : 'headers'}. For each name the verifier takes the bottom-most
+            copy it hasn't used yet. A name with no copy left is signed as absent, which is how a signer stops a second copy being
+            added later. Last comes this DKIM-Signature header with <code>b=</code> emptied. Everything is canonicalized with
+            <code>${escapeHtml(headerCanon)}</code> (${headerCanon === 'relaxed' ? 'names lowercased, whitespace folded' : 'exactly as written'}).</p>
+            <ol class="explain-picks">${picks.map(pick => `<li><code>${escapeHtml(pick.name)}</code> <span class="explain-muted">${pick.position
+                ? (pick.copies > 1 ? `the ${ordinal(pick.position)} of ${pick.copies} copies, counting from the top` : 'present')
+                : pick.copies ? 'no copy left: signed as absent, so another copy can\'t be added' : 'not in the message: signed as absent'}</span></li>`).join('')}</ol>
+            ${result.details?.dataToVerify ? `<p class="explain-muted">The exact data that was signed:</p><pre class="tech-value code explain-signed-data">${escapeHtml(result.details.dataToVerify)}</pre>` : ''}`));
+
+        steps.push(explainStep(5, 'Check the signature', [rfcLink(6376, '6.1.3'), ...(algorithm.startsWith('ed25519') ? [rfcLink(8463)] : [])], `
+            <p>The signature in <code>b=</code> is checked against that data with the public key.</p>
+            <p>${headers === true ? `It verifies: the signed headers are exactly as ${domain} signed them${body.valid === false ? ', though the body changed' : ''}.`
+                : headers === false ? 'It doesn\'t verify: the signed headers changed after signing, or the domain has changed its key since.'
+                : `It couldn't be checked${result.keyError ? ' without a usable key' : result.error ? ': ' + escapeHtml(result.error) : ''}.`}</p>`));
+
+        const now = Date.now() / 1000;
+        steps.push(explainStep(6, 'Check the dates', [rfcLink(6376, '3.5')], `
+            <p>${tags.t ? `Signed on ${escapeHtml(formatUnixTime(tags.t))}.` : 'No signing time (<code>t=</code>).'}
+            ${tags.x ? (Number(tags.x) < now ? `It expired on ${escapeHtml(formatUnixTime(tags.x))}, and receivers ignore a signature past its expiry, even one that still verifies.`
+                : `It's valid until ${escapeHtml(formatUnixTime(tags.x))}.`) : 'No expiry (<code>x=</code>), so it never expires.'}</p>`));
+    }
+
+    const status = result.valid ? 'pass' : result.bodyMissing ? 'unavailable' : offlineStatus(result.status || 'fail');
+    const meaning = result.valid ? 'The signature verifies: the domain vouches for this message as it is.'
+        : result.bodyMissing ? 'Only the headers could be checked.'
+        : result.status === 'expired' ? 'The signature has expired, so it no longer counts.'
+        : result.headersVerified === true ? 'It fails, because the body changed after signing; the signed headers are genuine.'
+        : ['temperror', 'unavailable'].includes(result.status) ? 'It couldn\'t be checked this time.'
+        : 'It fails: the message can\'t be shown to come unchanged from this domain.';
+    const delivered = deliveredDkim(dkim);
+    steps.push(explainStep(steps.length + 1, 'The result', [rfcLink(8601, '2.7.1')], `
+        <p><span class="${verdictClass(status)}">${escapeHtml(verdictLabel(status))}</span> ${meaning}</p>
+        <p>${delivered ? `At delivery <code>${escapeHtml(delivered.server || 'the receiving server')}</code> recorded <b>${escapeHtml(verdictLabel(delivered.result))}</b> for this signature${delivered.result === status ? ' too' : ''}.`
+            : 'No server that received the message recorded a result for this signature.'}</p>`));
+
+    const relation = fromRelationKind(tags.d);
+    const relationText = relation.kind === 'exact' ? `${domain} is the From domain`
+        : relation.kind === 'relaxed' ? `${domain} belongs to the same organization as the From domain <code>${breakable(relation.fromDomain)}</code>`
+        : relation.kind === 'none' ? `${domain} isn't the From domain <code>${breakable(relation.fromDomain)}</code> or part of the same organization` : 'The From domain is unknown';
+    steps.push(explainStep(steps.length + 1, 'What it means for the From address', [rfcLink(7489, '3.1.1')], `
+        <p>${relationText}. ${relation.kind === 'none' ? 'So even a valid signature here says nothing about the address you see in From.'
+            : relation.kind === 'unknown' ? '' : `So when it verifies, it counts toward DMARC for that address${relation.kind === 'relaxed' ? ' (unless the policy asks for an exact match with <code>adkim=s</code>)' : ''}.`}</p>`));
+
+    return `<div class="explain">${explainToolbar}
+        <p class="explain-intro">How this page checked the signature from ${domain}, step by step.</p>
+        <ol class="explain-steps">${steps.join('')}</ol>
+        ${dkim.dnsQuestion?.name ? `<h4>Repeat it yourself</h4><pre class="tech-value code explain-commands">dig +short TXT ${escapeHtml(dkim.dnsQuestion.name)}</pre>` : ''}
+        <h4>Standards</h4>
+        <ul class="explain-standards">
+            <li>${rfcLink(6376)} DomainKeys Identified Mail (DKIM) signatures</li>
+            <li>${rfcLink(8301)} Which algorithms and key sizes DKIM accepts</li>
+            <li>${rfcLink(8463)} Ed25519 for DKIM</li>
+            <li>${rfcLink(7489)} DMARC, which decides whether a signature counts for the From address</li>
+        </ul>
+    </div>`;
+}
+
+// --- DMARC, step by step (RFC 7489) ---
+function dmarcCheckSentence(check, dto) {
+    const domain = check.domain ? `<code>${breakable(check.domain)}</code>` : 'an unknown domain';
+    const from = `<code>${breakable(dto.domain)}</code>`;
+    const match = { exact: `is the From domain`, relaxed: `is in the same organization as ${from}, which is enough under relaxed matching`,
+        strict: `is in the same organization as ${from}, but the policy asks for an exact match (${check.kind === 'DKIM' ? 'adkim' : 'aspf'}=s)`,
+        none: `isn't ${from} or part of its organization`, unknown: 'couldn\'t be compared with the From domain' }[check.match] || '';
+    const auth = check.auth;
+    const authText = check.kind === 'DKIM'
+        ? ({ pass: 'verifies', 'body-changed': 'doesn\'t verify, because the body changed after signing', expired: 'has expired',
+            temperror: 'couldn\'t be checked (DNS error)', unavailable: 'couldn\'t be checked' }[auth.state] || 'doesn\'t verify')
+        : ({ pass: 'passes', unconfirmed: 'passes, but this page knows the sending IP only from the headers, not from the SMTP session, so the pass isn\'t confirmed',
+            none: 'has no SPF record', unavailable: 'couldn\'t be checked' }[auth.state] || `gives ${escapeHtml(verdictLabel(auth.state))}`);
+    const subject = check.kind === 'DKIM' ? `The signature from ${domain}${check.selector ? ` (selector <code>${escapeHtml(check.selector)}</code>)` : ''}`
+        : `SPF for the envelope domain ${domain}`;
+    return `<li class="explain-rule is-${check.counts ? 'matched' : 'no-match'}">
+        <div class="explain-rule-head"><b>${check.kind}</b>${check.counts ? pill('status-pass', 'Counts') : pill('status-neutral', 'Doesn\'t count')}</div>
+        <p>${subject} ${authText}. ${check.domain ? domain : 'Its domain'} ${match}.</p></li>`;
+}
+
+function dmarcWalkthrough(dto) {
+    const email = currentEmail;
+    const steps = [];
+    const from = email ? firstHeader(email, 'From') : null;
+    const domain = dto.domain ? `<code>${breakable(dto.domain)}</code>` : null;
+    steps.push(explainStep(1, 'Find the author domain', [rfcLink(7489, '6.6.1'), rfcLink(5322, '3.6.2')], `
+        <p>DMARC protects the address you see: the domain in the From header. That's the one checked here.</p>
+        <dl class="facts explain-facts"><div><dt>From</dt><dd class="mono">${from ? breakable(decodeMimeWords(from)) : 'Missing'}</dd></div>
+            <div><dt>Author domain</dt><dd class="mono">${domain || 'None'}</dd></div></dl>
+        ${dto.domain ? '' : `<p class="explain-stop">${escapeHtml(dto.error || 'There\'s no single From domain.')} DMARC needs exactly one, so the check stops here.</p>`}`));
+    if (!dto.domain) return explainWrap('How this page decided DMARC, step by step.', steps, [], dmarcStandards());
+
+    const policyQuestions = (dto.operations || []).filter(entry => entry.purpose === 'policy');
+    const subdomain = dto.fetchedDomain && dto.fetchedDomain !== dto.domain;
+    const tags = dto.tags || {};
+    const applying = subdomain && tags.sp ? 'sp' : 'p';
+    steps.push(explainStep(2, 'Find the policy', [rfcLink(7489, '6.6.3'), rfcLink(7489, '6.3'), dmarcbisLink()], `
+        <p>A domain publishes its DMARC policy in DNS at <code>_dmarc.</code> plus the domain. The receiver asks for the From
+        domain's first; if there's none, it looks for the policy of the domain's organization.</p>
+        ${explainQuestions(policyQuestions)}
+        <p>${dto.record ? `The policy found: <code class="spf-trace-record">${breakable(dto.record)}</code>
+            ${subdomain ? ` ${domain} has none of its own, so its organization <code>${breakable(dto.fetchedDomain)}</code>'s applies.` : ''}`
+            : `${escapeHtml(dto.error || 'No DMARC policy was found')}, so DMARC doesn't apply: the result is <b>None</b>, and the check stops here.`}</p>
+        ${dto.record ? `<p>What matters for this message: ${tags[applying] ? `<code>${applying}=${escapeHtml(tags[applying])}</code> asks receivers to
+            <b>${escapeHtml((policyActions[String(tags[applying]).toLowerCase()] || tags[applying]).replace(/^./, letter => letter.toLowerCase()))}</b> when DMARC fails` : 'no valid policy is set'};
+            domains are matched ${(tags.adkim || 'r').toLowerCase() === 's' ? 'exactly' : 'by organization'} for DKIM and ${(tags.aspf || 'r').toLowerCase() === 's' ? 'exactly' : 'by organization'} for SPF.</p>` : ''}`));
+    if (!dto.record) return explainWrap('How this page decided DMARC, step by step.', steps, policyQuestions, dmarcStandards());
+
+    const dkimChecks = (dto.checks || []).filter(check => check.kind === 'DKIM');
+    steps.push(explainStep(3, 'Check the DKIM signatures', [rfcLink(7489, '3.1.1')], `
+        <p>A DKIM signature counts when it verifies and its domain (<code>d=</code>) matches the From domain: exactly, or by
+        ${term('organizational domain', 'organization')} when the policy allows relaxed matching (<code>adkim=r</code>, the default).</p>
+        ${dkimChecks.length ? `<ol class="explain-rules">${dkimChecks.map(check => dmarcCheckSentence(check, dto)).join('')}</ol>`
+            : '<p>The message has no DKIM signatures, so DKIM can\'t help.</p>'}`));
+
+    const spfCheck = (dto.checks || []).find(check => check.kind === 'SPF');
+    steps.push(explainStep(4, 'Check SPF', [rfcLink(7489, '3.1.2'), rfcLink(7208, '2.6')], `
+        <p>SPF counts when it passes and the envelope domain (the bounce address, not the From line) matches the From domain:
+        exactly, or by organization under relaxed matching (<code>aspf=r</code>, the default). The SMTP session isn't saved in
+        the message, so this page only knows the envelope and sending IP from what the receiving server recorded. A pass
+        found that way isn't counted, but a domain that can't match still rules SPF out.</p>
+        ${spfCheck ? `<ol class="explain-rules">${dmarcCheckSentence(spfCheck, dto)}</ol>` : '<p>SPF wasn\'t checked.</p>'}`));
+
+    const orgQuestions = (dto.operations || []).filter(entry => entry.purpose === 'organization');
+    if (orgQuestions.length) {
+        steps.push(explainStep(5, 'Compare organizations', [rfcLink(7489, '3.2'), dmarcbisLink()], `
+            <p>To tell whether two domains belong to the same organization, the page walks up each domain's labels asking for
+            DMARC records (the DMARCbis ${term('tree walk')}). The highest-level domain with a record, or the one a <code>psd=n</code>
+            record marks, is the organization.</p>${explainQuestions(orgQuestions)}`));
+    }
+
+    const winner = (dto.checks || []).find(check => check.counts);
+    const meaning = { pass: `At least one check counts: ${winner ? `${winner.kind} for <code>${breakable(winner.domain)}</code>` : 'see above'}.`,
+        fail: 'No check counts, so the message can\'t be shown to come from the From domain.',
+        unavailable: 'Nothing counts, but some checks couldn\'t be confirmed from this message alone, so it can\'t be called a failure either.',
+        temperror: 'A DNS lookup failed, so DMARC couldn\'t be decided.', none: 'DMARC doesn\'t apply.' }[dto.result] || '';
+    const action = tags[applying] ? (policyActions[String(tags[applying]).toLowerCase()] || tags[applying]) : null;
+    const pct = tags.pct && tags.pct !== '100' ? ` for ${escapeHtml(tags.pct)}% of failing mail` : '';
+    const handling = dto.result === 'pass' ? `Mail that passes is handled normally; <code>${applying}=${escapeHtml(tags[applying] || '')}</code> only matters for mail that fails.`
+        : action ? `For mail that fails, the policy asks receivers to: <b>${escapeHtml(action.toLowerCase())}</b>${pct}. Receivers may decide otherwise.` : '';
+    steps.push(explainStep(steps.length + 1, 'The result', [rfcLink(7489, '6.6.2'), rfcLink(7489, '6.6.4')], `
+        <p><span class="${verdictClass(offlineStatus(dto.result))}">${escapeHtml(verdictLabel(offlineStatus(dto.result)))}</span> ${meaning}</p>
+        ${handling ? `<p>${handling}</p>` : ''}
+        ${dto.result === 'fail' && signedButChanged(dto) ? `<p>Even so, ${escapeHtml(signedButChanged(dto).text)}, so the message most likely did come from ${domain}.</p>` : ''}
+        <p>${dto.reported ? `At delivery <code>${escapeHtml(dto.reported.authServId || 'the receiving server')}</code> recorded <b>${escapeHtml(verdictLabel(dto.reported.result))}</b>${dto.reported.result === dto.result ? ' too' : ''}.`
+            : 'No server that received the message recorded a DMARC result.'}</p>`));
+
+    return explainWrap('How this page decided DMARC, step by step.', steps, dto.operations || [], dmarcStandards());
+}
+
+function dmarcStandards() {
+    return [`${rfcLink(7489)} DMARC`, `${dmarcbisLink()} The DMARC revision, including the tree walk`,
+        `${rfcLink(6376)} DKIM`, `${rfcLink(7208)} SPF`];
+}
+
+function explainWrap(intro, steps, questions, standards) {
+    const commands = [...new Set(questions.map(entry => `dig +short ${entry.type} ${entry.name}`))];
+    return `<div class="explain">${explainToolbar}
+        <p class="explain-intro">${intro}</p>
+        <ol class="explain-steps">${steps.join('')}</ol>
+        ${commands.length ? `<h4>Repeat it yourself</h4><pre class="tech-value code explain-commands">${escapeHtml(commands.join('\n'))}</pre>` : ''}
+        <h4>Standards</h4>
+        <ul class="explain-standards">${standards.map(item => `<li>${item}</li>`).join('')}</ul>
+    </div>`;
+}
+
+function noSpfRecord(spfDto) {
+    return spfDto.ignoredReports ? 'The SPF result in the headers can\'t be tied to a server that received the message, so it isn\'t used'
+        : 'No SPF result was recorded at delivery';
 }
 
 function displaySpf(spfDto) {
@@ -2441,7 +3760,7 @@ function displaySpf(spfDto) {
                     <span class="dmarc-verdict-text">${offlineVerdict(`The SPF record${spfDto.domain ? ` for <code>${escapeHtml(spfDto.domain)}</code>` : ''} wasn't looked up${ip ? `, so <code>${escapeHtml(ip)}</code> can't be checked against it` : ''}.`)}</span>
                 </div>
                 <div class="dmarc-reported">${spfDto.headerResult ? `At delivery <code>${escapeHtml(spfDto.reportedBy || 'the receiving server')}</code> recorded
-                    <span class="${verdictClass(spfDto.headerResult)}">${escapeHtml(verdictLabel(spfDto.headerResult))}</span>` : 'No SPF result was recorded at delivery'}</div>
+                    <span class="${verdictClass(spfDto.headerResult)}">${escapeHtml(verdictLabel(spfDto.headerResult))}</span>` : noSpfRecord(spfDto)}</div>
             </div>`;
         return;
     }
@@ -2463,22 +3782,22 @@ function displaySpf(spfDto) {
     }
     if (lookups >= 9) warnings.push(`This check used ${lookups} of the 10 DNS lookups SPF allows; one more include would break it.`);
 
-    spfOutput.innerHTML = `
-        <div class="spf-record-card">
+    spfOutput.innerHTML = explainHost('SPF view', `
             <div class="dmarc-verdict">
                 <span class="${verdictClass(spfDto.result)} summary-pill">${escapeHtml(verdictLabel(spfDto.result))}</span>
                 <span class="dmarc-verdict-text">${spfSummary(spfDto)}</span>
             </div>
             <div class="dmarc-reported">
-                ${reported ? `${agrees ? 'Same result' : 'Today\'s result differs from what'} <code>${escapeHtml(spfDto.reportedBy || 'the receiving server')}</code> recorded at delivery
-                    ${agrees ? '' : `(<span class="${verdictClass(reported)}">${escapeHtml(verdictLabel(reported))}</span>); the record may have changed since`}`
-                    : 'No SPF result was recorded at delivery'}${spfDto.trace ? ' · rechecked against today\'s DNS' : ''}
+                ${reported ? `At delivery <code>${escapeHtml(spfDto.reportedBy || 'the receiving server')}</code> recorded
+                    <span class="${verdictClass(reported)}">${escapeHtml(verdictLabel(reported))}</span>${agrees ? ', the same as today\'s check'
+                        : ', unlike today\'s check, so the record may have changed since'}`
+                    : noSpfRecord(spfDto)}${spfDto.trace ? ' · rechecked against today\'s DNS' : ''}
             </div>
             ${from.note}
             ${warnings.map(text => `<div class="notice">${text}</div>`).join('')}
 
             <dl class="facts spf-facts">
-                <div><dt>Envelope sender</dt>
+                <div><dt>${term('envelope sender', 'Envelope sender')}</dt>
                     <dd class="mono spf-mailbox">${breakable(spfDto.mailbox || spfDto.domain || 'Unknown')}</dd>
                     <dd class="fact-note">Return-Path ${from.chip}</dd></div>
                 <div><dt>Sending server</dt>
@@ -2519,8 +3838,8 @@ function displaySpf(spfDto) {
                     <div class="dns-command-label">Raw SPF record</div>
                     <div class="data-card"><div class="data-value" data-copy="${escapeHtml(dnsOutput)}">${dnsOutputDisplay}</div></div>
                 </div>
-            </div>` : ''}
-        </div>`;
+            </div>` : ''}`, spfWalkthrough(spfDto), 'spf-record-card');
+    selectExplainView(spfOutput.firstElementChild);
 
     // Reverse DNS and the network owner are only for display, so they load after the panel.
     fillNetworkOwners(spfOutput);
@@ -2633,7 +3952,7 @@ function displayDmarc(dmarcDto) {
                     <span class="status-neutral summary-pill">Offline</span>
                     <span class="dmarc-verdict-text">${offlineVerdict(`The DMARC policy${dto.domain ? ` for <code>${escapeHtml(dto.domain)}</code>` : ''} wasn't looked up.`)}</span>
                 </div>
-                ${dto.reported ? `<div class="dmarc-reported">At delivery <code>${escapeHtml(dto.reported.authServId)}</code> reported
+                ${dto.reported ? `<div class="dmarc-reported">At delivery <code>${escapeHtml(dto.reported.authServId || 'the receiving server')}</code> reported
                     <span class="${verdictClass(dto.reported.result)}">${escapeHtml(verdictLabel(dto.reported.result))}</span></div>` : ''}
             </div>`;
         return;
@@ -2643,19 +3962,18 @@ function displayDmarc(dmarcDto) {
     const checks = dto.checks || [];
     const policyDomain = dto.fetchedDomain || dto.domain;
 
-    dmarcOutput.innerHTML = `
-        <div class="dmarc-record-card">
+    dmarcOutput.innerHTML = explainHost('DMARC view', `
             <div class="dmarc-verdict">
                 <span class="${verdictClass(dto.result)} summary-pill">${escapeHtml(verdictLabel(dto.result))}</span>
                 <span class="dmarc-verdict-text">${dto.domain ? dmarcSummary({ ...dto, checks }) : escapeHtml(dto.error || 'No From domain to check.')}</span>
             </div>
-            ${dto.reported ? `<div class="dmarc-reported">At delivery <code>${escapeHtml(dto.reported.authServId)}</code> reported
+            ${dto.reported ? `<div class="dmarc-reported">At delivery <code>${escapeHtml(dto.reported.authServId || 'the receiving server')}</code> reported
                 <span class="${verdictClass(dto.reported.result)}">${escapeHtml(verdictLabel(dto.reported.result))}</span></div>` : ''}
 
             ${checks.length ? `
-            <h4>How it was decided</h4>
+            <h4>The checks</h4>
             <table class="dmarc-checks">
-                <thead><tr><th scope="col">Check</th><th scope="col">Domain</th><th scope="col">Matches From</th><th scope="col">Authenticated</th><th scope="col">Counts</th></tr></thead>
+                <thead><tr><th scope="col">Check</th><th scope="col">Domain</th><th scope="col">${term('alignment', 'Matches From')}</th><th scope="col">Authenticated</th><th scope="col">Counts</th></tr></thead>
                 <tbody>
                     ${checks.map(check => `
                     <tr${check.counts ? ' class="counts"' : ''}>
@@ -2686,8 +4004,8 @@ function displayDmarc(dmarcDto) {
                     <div class="dns-command-label">Raw DMARC record</div>
                     <div class="data-card"><div class="data-value" data-copy="${escapeHtml(dnsOutput)}">${dnsOutputDisplay}</div></div>
                 </div>
-            </div>` : ''}
-        </div>`;
+            </div>` : ''}`, dmarcWalkthrough(dto), 'dmarc-record-card');
+    selectExplainView(dmarcOutput.firstElementChild);
 }
 
 async function runVerification(email, run) {
@@ -2711,19 +4029,18 @@ async function runVerification(email, run) {
             }
             return result;
         });
-    const dkimResults = [];
-
-    for (const [index, dkim] of email.dkim.entries()) {
+    // Every signature is checked at once; each shows as soon as its key arrives.
+    const dkimResults = await Promise.all(email.dkim.map(async (dkim, index) => {
         let result;
         try {
             result = await validator.verify(email, dkim);
         } catch (error) {
             result = { valid: false, status: 'unavailable', error: error.message };
         }
-        if (run !== latestRun) return;
-        dkimResults.push({ result, dkim });
-        displayDkimResult(index, dkim, result);
-    }
+        if (run === latestRun) displayDkimResult(index, dkim, result);
+        return { result, dkim };
+    }));
+    if (run !== latestRun) return;
     email.dkimResults = dkimResults;
     displayHeaders();
     const dkimStatuses = dkimResults.map(({ result }) => result.valid ? 'pass' : result.status || 'fail');
@@ -2865,7 +4182,7 @@ function displayDkimResult(i, dkim, result) {
     const dnsOutput = dkim.dnsRaw || 'No record';
     const dnsOutputDisplay = escapeHtml(dnsOutput.length > 255 ? dnsOutput.substring(0, 255) + '…' : dnsOutput);
 
-    verificationDiv.innerHTML = `
+    verificationDiv.innerHTML = explainHost('DKIM view', `
         <div class="${verdict.cls}">${verdict.text}</div>
         <dl class="facts dkim-facts">
             <div><dt>Signed by</dt><dd class="mono">${escapeHtml(dkim.tags.d || 'unknown')}</dd>
@@ -2916,7 +4233,8 @@ function displayDkimResult(i, dkim, result) {
                 <div class="dns-command-label">Raw key record</div>
                 <div class="data-card"><div class="data-value" data-copy="${escapeHtml(dnsOutput)}">${dnsOutputDisplay}</div></div>
             </div>
-        </div>`;
+        </div>`, dkimWalkthrough(dkim, result));
+    selectExplainView(verificationDiv.firstElementChild);
 }
 
 function getHeaderValue(headers, key) {

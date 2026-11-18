@@ -1,10 +1,11 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./v2_dns'), require('./v2_email_parser').EmailAddress);
+    const parser = require('./v2_email_parser');
+    module.exports = factory(require('./v2_dns'), parser.EmailAddress, parser.DeliveryRecords);
   } else {
-    Object.assign(root, factory(root.EmailDns, root.EmailAddress));
+    Object.assign(root, factory(root.EmailDns, root.EmailAddress, root.DeliveryRecords));
   }
-}(typeof self !== 'undefined' ? self : this, function (dns, address) {
+}(typeof self !== 'undefined' ? self : this, function (dns, address, delivery) {
   const verdicts = { '+': 'Pass', '-': 'Fail', '~': 'SoftFail', '?': 'Neutral' };
 
   class SpfError extends Error {
@@ -147,8 +148,11 @@
     return ipText && parseIp(ipText) ? ipText : null;
   }
 
-  function readSpfReports(headers) {
-    const received = headerValues(headers, 'Received-SPF').flatMap(header => {
+  // Only records the Received chain ties to a receiving server; ones the sender could have written are left out.
+  function readSpfReports(email) {
+    const records = delivery.assess(email);
+    const trusted = name => records.trusted(name).map(record => record.value);
+    const received = trusted('received-spf').flatMap(header => {
       const clauses = traceClauses(header);
       const result = clauses[0].text.match(/^\s*(pass|fail|softfail|neutral|none|temperror|permerror)\b/i)?.[1];
       if (!result) return [];
@@ -163,7 +167,7 @@
         heloOnly: props.get('identity')?.toLowerCase() === 'helo'
       }];
     });
-    const auth = headerValues(headers, 'Authentication-Results').flatMap(header => {
+    const auth = trusted('authentication-results').flatMap(header => {
       const clauses = traceClauses(header);
       const receiver = dns.mailboxDomain(clauses[0].text.trim().split(/[\s/]+/)[0]);
       return clauses.flatMap(({ text, comment }) => {
@@ -181,7 +185,9 @@
         }];
       });
     });
-    return { received, auth };
+    const ignored = records.records.filter(record => !record.trusted &&
+      (record.name === 'received-spf' || /(?:^|[\s;])spf\s*=/i.test(record.value))).length;
+    return { received, auth, ignored };
   }
 
   function relayPeer(header) {
@@ -198,8 +204,9 @@
 
   function inferSession(headers, reports) {
     const allReports = [...reports.received, ...reports.auth];
-    const envelope = envelopeFrom(address.getHeader(headers, 'Return-Path')) ||
-      allReports.find(report => report.envelope && !report.heloOnly)?.envelope;
+    const returnPath = envelopeFrom(address.getHeader(headers, 'Return-Path'));
+    const reportedEnvelope = allReports.find(report => report.envelope && !report.heloOnly);
+    const envelope = returnPath || reportedEnvelope?.envelope;
     const relevant = allReports.filter(report =>
       (!report.heloOnly || envelope?.empty) &&
       (!report.envelope || (report.envelope.domain === envelope?.domain && report.envelope.empty === envelope?.empty)));
@@ -212,7 +219,9 @@
     const helo = explicitPeer?.helo ||
       relevant.find(report => report.helo && (!explicitPeer || report.receiver === receiver))?.helo || relay?.helo;
     const mailbox = envelope?.empty ? envelopeFrom(helo ? 'postmaster@' + helo : null) : envelope;
-    return { mailbox, helo, ipText: peer?.ip, ipSource: peer?.source, emptyEnvelope: envelope?.empty };
+    // Where the envelope sender came from, for the step-by-step explanation.
+    const mailboxSource = envelope?.empty ? 'HELO' : returnPath ? 'Return-Path' : reportedEnvelope?.source || null;
+    return { mailbox, helo, ipText: peer?.ip, ipSource: peer?.source, emptyEnvelope: envelope?.empty, mailboxSource };
   }
 
   class SpfDTO {
@@ -234,6 +243,11 @@
       this.reportedBy = null;
       this.lookups = null;
       this.voidLookups = null;
+      this.ignoredReports = 0;
+      this.helo = null;
+      this.mailboxSource = null;
+      // Every DNS question the check asked, in order: { domain, token, depth, type, name, records, error }.
+      this.operations = [];
     }
   }
 
@@ -242,15 +256,26 @@
       return dns.lookup(name, type);
     }
 
-    async lookup(name, type, budget) {
-      const records = await this.queryDns(name, type);
-      if (budget && !records.length && ++budget.voids > 2) throw new SpfError('PermError', 'SPF void lookup limit exceeded');
+    // Records each question and its answer, tagged with the policy and rule that asked it, when the budget keeps a log.
+    async lookup(name, type, budget, countVoid = true) {
+      const entry = budget?.log ? { ...budget.context, type, name, records: null, error: null } : null;
+      if (entry) budget.log.push(entry);
+      let records;
+      try {
+        records = await this.queryDns(name, type);
+      } catch (error) {
+        if (entry) entry.error = error.message;
+        throw error;
+      }
+      if (entry) entry.records = records;
+      // Only lookups made for rules count toward the void limit, not the first policy lookup (RFC 7208 section 4.6.4).
+      if (budget && countVoid && !records.length && ++budget.voids > 2) throw new SpfError('PermError', 'SPF void lookup limit exceeded');
       return records;
     }
 
-    async fetchSPF(domain, budget) {
+    async fetchSPF(domain, budget, countVoid = true) {
       const dnsCommand = 'dig TXT ' + domain;
-      const answers = await this.lookup(domain, 'TXT', budget);
+      const answers = await this.lookup(domain, 'TXT', budget, countVoid);
       const records = answers.map(rawDns => ({ rawDns, record: dns.txt(rawDns) }))
         .filter(({ record }) => /^v=spf1(?: |$)/i.test(record));
       if (records.length > 1) throw new SpfError('PermError', 'Multiple SPF records');
@@ -323,6 +348,8 @@
       const node = { domain, record: null, rawDns: null, dnsCommand: null, children: [], terms: [],
         result: 'None', reason: 'No SPF record found', matchMechanism: null };
       let current = null;
+      // What each rule looked at: its target after macros, the hosts an mx rule names, an include's result.
+      let detail = {};
       try {
         const name = dns.normalizeName(domain, true);
         const ip = session?.ip || parseIp(ipText);
@@ -330,22 +357,28 @@
         session ||= { ip, mailbox: address.parseMailboxes(sender || 'postmaster@' + name)[0], helo: null };
         if (!session.mailbox) throw new SpfError('PermError', 'Invalid SMTP MAIL FROM');
         budget ||= { terms: depth, voids: 0, ptr: null };
-        Object.assign(node, await this.fetchSPF(name, budget));
+        // The log tags each DNS question with the policy and rule that asked it.
+        budget.context = { domain: name, token: null, depth };
+        Object.assign(node, await this.fetchSPF(name, budget, depth > 0));
         if (!node.record) return node;
 
         const { terms, redirect } = parsePolicy(node.record);
         const addressType = ip.bits === 32 ? 'A' : 'AAAA';
         for (const term of terms) {
           current = term.token;
+          detail = {};
+          budget.context = { domain: name, token: term.token, depth };
           let matched = term.type === 'all';
           if (term.type === 'ip') {
             matched = matchesCidr(ip, term.network, term.prefix);
           } else if (term.type !== 'all') {
             this.countTerm(budget);
             const target = await this.expandDomain(term.target, name, session, budget);
+            detail.target = target;
             if (term.type === 'include') {
               const trace = await this.evaluateRecursive(ipText, target, depth + 1, sender, session, budget);
               node.children.push({ type: 'include', val: target, trace });
+              detail.result = trace.result;
               if (trace.result === 'None') throw new SpfError('PermError', 'SPF include has no policy');
               if (['PermError', 'TempError', 'Unavailable'].includes(trace.result)) throw new SpfError(trace.result, trace.reason);
               matched = trace.result === 'Pass';
@@ -353,15 +386,18 @@
             } else if (term.type === 'exists') {
               matched = (await this.lookup(target, 'A', budget)).length > 0;
             } else if (term.type === 'ptr') {
-              matched = (await this.validatedPtr(ip, budget)).some(name => name === target || name.endsWith('.' + target));
+              detail.names = await this.validatedPtr(ip, budget);
+              matched = detail.names.some(name => name === target || name.endsWith('.' + target));
             } else {
               let names = [target];
               if (term.type === 'mx') {
                 const exchanges = await this.lookup(target, 'MX', budget);
                 if (exchanges.length > 10) throw new SpfError('PermError', 'Too many SPF MX records');
                 names = exchanges.map(value => dns.normalizeName(value.trim().split(/\s+/)[1])).filter(Boolean);
+                detail.hosts = names;
               }
               const prefix = ip.bits === 32 ? term.ipv4Prefix : term.ipv6Prefix;
+              detail.prefix = prefix;
               for (const host of names) {
                 const addresses = await this.lookup(host, addressType, budget);
                 if (addresses.some(text => matchesCidr(ip, parseIp(text), prefix))) {
@@ -371,24 +407,28 @@
               }
             }
           }
-          node.terms.push({ token: term.token, outcome: matched ? 'matched' : 'no-match' });
+          node.terms.push({ token: term.token, outcome: matched ? 'matched' : 'no-match', detail });
           current = null;
           if (matched) return { ...node, result: verdicts[term.qualifier], reason: 'Matched ' + term.token, matchMechanism: term.token };
         }
 
         if (redirect) {
           current = 'redirect=' + redirect;
+          detail = {};
+          budget.context = { domain: name, token: current, depth };
           this.countTerm(budget);
           const target = await this.expandDomain(redirect, name, session, budget);
+          detail.target = target;
           const trace = await this.evaluateRecursive(ipText, target, depth + 1, sender, session, budget);
           node.children.push({ type: 'redirect', val: target, trace });
+          detail.result = trace.result;
           if (trace.result === 'None') throw new SpfError('PermError', 'SPF redirect has no policy');
-          node.terms.push({ token: 'redirect=' + redirect, outcome: trace.result === 'Pass' ? 'matched' : 'no-match' });
+          node.terms.push({ token: 'redirect=' + redirect, outcome: trace.result === 'Pass' ? 'matched' : 'no-match', detail });
           return { ...node, result: trace.result, reason: trace.reason, matchTarget: target, matchMechanism: 'redirect=' + redirect };
         }
         return { ...node, result: 'Neutral', reason: 'No mechanism matched' };
       } catch (error) {
-        if (current) node.terms.push({ token: current, outcome: 'error' });
+        if (current) node.terms.push({ token: current, outcome: 'error', detail });
         return { ...node, result: error.result || 'TempError', reason: error.message };
       }
     }
@@ -412,7 +452,8 @@
 
     async verify(email, smtp = null) {
       const dto = new SpfDTO();
-      const reports = readSpfReports(email.headers);
+      const reports = readSpfReports(email);
+      dto.ignoredReports = reports.ignored;
       dto.headerResult = reports.auth[0]?.result ?? reports.received[0]?.result ?? null;
       dto.reportedBy = (reports.auth[0] ? reports.auth[0].receiver : reports.received[0]?.receiver) ?? null;
       dto.source = smtp ? 'smtp' : 'headers';
@@ -421,18 +462,20 @@
         const helo = dns.mailboxDomain(smtp.helo?.trim());
         const envelope = envelopeFrom(smtp.mailFrom);
         const mailbox = envelope?.empty ? envelopeFrom(helo ? 'postmaster@' + helo : null) : envelope;
-        session = { ipText: peerIp(smtp.ip), mailbox, helo, emptyEnvelope: envelope?.empty };
+        session = { ipText: peerIp(smtp.ip), mailbox, helo, emptyEnvelope: envelope?.empty, mailboxSource: envelope?.empty ? 'HELO' : 'SMTP' };
       } else {
         session = inferSession(email.headers, reports);
       }
-      const { ipText, ipSource, mailbox, helo, emptyEnvelope } = session;
+      const { ipText, ipSource, mailbox, helo, emptyEnvelope, mailboxSource } = session;
       dto.domain = mailbox?.domain ?? null;
       dto.mailbox = mailbox?.address ?? null;
       dto.senderIp = ipText ?? null;
       dto.ipSource = ipSource ?? null;
+      dto.helo = helo ?? null;
+      dto.mailboxSource = mailboxSource ?? null;
       if (mailbox && ipText) {
         const ip = parseIp(ipText);
-        const budget = { terms: 0, voids: 0, ptr: null };
+        const budget = { terms: 0, voids: 0, ptr: null, log: dto.operations, context: null };
         dto.trace = await this.evaluateRecursive(ipText, dto.domain, 0, mailbox.address, { ip, mailbox, helo }, budget);
         dto.lookups = budget.terms;
         dto.voidLookups = budget.voids;
@@ -444,7 +487,8 @@
         if (!ipText) missing.push('the sending IP');
         dto.error = 'Unable to check SPF without ' + missing.join(' and ') + '.';
         if (mailbox) {
-          try { Object.assign(dto, await this.fetchSPF(dto.domain)); }
+          const budget = { terms: 0, voids: 0, ptr: null, log: dto.operations, context: { domain: dto.domain, token: null, depth: 0 } };
+          try { Object.assign(dto, await this.fetchSPF(dto.domain, budget, false)); }
           catch (error) { dto.error += ' DNS lookup failed: ' + error.message; }
         }
       }
