@@ -1,8 +1,8 @@
 const assert = require('node:assert/strict');
 const { createHash, generateKeyPairSync, sign } = require('node:crypto');
 const { test } = require('node:test');
-const { EmailParser, parseEmail, decodeMimeWords, RelayParser, IpAddress, parseMailDate } = require('../v2_email_parser');
-const { DkimParser, DkimValidator } = require('../v2_dkim_validator');
+const { EmailParser, parseEmail, decodeMimeWords, RelayParser, IpAddress, parseMailDate, ServerValidationParser, MimeParser, HeaderInsights } = require('../v2_email_parser');
+const { DkimParser, DkimValidator, ArcValidator } = require('../v2_dkim_validator');
 const { DmarcValidator } = require('../v2_dmarc_validator');
 const { SpfValidator } = require('../v2_spf_validator');
 
@@ -51,6 +51,50 @@ test('unwraps the IPv4 address carried inside 6to4, mapped, NAT64 and Teredo IPv
     assert.equal(IpAddress.embeddedIpv4(other), null, other);
   }
   assert.deepEqual(IpAddress.parseIpv6('2001:db8::1'), [0x2001, 0xdb8, 0, 0, 0, 0, 0, 1]);
+});
+
+test('names the network and organization behind an IP from routing and registry data', async () => {
+  const asked = [];
+  const lookup = async (name, type) => {
+    asked.push(type + ' ' + name);
+    return {
+      'TXT 48.171.220.204.origin.asn.cymru.com': ['"396479 | 204.220.171.0/24 | US | arin | 1995-01-05"'],
+      'TXT AS396479.asn.cymru.com': ['"396479 | US | arin | 2017-06-21 | MAILGUN-US - Mailgun Technologies Inc., US"']
+    }[type + ' ' + name] || [];
+  };
+  const getJson = async url => {
+    assert.equal(url, 'https://rdap.arin.net/registry/ip/204.220.171.48');
+    return { name: 'MAILGUN-204-220-160-20', cidr0_cidrs: [{ v4prefix: '204.220.160.0', length: 20 }],
+      entities: [{ roles: ['registrant'], vcardArray: ['vcard', [['fn', {}, 'text', 'Mailgun Technologies Inc.']]] }] };
+  };
+  const owner = await IpAddress.networkOwner('204.220.171.48', { lookup, getJson });
+  assert.deepEqual(owner, { ip: '204.220.171.48', asn: '396479', prefix: '204.220.171.0/24', country: 'US', registry: 'ARIN',
+    asName: 'Mailgun Technologies Inc.', organization: 'Mailgun Technologies Inc.', network: 'MAILGUN-204-220-160-20', range: '204.220.160.0/20' });
+
+  // Without a registry answer the routing data still names the network.
+  const routingOnly = await IpAddress.networkOwner('204.220.171.48', { lookup, getJson: async () => { throw new Error('offline'); } });
+  assert.equal(routingOnly.organization, null);
+  assert.equal(routingOnly.asName, 'Mailgun Technologies Inc.');
+
+  // IPv6 uses the nibble-reversed origin6 zone; non-addresses are never looked up.
+  await IpAddress.networkOwner('2001:db8::1', { lookup, getJson });
+  assert.ok(asked.includes('TXT 1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.origin6.asn.cymru.com'));
+  assert.equal(await IpAddress.networkOwner('mx.example.test', { lookup, getJson }), null);
+});
+
+test('reads every Authentication-Results header with each result, its details and comment', () => {
+  const dto = new ServerValidationParser().parse([
+    'mx.microsoft.com 1; spf=pass (sender IP is\r\n 204.220.171.48) smtp.mailfrom=marketing.example.test; dkim=pass (signature was verified) ' +
+      'header.d=marketing.example.test;dmarc=pass action=none header.from=marketing.example.test;compauth=pass reason=100',
+    'relay.example.test; dkim=fail (body; hash mismatch) header.i=@example.test'
+  ]);
+  assert.equal(dto.headers.length, 2);
+  assert.deepEqual([dto.service, dto.headers[0].version], ['mx.microsoft.com', '1']);
+  assert.deepEqual(dto.results.map(({ method, result }) => method + '=' + result), ['spf=pass', 'dkim=pass', 'dmarc=pass', 'compauth=pass']);
+  assert.deepEqual(dto.results[0].props, { 'smtp.mailfrom': 'marketing.example.test' });
+  assert.equal(dto.results[0].comment, 'sender IP is 204.220.171.48');
+  // A ';' inside a comment doesn't start a new result.
+  assert.deepEqual(dto.headers[1].results.map(({ method, result, comment }) => [method, result, comment]), [['dkim', 'fail', 'body; hash mismatch']]);
 });
 
 test('relay parser reads dates without a semicolon and ignores clauses inside comments', () => {
@@ -116,6 +160,26 @@ test('a body changed after signing fails DKIM but reports that the signed header
   assert.equal(changed.headersVerified, true);
   const forged = await validator.verify(build('YWJjZA==', 'Hello, rewritten\r\n'), new DkimParser().parse(tags('YWJjZA=='), 0));
   assert.equal(forged.headersVerified, false);
+});
+
+test('headers pasted without a body report the body as unchecked, not as a DKIM failure', async () => {
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+  const key = publicKey.export({ type: 'pkcs1', format: 'der' }).toString('base64');
+  const tags = sig => 'v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.test; s=mail; h=from:subject; bh=' +
+    hash('Hello\r\n').toString('base64') + '; b=' + sig;
+  const headers = sig => 'DKIM-Signature: ' + tags(sig) + '\r\nFrom: sender@example.test\r\nSubject: Hi';
+  const validator = new DkimValidator();
+  validator.queryDns = async () => ['v=DKIM1; p=' + key];
+  const draft = await validator.verify(parseEmail(headers('AAAA') + '\r\n\r\nHello\r\n'), new DkimParser().parse(tags('AAAA'), 0));
+  const signature = sign('sha256', Buffer.from(draft.details.dataToVerify), privateKey).toString('base64');
+
+  const email = parseEmail(headers(signature));
+  assert.equal(email.headersOnly, true);
+  const result = await validator.verify(email, new DkimParser().parse(tags(signature), 0));
+  assert.equal(result.valid, false);
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.bodyMissing, true);
+  assert.equal(result.headersVerified, true);
 });
 
 test('DKIM hashes the original octets and reports the covered byte count', async () => {
@@ -431,4 +495,132 @@ test('DMARC passes via aligned DKIM when SPF passes for a delivery provider', as
   assert.equal(result.dkimAlignment, 'pass');
   assert.equal(result.result, 'pass');
   assert.deepEqual(result.passedBy, ['DKIM']);
+});
+
+test('MIME parser decodes text parts and lists attachments with RFC 2231 names and decoded sizes', () => {
+  const pdf = Buffer.from('%PDF-1.4 fake document bytes');
+  const email = new EmailParser().parseBytes(Buffer.from([
+    'From: sender@example.test',
+    'Content-Type: multipart/mixed; boundary="outer"',
+    '',
+    '--outer',
+    'Content-Type: multipart/alternative; boundary=inner',
+    '',
+    '--inner',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable',
+    '',
+    'Caf=C3=A9 is open=',
+    ' today',
+    '--inner',
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from('<p>Café</p>').toString('base64'),
+    '--inner--',
+    '--outer',
+    'Content-Type: application/pdf',
+    "Content-Disposition: attachment; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf",
+    'Content-Transfer-Encoding: base64',
+    '',
+    pdf.toString('base64'),
+    '--outer--',
+    ''
+  ].join('\r\n')));
+  const parser = new MimeParser();
+  const leaves = parser.flatten(parser.parse(email));
+  assert.deepEqual(leaves.map(({ contentType, attachment }) => [contentType, attachment]),
+    [['text/plain', false], ['text/html', false], ['application/pdf', true]]);
+  assert.equal(leaves[0].text, 'Café is open today');
+  assert.equal(leaves[1].text, '<p>Café</p>');
+  assert.equal(leaves[2].filename, 'résumé.pdf');
+  assert.equal(leaves[2].size, pdf.length);
+});
+
+test('ARC verifies a sealed set, and breaks when the recorded results or the chain change', async () => {
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+  const key = publicKey.export({ type: 'pkcs1', format: 'der' }).toString('base64');
+  const dkim = new DkimValidator();
+  dkim.queryDns = async () => ['v=DKIM1; p=' + key];
+  const arc = new ArcValidator(dkim);
+  const body = 'Hello\r\n';
+  const results = 'i=1; mx.forwarder.test; dkim=pass header.d=example.test';
+  const amsTags = sig => 'i=1; a=rsa-sha256; c=relaxed/relaxed; d=forwarder.test; s=arc; h=from:subject; bh=' +
+    hash(body).toString('base64') + '; b=' + sig;
+  const sealTags = (sig, cv = 'none') => `i=1; a=rsa-sha256; cv=${cv}; d=forwarder.test; s=arc; b=${sig}`;
+  const build = (ams, seal, recorded = results) => parseEmail(`ARC-Seal: ${seal}\r\nARC-Message-Signature: ${ams}\r\n` +
+    `ARC-Authentication-Results: ${recorded}\r\nFrom: sender@example.test\r\nSubject: Hi\r\n\r\n${body}`);
+
+  const draft = await dkim.verify(build(amsTags('AAAA'), sealTags('AAAA')), new DkimParser().parse(amsTags('AAAA'), 0),
+    { field: 'arc-message-signature', arc: true });
+  const ams = amsTags(sign('sha256', Buffer.from(draft.details.dataToVerify), privateKey).toString('base64'));
+  const sealData = (seal, recorded = results) => ['ARC-Authentication-Results: ' + recorded, 'ARC-Message-Signature: ' + ams, 'ARC-Seal: ' + seal]
+    .map(field => dkim.canonicalizeHeader(field, 'relaxed')).join('').slice(0, -2);
+  const seal = sealTags(sign('sha256', Buffer.from(sealData(sealTags(''))), privateKey).toString('base64'));
+
+  const intact = await arc.verify(build(ams, seal));
+  assert.equal(intact.status, 'pass');
+  assert.deepEqual([intact.sets[0].sealer, intact.sets[0].cv, intact.sets[0].seal.valid, intact.sets[0].ams.valid],
+    ['forwarder.test', 'none', true, true]);
+  assert.equal(intact.sets[0].recorded, 'mx.forwarder.test; dkim=pass header.d=example.test');
+
+  const altered = await arc.verify(build(ams, seal, 'i=1; mx.forwarder.test; dkim=fail header.d=example.test'));
+  assert.equal(altered.status, 'fail');
+  assert.equal(altered.sets[0].seal.valid, false);
+
+  const firstClaimsPass = await arc.verify(build(ams, sealTags('AAAA', 'pass')));
+  assert.equal(firstClaimsPass.status, 'fail');
+
+  const gap = await arc.verify(parseEmail(`ARC-Seal: ${seal.replace('i=1', 'i=2')}\r\nFrom: sender@example.test\r\n\r\n`));
+  assert.deepEqual([gap.status, gap.error], ['fail', 'ARC set 1 is missing or incomplete']);
+  assert.equal((await arc.verify(parseEmail('From: sender@example.test\r\n\r\nHi'))).status, 'none');
+});
+
+const headerFields = text => new DkimValidator().getRawHeaderFields(text).map((field, index) => ({
+  index, key: field.key, instance: field.instance, name: field.raw.slice(0, field.raw.indexOf(':')),
+  value: field.raw.slice(field.raw.indexOf(':') + 1).replace(/\r\n[ \t]+/g, ' ').trim()
+}));
+
+test('header insights group headers by purpose and explain common ones', () => {
+  assert.deepEqual(['From', 'Subject', 'DKIM-Signature', 'X-MS-Exchange-Organization-SCL', 'X-Microsoft-Antispam-Untrusted', 'X-Received',
+    'List-Unsubscribe', 'X-Mailgun-Sid', 'X-MS-Exchange-CrossTenant-Id', 'X-Gm-Message-State', 'X-Unknown'].map(HeaderInsights.category),
+    ['people', 'message', 'auth', 'spam', 'microsoft', 'route', 'list', 'service', 'microsoft', 'google', 'other']);
+  assert.match(HeaderInsights.describe('Return-Path'), /SPF checks its domain/);
+  assert.match(HeaderInsights.describe('X-Forefront-Antispam-Report-Untrusted'), /sending organization/);
+  assert.equal(HeaderInsights.describe('X-Unknown'), null);
+});
+
+test('spam verdicts come from the receiving provider, not from the sender\'s untrusted copies', () => {
+  const microsoft = HeaderInsights.spamVerdicts(headerFields([
+    'X-Forefront-Antispam-Report-Untrusted: CIP:255.255.255.255;SCL:9;SFV:SPM;CAT:PHSH',
+    'X-MS-Exchange-Organization-SCL: 1',
+    'X-Microsoft-Antispam: BCL:3;ARA:1444111002|62400799021',
+    'X-Microsoft-Antispam-Mailbox-Delivery: ucf:0;jmr:0;auth:1;dest:I;ENG:(5062000311)'
+  ].join('\r\n')));
+  assert.equal(microsoft.provider, 'Microsoft');
+  assert.deepEqual(microsoft.items.map(({ label, tone, detail }) => [label, tone, detail]),
+    [['Not spam', 'pass', 'SCL 1'], ['Bulk level 3', 'neutral', 'few complaints'], ['Delivered to Inbox', 'pass', 'dest:I']]);
+  assert.deepEqual(microsoft.untrusted, ['X-Forefront-Antispam-Report-Untrusted']);
+
+  const filtered = HeaderInsights.spamVerdicts(headerFields('X-Forefront-Antispam-Report: SFV:SPM;CAT:PHSH\r\nX-Microsoft-Antispam-Mailbox-Delivery: dest:J'));
+  assert.deepEqual(filtered.items.map(item => item.label), ['Spam', 'Phishing', 'Delivered to Junk']);
+  const assassin = HeaderInsights.spamVerdicts(headerFields('X-Spam-Status: No, score=-0.9 required=5.0 tests=DKIM_SIGNED'));
+  assert.deepEqual(assassin.items.map(({ label, detail }) => [label, detail]), [['Not spam', 'score -0.9 of 5.0']]);
+  assert.equal(HeaderInsights.spamVerdicts(headerFields('Subject: Hi')), null);
+});
+
+test('header warnings flag repeated From headers and receiver results written below the oldest hop', () => {
+  const fields = headerFields([
+    'Authentication-Results: mx.example.net; dmarc=fail',
+    'Received: from mail.sender.test by mx.example.net; Tue, 10 Nov 2026 16:55:12 +0000',
+    'From: Bank <alerts@bank.example>',
+    'Authentication-Results: mx.example.net; dkim=pass; dmarc=pass',
+    'From: someone@sender.test',
+    'Subject: Hi'
+  ].join('\r\n'));
+  const issues = HeaderInsights.anomalies(fields, { covered: new Set(['from:1']), receiver: 'mx.example.net' });
+  assert.deepEqual(issues.map(issue => [issue.kind, issue.indexes]), [['duplicate', [2, 4]], ['forged-results', [3]]]);
+  assert.match(issues[0].message, /only one is signed/);
+  assert.deepEqual(HeaderInsights.anomalies(headerFields('Received: by mx.example.net\r\nAuthentication-Results: other.example; spf=pass\r\nFrom: a@b.test'),
+    { receiver: 'mx.example.net' }), []);
 });

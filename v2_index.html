@@ -21,12 +21,21 @@
                 <p class="tagline">Inspect a raw message and verify its DKIM, SPF and DMARC.</p>
             </div>
         </div>
+        <div class="header-actions">
+        <div class="network-menu">
+            <button type="button" id="network-menu-btn" class="btn btn-secondary theme-menu-btn network-menu-btn" aria-controls="network-panel" aria-expanded="false" aria-haspopup="true">
+                <span class="network-dot" aria-hidden="true"></span>
+                <span class="network-label">Online</span>
+            </button>
+            <div id="network-panel" class="theme-panel network-panel hidden" role="group" aria-label="Network and privacy"></div>
+        </div>
         <div class="theme-menu">
-            <button type="button" id="theme-menu-btn" class="btn btn-secondary theme-menu-btn" aria-controls="theme-selector" aria-expanded="false" aria-haspopup="true">
+            <button type="button" id="theme-menu-btn" aria-label="Theme" class="btn btn-secondary theme-menu-btn" aria-controls="theme-selector" aria-expanded="false" aria-haspopup="true">
                 <span class="theme-swatch" aria-hidden="true"></span>
                 <span>Theme</span>
             </button>
             <div id="theme-selector" class="theme-panel hidden" role="group" aria-label="Color theme"></div>
+        </div>
         </div>
     </header>
 
@@ -39,45 +48,78 @@
                 </svg>
             </span>
             <p class="drop-title">Drop an <code>.eml</code> file here</p>
+            <p class="drop-hint"></p>
             <button type="button" class="file-picker btn btn-primary">Choose file</button>
         </div>
         <input type="file" id="file-input" class="hidden" accept=".eml,.txt">
         <div id="error-msg" class="error hidden" role="alert"></div>
 
         <div id="results" class="hidden">
-            <section class="section">
-                <h2 class="section-heading"><span>Summary</span></h2>
+            <nav id="jump-bar" class="jump-bar" aria-label="Jump to a section"></nav>
+            <section class="section" id="section-summary">
+                <h2 class="section-heading">
+                    <span>Summary</span>
+                    <span class="header-controls"><button type="button" id="copy-report" class="btn btn-secondary report-btn" title="Copy a plain-text report of these results">Copy report</button></span>
+                </h2>
                 <div id="summary-output"></div>
             </section>
-            <section class="section">
+            <section class="section" id="section-content">
+                <h2 class="section-heading">
+                    <span>Message Content</span>
+                    <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="content-output" aria-expanded="true" title="Collapse section"></button></span>
+                </h2>
+                <div id="content-output"></div>
+            </section>
+            <section class="section" id="section-dmarc">
                 <h2 class="section-heading">
                     <span>DMARC Analysis</span>
                     <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="dmarc-output" aria-expanded="true" title="Collapse section"></button></span>
                 </h2>
                 <div id="dmarc-output"></div>
             </section>
-            <section class="section">
+            <section class="section" id="section-spf">
                 <h2 class="section-heading">
                     <span>SPF Record</span>
                     <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="spf-output" aria-expanded="true" title="Collapse section"></button></span>
                 </h2>
                 <div id="spf-output"></div>
             </section>
-            <section class="section">
+            <section class="section" id="section-dkim">
                 <h2 class="section-heading">
                     <span>DKIM Signatures</span>
                     <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="dkim-output" aria-expanded="true" title="Collapse section"></button></span>
                 </h2>
                 <div id="dkim-output"></div>
             </section>
-            <section class="section">
+            <section class="section" id="section-arc">
+                <h2 class="section-heading">
+                    <span>ARC Chain</span>
+                    <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="arc-output" aria-expanded="true" title="Collapse section"></button></span>
+                </h2>
+                <div id="arc-output"></div>
+            </section>
+            <section class="section" id="section-domain">
+                <h2 class="section-heading">
+                    <span>Sender Domain</span>
+                    <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="domain-output" aria-expanded="true" title="Collapse section"></button></span>
+                </h2>
+                <div id="domain-output"></div>
+            </section>
+            <section class="section" id="section-headers">
                 <h2 class="section-heading">
                     <span>Headers</span>
                     <span class="header-controls"><button type="button" class="toggle-section-btn" aria-controls="headers-panel" aria-expanded="true" title="Collapse section"></button></span>
                 </h2>
                 <div id="headers-panel">
                     <div class="headers-toolbar">
-                        <button type="button" id="headers-signed-toggle" class="btn btn-secondary signed-filter-btn" aria-pressed="true" title="Show all headers"></button>
+                        <div class="relay-tabs headers-views" role="group" aria-label="Arrange headers">
+                            <button type="button" class="relay-tab" data-view="order" aria-pressed="true" title="As they appear in the message, newest first">In order</button>
+                            <button type="button" class="relay-tab" data-view="purpose" aria-pressed="false" title="Grouped by what they're for">By purpose</button>
+                        </div>
+                        <button type="button" id="headers-signed-toggle" class="btn btn-secondary signed-filter-btn" aria-pressed="false" title="Show only signed headers"></button>
+                        <input type="search" id="headers-search" class="headers-search" placeholder="Filter by name or value" aria-label="Filter headers by name or value" autocomplete="off">
+                        <button type="button" id="headers-raw-toggle" class="btn btn-secondary headers-raw-btn" aria-pressed="false" title="Show the header block exactly as received">Raw</button>
+                        <span id="headers-count" class="headers-count" aria-live="polite"></span>
                     </div>
                     <div id="headers-output"></div>
                 </div>

@@ -136,10 +136,11 @@
       return record;
     }
 
-    validateSignature(dkim) {
+    // ARC-Message-Signature uses the DKIM format without v=, and its i= is an instance number.
+    validateSignature(dkim, arc = false) {
       const { tags, signedHeaders } = dkim;
       if (dkim.parseError) return dkim.parseError;
-      if (tags.v !== '1' || ['a', 'b', 'bh', 'd', 'h', 's'].some(tag => !tags[tag])) {
+      if ((!arc && tags.v !== '1') || (arc && !/^\d{1,2}$/.test(tags.i || '')) || ['a', 'b', 'bh', 'd', 'h', 's'].some(tag => !tags[tag])) {
         return 'Missing or invalid required DKIM tag';
       }
       if (!Object.hasOwn(algorithms, tags.a)) return 'Unsupported DKIM algorithm';
@@ -150,12 +151,12 @@
         return 'Unsupported DKIM query method';
       }
       if (!signedHeaders.every(name => fieldName.test(name))) return 'Invalid name in the DKIM signed header list';
-      if (!signedHeaders.some(name => name.toLowerCase() === 'from')) return 'The From header must be signed';
+      if (!arc && !signedHeaders.some(name => name.toLowerCase() === 'from')) return 'The From header must be signed';
       const domain = dns.normalizeName(tags.d);
       if (!domain?.includes('.') || !dns.normalizeName(tags.s) || tags.d.endsWith('.') || tags.s.endsWith('.')) {
         return 'Invalid DKIM selector or signing domain';
       }
-      if (tags.i !== undefined) {
+      if (!arc && tags.i !== undefined) {
         const at = tags.i.lastIndexOf('@');
         const identity = at >= 0 ? dns.normalizeName(tags.i.slice(at + 1)) : null;
         if (!identity || (identity !== domain && !identity.endsWith('.' + domain))) return 'Invalid DKIM signing identity';
@@ -167,8 +168,8 @@
       return null;
     }
 
-    async verify(email, dkim) {
-      const error = this.validateSignature(dkim);
+    async verify(email, dkim, { field = 'dkim-signature', arc = false } = {}) {
+      const error = this.validateSignature(dkim, arc);
       if (error) return { valid: false, error };
       if (!crypto?.subtle) return { valid: false, status: 'unavailable', error: 'Web Crypto is unavailable' };
 
@@ -185,9 +186,12 @@
       // signer and headers are genuine and only the body changed after signing.
       const bodyHash = await this.verifyBodyHash(email, dkim);
       const bodyError = bodyHash.valid ? null : bodyHash.error || 'Body hash mismatch';
+      // With no body in the input, a mismatch says nothing about the message; report it as unchecked.
+      const bodyMissing = Boolean(bodyError) && email.headersOnly === true;
+      const missingError = 'The message body wasn\'t included, so only the signed headers could be checked';
 
       const rawFields = this.getRawHeaderFields(email.rawHeaders);
-      const signatures = rawFields.filter(field => field.key === 'dkim-signature');
+      const signatures = rawFields.filter(entry => entry.key === field);
       const matches = field => {
         const parsed = dns.parseTags(field.raw.slice(field.raw.indexOf(':') + 1)).tags;
         return Object.keys(parsed).length === Object.keys(tags).length &&
@@ -218,14 +222,17 @@
       if (record.error) result.keyError = record.error;
       // The current DNS record is useful for inspection even after expiration.
       if (record.error) {
+        if (bodyMissing) return { ...result, status: 'unavailable', bodyMissing, error: missingError };
         return bodyError ? { ...result, status: 'fail', error: bodyError }
           : expired ? { ...result, status: 'expired', error: 'The DKIM signature has expired' }
           : { ...result, status: record.status, error: record.error };
       }
 
-      const check = await this.checkSignature(record, tags, signature, wireBytes(dataToVerify, email));
+      const check = await this.checkSignature(record, arc ? { ...tags, i: undefined } : tags, signature, wireBytes(dataToVerify, email));
       if (bodyError) {
-        return { ...result, status: 'fail', error: bodyError, key: check.key, headersVerified: check.status === 'unavailable' ? null : check.valid };
+        const headersVerified = check.status === 'unavailable' ? null : check.valid;
+        if (bodyMissing) return { ...result, status: 'unavailable', bodyMissing, error: missingError, key: check.key, headersVerified };
+        return { ...result, status: 'fail', error: bodyError, key: check.key, headersVerified };
       }
       if (!expired) return { ...result, ...check };
       // An expired signature never passes, but whether it still verifies against the current key
@@ -273,5 +280,98 @@
     }
   }
 
-  return { DkimDTO, DkimParser, DkimValidator };
+  // --- ARC (RFC 8617): each server that handles the message can add a set of three headers, numbered
+  // i=1, 2, ...: the results it recorded (ARC-Authentication-Results), a DKIM-style signature of the
+  // message (ARC-Message-Signature), and a seal over every set so far (ARC-Seal).
+  const arcKeys = ['arc-authentication-results', 'arc-message-signature', 'arc-seal'];
+
+  class ArcValidator {
+    constructor(dkim = new DkimValidator()) {
+      this.dkim = dkim;
+    }
+
+    async verify(email) {
+      const fields = this.dkim.getRawHeaderFields(email.rawHeaders).filter(field => arcKeys.includes(field.key));
+      if (!fields.length) return { status: 'none', sets: [] };
+      const sets = new Map();
+      const signatureIndex = new Map();
+      let amsCount = 0;
+      for (const field of fields) {
+        const value = field.raw.slice(field.raw.indexOf(':') + 1);
+        const instance = Number(value.match(/(?:^|;)[ \t\r\n]*i[ \t\r\n]*=[ \t\r\n]*(\d{1,2})[ \t\r\n]*(?:;|$)/)?.[1]);
+        if (!instance) return { status: 'fail', error: 'An ARC header has no valid instance number (i=)', sets: [] };
+        const set = sets.get(instance) || {};
+        if (set[field.key]) return { status: 'fail', error: `Instance ${instance} has more than one ${field.raw.slice(0, field.raw.indexOf(':'))}`, sets: [] };
+        set[field.key] = field;
+        sets.set(instance, set);
+        if (field.key === 'arc-message-signature') signatureIndex.set(instance, amsCount++);
+      }
+      const count = Math.max(...sets.keys());
+      if (count > 50) return { status: 'fail', error: 'More than 50 ARC sets', sets: [] };
+      for (let i = 1; i <= count; i++) {
+        if (!sets.has(i) || arcKeys.some(key => !sets.get(i)[key])) {
+          return { status: 'fail', error: `ARC set ${i} is missing or incomplete`, sets: [] };
+        }
+      }
+
+      const results = [];
+      for (let i = 1; i <= count; i++) {
+        const set = sets.get(i);
+        const value = name => set[name].raw.slice(set[name].raw.indexOf(':') + 1);
+        const sealTags = dns.parseTags(value('arc-seal')).tags;
+        const ams = new DkimParser().parse(value('arc-message-signature'), signatureIndex.get(i));
+        const [amsResult, seal] = await Promise.all([
+          this.dkim.verify(email, ams, { field: 'arc-message-signature', arc: true }),
+          this.verifySeal(email, sets, i, sealTags)
+        ]);
+        results.push({
+          instance: i, sealer: sealTags.d || null, selector: sealTags.s || null, cv: (sealTags.cv || '').toLowerCase(),
+          time: sealTags.t ? Number(sealTags.t) : null, seal, ams: { ...amsResult, dkim: ams },
+          recorded: value('arc-authentication-results').replace(/^[ \t\r\n]*i[ \t\r\n]*=[ \t\r\n]*\d+[ \t\r\n]*;/, '').trim(),
+          raw: arcKeys.map(key => set[key].raw)
+        });
+      }
+      return { status: this.chainStatus(results), sets: results };
+    }
+
+    // The seal of set i covers sets 1..i: in each, the results, the message signature, then the seal.
+    async verifySeal(email, sets, i, tags) {
+      if (!algorithms[tags.a] || !tags.b || !tags.d || !tags.s || !['none', 'pass', 'fail'].includes((tags.cv || '').toLowerCase())) {
+        return { valid: false, error: 'Missing or invalid ARC-Seal tag' };
+      }
+      let data = '';
+      for (let k = 1; k <= i; k++) {
+        for (const key of arcKeys) {
+          let raw = sets.get(k)[key].raw;
+          if (k === i && key === 'arc-seal') {
+            const split = raw.indexOf(':') + 1;
+            raw = raw.slice(0, split) + raw.slice(split).replace(/(^|;)([ \t\r\n]*b[ \t\r\n]*=)[^;]*/, '$1$2');
+          }
+          data += this.dkim.canonicalizeHeader(raw, 'relaxed');
+        }
+      }
+      data = data.slice(0, -2);
+      let signature;
+      try {
+        signature = decodeBase64(tags.b);
+      } catch {
+        return { valid: false, error: 'Invalid ARC-Seal signature' };
+      }
+      const record = await this.dkim.fetchPublicKey(tags.s, tags.d);
+      if (record.error) return { valid: null, error: record.error, keyName: tags.s + '._domainkey.' + tags.d };
+      const check = await this.dkim.checkSignature(record, { a: tags.a, d: tags.d }, signature, wireBytes(data, email));
+      return { valid: check.status === 'unavailable' ? null : check.valid, error: check.error || null, key: check.key };
+    }
+
+    chainStatus(sets) {
+      const latest = sets.at(-1);
+      if (sets.some((set, index) => set.cv === 'fail' || set.cv !== (index === 0 ? 'none' : 'pass'))) return 'fail';
+      if (sets.some(set => set.seal.valid === false)) return 'fail';
+      if (sets.some(set => set.seal.valid === null)) return 'unavailable';
+      if (latest.ams.valid) return 'pass';
+      return latest.ams.bodyMissing || ['temperror', 'unavailable'].includes(latest.ams.status) ? 'unavailable' : 'fail';
+    }
+  }
+
+  return { DkimDTO, DkimParser, DkimValidator, ArcValidator };
 }));

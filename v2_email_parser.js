@@ -13,6 +13,8 @@
     root.EmailAddress = modules.EmailAddress;
     root.IpAddress = modules.IpAddress;
     root.parseMailDate = modules.parseMailDate;
+    root.MimeParser = modules.MimeParser;
+    root.HeaderInsights = modules.HeaderInsights;
     root.RelayParser = modules.RelayParser;
     root.RelayDTO = modules.RelayDTO;
     root.ServerValidationParser = modules.ServerValidationParser;
@@ -109,6 +111,8 @@
       }
 
       const email = new EmailDTO(rawText, rawHeaders, headers, body, []);
+      // Pasted headers (e.g. from a mail client's "Show original") often come without the body.
+      email.headersOnly = !body.trim();
       email.wireBytes = wireBytes;
       return email;
     }
@@ -365,46 +369,69 @@
       this.service = null;
       this.results = [];
       this.fullHeader = null;
+      // Every Authentication-Results header, topmost (most recent) first.
+      this.headers = [];
     }
   }
 
+  // Split an Authentication-Results value on ';' outside comments and quoted strings, keeping each
+  // clause's comment text apart: "spf=pass (sender IP is 192.0.2.1) smtp.mailfrom=a.example".
+  function resultClauses(value) {
+    const clauses = [{ text: '', comment: '' }];
+    let depth = 0;
+    let quoted = false;
+    for (let i = 0; i < value.length; i++) {
+      const char = value[i];
+      const clause = clauses.at(-1);
+      if (quoted) {
+        clause.text += char;
+        if (char === '\\') clause.text += value[++i] ?? '';
+        else if (char === '"') quoted = false;
+      } else if (depth) {
+        if (char === '\\') { clause.comment += value[++i] ?? ''; continue; }
+        if (char === '(') depth++;
+        if (char === ')' && --depth === 0) continue;
+        clause.comment += char;
+      } else if (char === '(') {
+        depth = 1;
+        if (clause.comment) clause.comment += ' ';
+      } else if (char === '"') {
+        quoted = true;
+        clause.text += char;
+      } else if (char === ';') {
+        clauses.push({ text: '', comment: '' });
+      } else {
+        clause.text += char;
+      }
+    }
+    return clauses.map(clause => ({ text: clause.text.replace(/\s+/g, ' ').trim(), comment: clause.comment.replace(/\s+/g, ' ').trim() }))
+      .filter(clause => clause.text || clause.comment);
+  }
+
   class ServerValidationParser {
+    parseOne(header) {
+      const [first, ...rest] = resultClauses(header);
+      const [service = null, version = null] = (first?.text || '').split(/\s+/);
+      const results = [];
+      for (const clause of rest) {
+        const match = clause.text.match(/^([a-z0-9_.-]+)(?:\/\d+)?\s*=\s*([a-z0-9_-]+)\s*(.*)$/i);
+        if (!match) continue;
+        const props = {};
+        for (const [, key, raw] of match[3].matchAll(/([a-z0-9_.-]+)\s*=\s*("(?:[^"\\]|\\.)*"|[^\s;]+)/gi)) {
+          props[key.toLowerCase()] = raw.replace(/^"|"$/g, '');
+        }
+        results.push({ method: match[1].toLowerCase(), result: match[2].toLowerCase(), props, comment: clause.comment || null,
+          raw: clause.text + (clause.comment ? ' (' + clause.comment + ')' : '') });
+      }
+      return { service, version, results, raw: header };
+    }
+
     parse(headerValue) {
       const dto = new ServerValidationDTO();
-      if (!headerValue) return dto;
-
-      const header = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-      dto.fullHeader = header;
-
-      const parts = header.split(';').map(p => p.trim()).filter(p => p);
-
-      if (parts.length > 0) {
-        dto.service = parts[0];
-
-        for (let i = 1; i < parts.length; i++) {
-          const part = parts[i];
-          const eqIndex = part.indexOf('=');
-          if (eqIndex !== -1) {
-            const method = part.substring(0, eqIndex).trim();
-            const rest = part.substring(eqIndex + 1).trim();
-            
-            const spaceIndex = rest.indexOf(' ');
-            let result = rest;
-            let props = '';
-            
-            if (spaceIndex !== -1) {
-                result = rest.substring(0, spaceIndex);
-                props = rest.substring(spaceIndex + 1);
-            }
-            
-            dto.results.push({
-                method: method.toLowerCase(),
-                result: result.toLowerCase(),
-                props: props,
-                raw: part
-            });
-          }
-        }
+      const headers = (Array.isArray(headerValue) ? headerValue : [headerValue]).filter(value => typeof value === 'string');
+      dto.headers = headers.map(header => this.parseOne(header));
+      if (dto.headers.length) {
+        Object.assign(dto, { service: dto.headers[0].service, results: dto.headers[0].results, fullHeader: dto.headers[0].raw });
       }
       return dto;
     }
@@ -515,13 +542,373 @@
       })().catch(() => null);
       if (hooks) return pending;
       ownerCache.set(ip.text, pending);
+      // Keep only answers, so a later lookup can retry after a network error.
+      pending.then(result => { if (!result) ownerCache.delete(ip.text); });
     }
     return ownerCache.get(ip.text);
   }
 
-  const IpAddress = { parseIpv6, embeddedIpv4, networkOwner, parseCymru, rdapSummary };
+  const IpAddress = { parseIpv6, embeddedIpv4, networkOwner, parseCymru, rdapSummary, clearCache: () => ownerCache.clear() };
 
-  const exports = { EmailDTO, EmailParser, parseEmail, decodeMimeWords, EmailAddress, IpAddress, parseMailDate, RelayDTO, RelayParser, ServerValidationDTO, ServerValidationParser };
+  // --- MIME structure: the parts of a message, decoded, with their types and file names ---
+  function headerFields(block) {
+    const fields = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (/^[ \t]/.test(line) && fields.length) fields.at(-1).value += ' ' + line.trim();
+      else if (line.includes(':')) fields.push({ name: line.slice(0, line.indexOf(':')).trim().toLowerCase(), value: line.slice(line.indexOf(':') + 1).trim() });
+    }
+    return fields;
+  }
+
+  // "text/plain; charset=utf-8", including RFC 2231 forms such as filename*=UTF-8''na%C3%AFve.pdf
+  function headerParams(value) {
+    const [main, ...rest] = String(value || '').match(/(?:"(?:[^"\\]|\\.)*"|[^;])+/g) || [''];
+    const params = {};
+    const pieces = {};
+    for (const item of rest) {
+      const at = item.indexOf('=');
+      if (at < 0) continue;
+      const key = item.slice(0, at).trim().toLowerCase();
+      let raw = item.slice(at + 1).trim();
+      if (raw.startsWith('"')) raw = raw.slice(1, -1).replace(/\\(.)/g, '$1');
+      const continued = key.match(/^([^*]+)\*(\d+)(\*?)$/);
+      if (continued) (pieces[continued[1]] ||= []).push({ index: Number(continued[2]), raw, encoded: Boolean(continued[3]) });
+      else if (key.endsWith('*')) params[key.slice(0, -1)] = decodeExtended(raw, true);
+      else params[key] = raw;
+    }
+    for (const [key, list] of Object.entries(pieces)) {
+      list.sort((a, b) => a.index - b.index);
+      params[key] = decodeExtended(list.map(piece => piece.raw).join(''), list[0].encoded);
+    }
+    return { value: main.trim().toLowerCase(), params };
+  }
+
+  function decodeExtended(raw, encoded) {
+    if (!encoded) return raw;
+    const match = raw.match(/^([^']*)'[^']*'(.*)$/);
+    const charset = match ? match[1] || 'utf-8' : 'utf-8';
+    const text = match ? match[2] : raw;
+    const bytes = [];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '%' && /^[0-9a-f]{2}$/i.test(text.slice(i + 1, i + 3))) {
+        bytes.push(parseInt(text.slice(i + 1, i + 3), 16));
+        i += 2;
+      } else {
+        bytes.push(text.charCodeAt(i) & 255);
+      }
+    }
+    return decodeCharset(Uint8Array.from(bytes), charset);
+  }
+
+  function decodeCharset(bytes, charset) {
+    try {
+      return new TextDecoder(charset || 'utf-8').decode(bytes);
+    } catch {
+      return new TextDecoder('windows-1252').decode(bytes);
+    }
+  }
+
+  function stringBytes(text, wire) {
+    return wire ? Uint8Array.from(text, char => char.charCodeAt(0) & 255) : new TextEncoder().encode(text);
+  }
+
+  // Returns the decoded bytes, plus the text as-is when a pasted (already decoded) part needs no decoding.
+  function decodeTransfer(raw, encoding, wire) {
+    if (encoding === 'base64') {
+      try {
+        return { bytes: Uint8Array.from(atob(raw.replace(/[^A-Za-z0-9+/=]/g, '')), char => char.charCodeAt(0)) };
+      } catch {
+        return { bytes: stringBytes(raw, wire) };
+      }
+    }
+    if (encoding === 'quoted-printable') {
+      const text = raw.replace(/=\r?\n/g, '');
+      const bytes = [];
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] === '=' && /^[0-9a-f]{2}$/i.test(text.slice(i + 1, i + 3))) {
+          bytes.push(parseInt(text.slice(i + 1, i + 3), 16));
+          i += 2;
+        } else {
+          bytes.push(...stringBytes(text[i], wire));
+        }
+      }
+      return { bytes: Uint8Array.from(bytes) };
+    }
+    return wire ? { bytes: stringBytes(raw, true) } : { bytes: stringBytes(raw, false), text: raw };
+  }
+
+  function splitMultipart(body, boundary) {
+    const delimiter = '--' + boundary;
+    const parts = [];
+    let current = null;
+    for (const line of body.split(/\r?\n/)) {
+      if (line.startsWith(delimiter)) {
+        const rest = line.slice(delimiter.length);
+        if (rest.startsWith('--')) break;
+        if (/^[ \t]*$/.test(rest)) {
+          if (current) parts.push(current);
+          current = [];
+          continue;
+        }
+      }
+      if (current) current.push(line);
+    }
+    if (current) parts.push(current);
+    return parts.map(lines => lines.join('\r\n'));
+  }
+
+  class MimeParser {
+    parse(email) {
+      this.count = 0;
+      return this.parsePart(headerFields(email.rawHeaders), email.body, Boolean(email.wireBytes), 0, 'text/plain');
+    }
+
+    parsePart(fields, body, wire, depth, defaultType) {
+      const field = name => fields.find(entry => entry.name === name)?.value;
+      const type = headerParams(field('content-type') || defaultType);
+      const disposition = headerParams(field('content-disposition') || '');
+      const encoding = (field('content-transfer-encoding') || '7bit').trim().toLowerCase();
+      const rawName = disposition.params.filename || type.params.name || null;
+      const part = {
+        contentType: type.value || defaultType, charset: type.params.charset || null, disposition: disposition.value || null,
+        filename: rawName ? decodeMimeWords(rawName) : null, contentId: field('content-id')?.replace(/^<|>$/g, '') || null,
+        encoding, size: 0, children: [], text: null
+      };
+      this.count++;
+      if (part.contentType.startsWith('multipart/') && type.params.boundary && depth < 20 && this.count < 500) {
+        const childDefault = part.contentType === 'multipart/digest' ? 'message/rfc822' : 'text/plain';
+        for (const chunk of splitMultipart(body, type.params.boundary)) {
+          const split = chunk.match(/\r?\n\r?\n/);
+          const headerBlock = chunk.startsWith('\r\n') || chunk.startsWith('\n') || !split ? '' : chunk.slice(0, split.index);
+          const childBody = headerBlock ? chunk.slice(split.index + split[0].length) : chunk.replace(/^\r?\n/, '');
+          part.children.push(this.parsePart(headerFields(headerBlock), childBody, wire, depth + 1, childDefault));
+        }
+        part.size = part.children.reduce((sum, child) => sum + child.size, 0);
+        return part;
+      }
+      const decoded = decodeTransfer(body, encoding, wire);
+      part.size = decoded.bytes.length;
+      if (part.contentType.startsWith('text/') && part.disposition !== 'attachment') {
+        part.text = decoded.text ?? decodeCharset(decoded.bytes, part.charset || 'utf-8');
+      }
+      return part;
+    }
+
+    // Leaf parts in order, each with whether it's an attachment rather than message text.
+    flatten(part, out = []) {
+      if (part.children.length) {
+        for (const child of part.children) this.flatten(child, out);
+      } else {
+        const isText = part.text !== null && !part.filename;
+        out.push({ ...part, attachment: !isText });
+      }
+      return out;
+    }
+  }
+
+  // --- Header insights: what a header is for, how to group them, spam verdicts and warning signs ---
+  const HeaderInsights = (() => {
+    // RFC 5322 allows at most one of each of these.
+    const singletons = ['from', 'sender', 'reply-to', 'to', 'cc', 'bcc', 'subject', 'date', 'message-id', 'in-reply-to', 'references'];
+    const spamHeader = /^(x-ms-exchange-organization-scl|x-microsoft-antispam(-mailbox-delivery)?|x-forefront-antispam-report|x-spam-[a-z-]+|x-ham-report)$/;
+
+    const groups = [
+      { id: 'people', title: 'Sender and recipients', match: name => /^(from|sender|reply-to|to|cc|bcc|return-path|delivered-to|x-original-to|envelope-to|resent-[a-z-]+)$/.test(name) },
+      { id: 'message', title: 'Message', match: name => /^(subject|date|message-id|in-reply-to|references|thread-topic|thread-index|importance|x-priority|priority|sensitivity|content-[a-z-]+|mime-version|accept-language|organization|x-entity-ref-id)$/.test(name) },
+      { id: 'auth', title: 'Authentication', match: name => /^(dkim-signature|arc-[a-z-]+|authentication-results(-original)?|received-spf|x-google-dkim-signature|bimi-[a-z-]+|x-original-authentication-results)$/.test(name) },
+      { id: 'spam', title: 'Spam filter verdicts', match: name => spamHeader.test(name) },
+      { id: 'route', title: 'Route', match: name => /^(received|x-received|x-originating-ip|x-sender-ip|x-forwarded-to|x-forwarded-for)$/.test(name) },
+      { id: 'list', title: 'Mailing list and bulk mail', match: name => /^(list-[a-z-]+|precedence|feedback-id|x-feedback-id|auto-submitted|x-auto-response-suppress|x-report-abuse(-to)?|x-complaints-to|x-csa-complaints|x-abuse[a-z-]*)$/.test(name) },
+      { id: 'service', title: 'Sending software and service', match: name => /^(x-mailer|user-agent|x-mailgun-[a-z-]+|x-sg-[a-z-]+|x-ses-[a-z-]+|x-sfmc-[a-z-]+|x-job|x-mc-[a-z-]+|x-mandrill-[a-z-]+|x-pm-[a-z-]+|x-sid-[a-z-]+|x-campaign[a-z-]*|x-hs-[a-z-]+|x-klaviyo-[a-z-]+|x-sender-id|x-sendgrid-[a-z-]+)$/.test(name) },
+      { id: 'microsoft', title: 'Microsoft Exchange internals', folded: true, match: name => /^x-(ms|microsoft|forefront)-|^x-incomingtopheadermarker$|^x-eoptenantattributedmessage$/.test(name) },
+      { id: 'google', title: 'Google internals', folded: true, match: name => /^x-(gm|google)-/.test(name) },
+      { id: 'other', title: 'Other', match: () => true }
+    ];
+
+    function category(name) {
+      return groups.find(group => group.match(String(name).toLowerCase())).id;
+    }
+
+    const notes = {
+      'from': 'The author shown to you. DMARC checks this domain.',
+      'sender': 'Who actually sent it on the author\'s behalf, such as an assistant or a mailing list.',
+      'reply-to': 'Where replies go, if not to From.',
+      'to': 'Recipients as written by the sender. The addresses it was actually delivered to can differ.',
+      'cc': 'Copied recipients as written by the sender.',
+      'bcc': 'Hidden recipients. Normally removed before delivery.',
+      'subject': 'The subject line.',
+      'date': 'When the sender\'s software says the message was written.',
+      'message-id': 'A unique ID the sending system gave the message.',
+      'in-reply-to': 'The message this replies to, used for threading.',
+      'references': 'Earlier messages in the conversation, used for threading.',
+      'return-path': 'The envelope sender (bounce address), added at delivery. SPF checks its domain.',
+      'delivered-to': 'The mailbox the message was delivered to.',
+      'x-original-to': 'The address the message was originally sent to, before forwarding or aliases.',
+      'envelope-to': 'The envelope recipient at delivery.',
+      'received': 'One relay hop, added by the server that accepted the message.',
+      'x-received': 'An internal step inside the provider, such as between Google\'s servers.',
+      'x-originating-ip': 'The address of the sender\'s device or webmail session, if the provider records it.',
+      'dkim-signature': 'A domain\'s signature over chosen headers and the body.',
+      'x-google-dkim-signature': 'Google\'s internal signature. Other receivers don\'t use it for DKIM.',
+      'authentication-results': 'What a receiving server concluded about SPF, DKIM and DMARC.',
+      'authentication-results-original': 'Results recorded before the message was forwarded.',
+      'received-spf': 'The SPF result recorded by a receiving server.',
+      'arc-seal': 'ARC: a forwarding server\'s seal over the ARC sets so far.',
+      'arc-message-signature': 'ARC: a forwarding server\'s signature of the message, like DKIM.',
+      'arc-authentication-results': 'ARC: the authentication results a server recorded, preserved for later servers.',
+      'bimi-selector': 'Which BIMI record (brand logo) the sender wants used.',
+      'bimi-location': 'The brand logo location a receiver found for this message.',
+      'mime-version': 'Marks the message as MIME formatted.',
+      'content-type': 'How the body is structured: plain text, HTML, attachments.',
+      'content-transfer-encoding': 'How the body is encoded for transport.',
+      'content-language': 'The language of the message.',
+      'thread-topic': 'Outlook conversation threading.',
+      'thread-index': 'Outlook conversation threading.',
+      'importance': 'Priority set by the sender.',
+      'x-priority': 'Priority set by the sender.',
+      'list-unsubscribe': 'The address or link a mail client\'s Unsubscribe button uses.',
+      'list-unsubscribe-post': 'Enables one-click unsubscribe (RFC 8058).',
+      'list-id': 'Identifies the mailing list.',
+      'precedence': 'Marks bulk or list mail, so auto-replies skip it.',
+      'feedback-id': 'Lets mailbox providers report spam complaints to the sender per campaign.',
+      'x-feedback-id': 'Lets mailbox providers report spam complaints to the sender per campaign.',
+      'auto-submitted': 'Marks automatically generated mail.',
+      'x-auto-response-suppress': 'Asks Exchange not to send automatic replies.',
+      'x-mailer': 'The software that wrote the message.',
+      'user-agent': 'The software that wrote the message.',
+      'x-ms-exchange-organization-scl': 'Microsoft\'s spam score for your mailbox: -1 means not scanned, 0 to 1 not spam, 5 and above spam.',
+      'x-microsoft-antispam': 'Microsoft\'s filter details. BCL is the bulk level, 0 to 9.',
+      'x-microsoft-antispam-mailbox-delivery': 'Where Microsoft delivered the message: dest:I is the Inbox, dest:J is Junk.',
+      'x-forefront-antispam-report': 'Microsoft\'s filter report: SFV is the verdict, CAT the category, CIP the sending IP.',
+      'x-spam-status': 'A spam filter\'s verdict and score, usually SpamAssassin.',
+      'x-spam-flag': 'A spam filter\'s yes or no verdict.',
+      'x-spam-score': 'A spam filter\'s score.',
+      'x-incomingtopheadermarker': 'Microsoft internal marker.'
+    };
+
+    function describe(name) {
+      const key = String(name).toLowerCase();
+      if (notes[key]) return notes[key];
+      if (/^x-(microsoft|forefront)-.*-untrusted$/.test(key)) return 'Copied from the sending organization\'s own Microsoft system, so it says nothing about your mailbox.';
+      if (/^x-ms-exchange-crosstenant-/.test(key)) return 'Microsoft 365 routing between organizations.';
+      if (/^x-ms-exchange-organization-/.test(key)) return 'Set by Microsoft Exchange for the receiving organization.';
+      if (/^x-(ms|microsoft)-/.test(key)) return 'Microsoft Exchange internal data.';
+      if (/^x-(gm|google)-/.test(key)) return 'Google internal data.';
+      if (/^list-/.test(key)) return 'Mailing list information.';
+      if (/^content-/.test(key)) return 'Describes the body\'s format.';
+      if (/^x-spam-/.test(key)) return 'Written by a spam filter, usually SpamAssassin.';
+      const services = [[/^x-mailgun-/, 'Mailgun'], [/^x-sg-|^x-sendgrid-/, 'SendGrid'], [/^x-ses-/, 'Amazon SES'], [/^x-sfmc-/, 'Salesforce Marketing Cloud'],
+        [/^x-mc-|^x-mandrill-/, 'Mailchimp'], [/^x-pm-/, 'Postmark'], [/^x-hs-/, 'HubSpot'], [/^x-klaviyo-/, 'Klaviyo']];
+      const service = services.find(([pattern]) => pattern.test(key));
+      if (service) return `Sending details from ${service[1]}.`;
+      return null;
+    }
+
+    function semicolonTags(value) {
+      const tags = {};
+      for (const part of String(value).split(';')) {
+        const colon = part.indexOf(':');
+        if (colon > 0) tags[part.slice(0, colon).trim().toUpperCase()] = part.slice(colon + 1).trim();
+      }
+      return tags;
+    }
+
+    const sfvVerdicts = {
+      NSPM: ['Not spam', 'pass'], SPM: ['Spam', 'fail'], SKN: ['Marked safe before filtering', 'neutral'], SKA: ['Allowed sender', 'neutral'],
+      SKB: ['Blocked sender', 'fail'], SKI: ['Internal message', 'neutral'], SKQ: ['Released from quarantine', 'neutral'],
+      SKS: ['Marked spam before filtering', 'fail'], SFE: ['On your safe senders list', 'neutral'], BLK: ['On your blocked senders list', 'fail']
+    };
+    const categories = {
+      BULK: 'Bulk', DIMP: 'Domain impersonation', GIMP: 'Impersonation', HPHSH: 'High-confidence phishing', HSPM: 'High-confidence spam',
+      MALW: 'Malware', PHSH: 'Phishing', SPM: 'Spam', SPOOF: 'Spoofing', UIMP: 'User impersonation', OSPM: 'Outbound spam', INTOS: 'Internal phishing'
+    };
+
+    // The receiving provider's spam verdicts, from the headers it adds. Microsoft's "-Untrusted" copies come from the
+    // sending organization and are only listed, never used.
+    function spamVerdicts(fields) {
+      const value = key => fields.find(field => field.key === key)?.value?.trim();
+      const items = [];
+      let provider = null;
+      const scl = value('x-ms-exchange-organization-scl');
+      if (scl !== undefined && /^-?\d+$/.test(scl)) {
+        provider = 'Microsoft';
+        const level = Number(scl);
+        const [label, tone] = level < 0 ? ['Not scanned', 'neutral'] : level <= 1 ? ['Not spam', 'pass'] : level <= 4 ? ['Low spam score', 'neutral']
+          : level <= 6 ? ['Spam', 'fail'] : ['High-confidence spam', 'fail'];
+        items.push({ label, tone, detail: `SCL ${level}`, title: level < 0 ? 'Spam confidence level -1: filtering was skipped, usually for trusted or internal senders'
+          : `Spam confidence level ${level} (0 to 1 is not spam, 5 and above is spam)` });
+      }
+      const report = value('x-forefront-antispam-report');
+      if (report) {
+        provider = 'Microsoft';
+        const tags = semicolonTags(report);
+        const verdict = sfvVerdicts[(tags.SFV || '').toUpperCase()];
+        if (verdict && scl === undefined) items.push({ label: verdict[0], tone: verdict[1], detail: `SFV:${tags.SFV}`, title: 'Microsoft spam filter verdict' });
+        const category = (tags.CAT || '').toUpperCase();
+        if (category && category !== 'NONE') {
+          items.push({ label: categories[category] || category, tone: category === 'BULK' ? 'neutral' : 'fail', detail: `CAT:${category}`, title: 'The category Microsoft\'s filter assigned' });
+        }
+      }
+      const bcl = value('x-microsoft-antispam')?.match(/(?:^|;)\s*BCL:(\d)\b/i)?.[1];
+      if (bcl !== undefined) {
+        provider = 'Microsoft';
+        const level = Number(bcl);
+        items.push({ label: level === 0 ? 'Not bulk' : `Bulk level ${level}`, tone: level >= 8 ? 'fail' : level >= 4 ? 'warn' : 'neutral',
+          detail: level === 0 ? 'BCL 0' : level <= 3 ? 'few complaints' : level <= 7 ? 'some complaints' : 'many complaints',
+          title: `Bulk complaint level ${level} of 9: how often mail from this bulk sender draws complaints` });
+      }
+      const destination = value('x-microsoft-antispam-mailbox-delivery')?.match(/(?:^|;)\s*dest:([A-Z])\b/i)?.[1]?.toUpperCase();
+      if (destination) {
+        provider = 'Microsoft';
+        items.push(destination === 'I' ? { label: 'Delivered to Inbox', tone: 'pass', detail: 'dest:I', title: 'Microsoft put the message in the Inbox' }
+          : destination === 'J' ? { label: 'Delivered to Junk', tone: 'fail', detail: 'dest:J', title: 'Microsoft put the message in the Junk folder' }
+          : { label: `Folder ${destination}`, tone: 'neutral', detail: `dest:${destination}`, title: 'Where Microsoft delivered the message' });
+      }
+      const status = value('x-spam-status');
+      const flag = value('x-spam-flag');
+      if (status || flag) {
+        provider = provider || 'Spam filter';
+        const spam = /^yes\b/i.test(status || flag);
+        const score = status?.match(/\bscore=(-?[\d.]+)/i)?.[1];
+        const required = status?.match(/\brequired=(-?[\d.]+)/i)?.[1];
+        items.push({ label: spam ? 'Spam' : 'Not spam', tone: spam ? 'fail' : 'pass', detail: score ? `score ${score}${required ? ` of ${required}` : ''}` : '',
+          title: 'X-Spam-Status, usually from SpamAssassin. Any server on the way could have added it.' });
+      }
+      const untrusted = fields.filter(field => /^x-(microsoft|forefront)-.*-untrusted$/.test(field.key)).map(field => field.name || field.key);
+      return items.length ? { provider, items, untrusted } : null;
+    }
+
+    // Signs that a header was added to mislead: repeated single-use headers, and receiver results written where only the sender writes.
+    function anomalies(fields, { covered = new Set(), receiver = null } = {}) {
+      const issues = [];
+      for (const key of singletons) {
+        const copies = fields.filter(field => field.key === key);
+        if (copies.length < 2) continue;
+        const name = copies[0].name || key;
+        const signed = copies.filter(field => covered.has(field.key + ':' + field.instance)).length;
+        issues.push({ kind: 'duplicate', key, indexes: copies.map(field => field.index),
+          message: signed && signed < copies.length
+            ? `There are ${copies.length} ${name} headers and only ${signed === 1 ? 'one is' : `${signed} are`} signed. A mail client may show you the unsigned one.`
+            : `There are ${copies.length} ${name} headers, where a message should have one. Mail clients may show a different one than the checks used.` });
+      }
+      const oldestHop = fields.filter(field => field.key === 'received').at(-1);
+      const results = fields.filter(field => field.key === 'authentication-results');
+      if (oldestHop && receiver) {
+        for (const field of results.slice(1)) {
+          const service = field.value.split(';')[0].trim().split(/\s+/)[0].toLowerCase();
+          if (field.index > oldestHop.index && service === receiver.toLowerCase()) {
+            issues.push({ kind: 'forged-results', key: field.key, indexes: [field.index],
+              message: `An Authentication-Results header naming ${receiver} sits below the oldest Received header, where the sender's software writes. It may be forged.` });
+          }
+        }
+      }
+      return issues;
+    }
+
+    return { singletons, groups, category, describe, spamVerdicts, anomalies };
+  })();
+
+  const exports = { EmailDTO, EmailParser, parseEmail, decodeMimeWords, EmailAddress, IpAddress, parseMailDate, MimeParser, HeaderInsights, RelayDTO, RelayParser, ServerValidationDTO, ServerValidationParser };
 
   if (dkimModule) {
     Object.assign(exports, dkimModule);

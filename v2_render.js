@@ -6,10 +6,16 @@ const errorMsg = document.getElementById('error-msg');
 const resultsDiv = document.getElementById('results');
 const headersOutput = document.getElementById('headers-output');
 const headersSignedToggle = document.getElementById('headers-signed-toggle');
+const headersSearch = document.getElementById('headers-search');
+const headersRawToggle = document.getElementById('headers-raw-toggle');
+const headersCount = document.getElementById('headers-count');
 const summaryOutput = document.getElementById('summary-output');
 const dkimOutput = document.getElementById('dkim-output');
 const spfOutput = document.getElementById('spf-output');
 const dmarcOutput = document.getElementById('dmarc-output');
+const contentOutput = document.getElementById('content-output');
+const domainOutput = document.getElementById('domain-output');
+const arcOutput = document.getElementById('arc-output');
 const themeSelector = document.getElementById('theme-selector');
 const copyToast = document.getElementById('copy-status');
 
@@ -20,6 +26,7 @@ function escapeHtml(value) {
 
 function verdictClass(result) {
     if (result === 'pass') return 'status-pass';
+    if (result === 'offline') return 'status-neutral';
     if (result === 'fail' || result === 'softfail' || result === 'permerror') return 'status-fail';
     return 'status-pending';
 }
@@ -29,8 +36,174 @@ function formatUnixTime(seconds) {
 }
 
 function verdictLabel(result) {
-    return { pending: 'Checking…', none: 'None', unavailable: 'Not verified',
+    return { pending: 'Checking…', none: 'None', unavailable: 'Not verified', offline: 'Offline',
         temperror: 'Temporary error', permerror: 'Policy error' }[result] || result.toUpperCase();
+}
+
+// --- Network: every request the page makes goes through fetch, so this one place logs them and offline mode blocks them ---
+const offlineMessage = 'offline mode is on';
+const network = { offline: false, requests: [] };
+try {
+    network.offline = localStorage.getItem('emailParserOffline') === '1';
+} catch {
+    // Without storage the setting lasts until the page is closed.
+}
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+    if (network.offline) return Promise.reject(new Error(offlineMessage));
+    try {
+        logRequest(new URL(input instanceof Request ? input.url : String(input), location.href));
+    } catch {
+        // Logging never stops a request.
+    }
+    return nativeFetch(input, init);
+};
+
+const networkDestinations = [
+    { id: 'dns', name: 'Cloudflare DNS', host: 'cloudflare-dns.com',
+        sends: 'Domain names: DKIM keys and the SPF, DMARC, MX, BIMI, MTA-STS and TLS reporting records, plus reverse DNS for the sending IP' },
+    { id: 'cymru', name: 'Team Cymru, through Cloudflare DNS', host: 'asn.cymru.com', sends: 'Relay IP addresses, to find the network that routes them' },
+    { id: 'rir', name: 'IP address registries', host: 'ARIN, RIPE NCC, APNIC, LACNIC, AFRINIC', sends: 'Relay IP addresses, to find who the network is registered to' },
+    { id: 'rdap', name: 'rdap.org', host: 'rdap.org', sends: 'The sender\'s domain, to find when it was registered' },
+    { id: 'logo', name: 'Brand logo host', host: '', sends: 'A request for the sender\'s logo image, the same for every recipient, when the Summary shows it or you click Show logo' }
+];
+
+function logRequest(url, kind = null) {
+    let dest = 'other';
+    let label = url.host;
+    if (kind) {
+        dest = kind;
+        label = url.href;
+    } else if (url.host === 'cloudflare-dns.com') {
+        const name = url.searchParams.get('name') || '';
+        dest = /\.asn\.cymru\.com$/i.test(name) ? 'cymru' : 'dns';
+        label = `${url.searchParams.get('type') || ''} ${name}`;
+    } else if (url.host === 'rdap.org') {
+        dest = 'rdap';
+        label = decodeURIComponent(url.pathname.replace(/^\/domain\//, ''));
+    } else if (/^rdap\.|\.rdap\./.test(url.host)) {
+        dest = 'rir';
+        label = `${url.host} · ${decodeURIComponent(url.pathname.split('/').pop())}`;
+    }
+    network.requests.push({ dest, label });
+    scheduleNetworkUpdate();
+}
+
+const networkMenuButton = document.getElementById('network-menu-btn');
+const networkPanel = document.getElementById('network-panel');
+let offlineSwitch;
+function buildNetworkPanel() {
+    networkPanel.innerHTML = `
+    <div class="network-switch-row">
+        <div>
+            <div class="network-title" id="offline-title">Offline mode</div>
+            <p class="network-help">Blocks every lookup. Checks then use only what's in the email, and what the receiving server recorded is still shown.</p>
+        </div>
+        <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="offline-title"><span class="switch-thumb"></span></button>
+    </div>
+    <div class="theme-panel-label">What leaves your browser</div>
+    <ul class="network-dests">${networkDestinations.map(dest => `
+        <li data-dest="${dest.id}">
+            <span class="network-dest-name">${escapeHtml(dest.name)}</span>
+            <span class="network-count"></span>
+            <span class="network-dest-sends">${escapeHtml(dest.sends)}</span>
+        </li>`).join('')}
+    </ul>
+    <p class="network-foot">The email itself never leaves your browser.</p>
+    <div class="network-actions">
+        <button type="button" class="dkim-advanced-toggle network-log-toggle" aria-controls="network-log" aria-expanded="false">
+            ${detailDisclosureIcon}<span>Requests for this email</span><span class="toggle-meta network-log-count"></span>
+        </button>
+        <ol id="network-log" class="network-log hidden"></ol>
+        <button type="button" class="btn btn-secondary network-recheck" title="Run every lookup again for this email">Recheck</button>
+    </div>`;
+    offlineSwitch = networkPanel.querySelector('.switch');
+    offlineSwitch.addEventListener('click', () => setOffline(!network.offline));
+    networkPanel.querySelector('.network-recheck').addEventListener('click', () => recheck());
+    updateNetworkControls();
+}
+
+let networkUpdatePending = false;
+function scheduleNetworkUpdate() {
+    if (networkUpdatePending) return;
+    networkUpdatePending = true;
+    requestAnimationFrame(() => {
+        networkUpdatePending = false;
+        updateNetworkControls();
+    });
+}
+
+function updateNetworkControls() {
+    if (!offlineSwitch) return;
+    const offline = network.offline;
+    networkMenuButton.classList.toggle('is-offline', offline);
+    networkMenuButton.querySelector('.network-label').textContent = offline ? 'Offline' : 'Online';
+    networkMenuButton.title = offline ? 'Offline mode: no lookups are made' : 'Network: see what this page looks up';
+    networkMenuButton.setAttribute('aria-label', offline ? 'Network: offline mode is on' : 'Network: online');
+    offlineSwitch.setAttribute('aria-checked', String(offline));
+    const counts = {};
+    for (const request of network.requests) counts[request.dest] = (counts[request.dest] || 0) + 1;
+    for (const item of networkPanel.querySelectorAll('[data-dest]')) {
+        const count = counts[item.dataset.dest] || 0;
+        item.querySelector('.network-count').textContent = offline ? 'Blocked' : currentEmail ? `${count} ${count === 1 ? 'request' : 'requests'}` : '';
+        item.classList.toggle('is-idle', offline || !count);
+    }
+    const total = network.requests.length;
+    networkPanel.querySelector('.network-log-count').textContent = offline ? 'none, offline' : String(total);
+    networkPanel.querySelector('.network-log').innerHTML = network.requests.map(request =>
+        `<li><span class="network-log-dest">${escapeHtml(networkDestinations.find(dest => dest.id === request.dest)?.name.split(',')[0] || 'Other')}</span>${escapeHtml(request.label)}</li>`).join('')
+        || `<li class="network-log-empty">${offline ? 'Nothing is sent while offline mode is on.' : currentEmail ? 'No requests yet.' : 'Load an email to see its lookups.'}</li>`;
+    const recheck = networkPanel.querySelector('.network-recheck');
+    recheck.disabled = !lastInput || offline;
+    const offlineChip = document.querySelector('.jump-offline');
+    if (offlineChip) offlineChip.hidden = !offline;
+}
+
+function setOffline(offline) {
+    network.offline = offline;
+    try {
+        localStorage.setItem('emailParserOffline', offline ? '1' : '0');
+    } catch {
+        // Only persistence is optional.
+    }
+    updateNetworkControls();
+    recheck();
+}
+
+function closeNetworkMenu(returnFocus) {
+    if (networkPanel.classList.contains('hidden')) return;
+    networkPanel.classList.add('hidden');
+    networkMenuButton.setAttribute('aria-expanded', 'false');
+    if (returnFocus) networkMenuButton.focus();
+}
+
+document.addEventListener('click', event => {
+    if (!event.target.closest('.network-menu')) closeNetworkMenu(false);
+    if (event.target.closest('.go-online-btn')) setOffline(false);
+    if (event.target.closest('.recheck-btn')) recheck();
+});
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeNetworkMenu(true);
+});
+
+// While offline, a lookup that couldn't run reads as Offline rather than as an error.
+function offlineStatus(status) {
+    return network.offline && (status === 'temperror' || status === 'unavailable') ? 'offline' : status;
+}
+
+function offlineVerdict(text) {
+    return `${text} Offline mode is on. <button type="button" class="link-toggle go-online-btn">Turn it off and recheck</button>`;
+}
+
+// Run the current email again, keeping the reader's place on the page.
+let lastInput = null;
+function recheck() {
+    if (!lastInput) return;
+    const top = scrollY;
+    const { input, source } = lastInput;
+    IpAddress.clearCache();
+    processRawEmail(input, startRun(), source);
+    scrollTo({ top, behavior: 'instant' });
 }
 
 // Define all themes
@@ -115,6 +288,88 @@ pasteInput.addEventListener('input', () => {
 
 const iconAttrs = 'aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
 const copiedIcon = `<svg width="16" height="16" ${iconAttrs}><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>`;
+const fileIcon = `<svg width="20" height="20" ${iconAttrs}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>`;
+const pasteKey = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘V' : 'Ctrl+V';
+
+// Once an email is loaded the drop zone shrinks to one line, so results start near the top.
+const loadedBar = document.createElement('div');
+loadedBar.className = 'loaded-info';
+loadedBar.innerHTML = `
+    <span class="loaded-icon" aria-hidden="true">${fileIcon}</span>
+    <span class="loaded-text"><span class="loaded-name"></span><span class="loaded-meta"></span></span>
+    <span class="loaded-actions">
+        <button type="button" class="btn btn-secondary loaded-paste">Paste text</button>
+        <button type="button" class="btn btn-primary loaded-choose">Choose file</button>
+    </span>`;
+dropZone.appendChild(loadedBar);
+document.querySelector('.drop-hint').textContent = `or press ${pasteKey} anywhere on the page to paste one`;
+
+function formatBytes(bytes) {
+    return bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function showLoaded(source) {
+    loadedBar.querySelector('.loaded-name').textContent = source.name;
+    loadedBar.querySelector('.loaded-meta').textContent = `${formatBytes(source.size)} · drop or paste (${pasteKey}) another email anywhere`;
+    dropZone.classList.add('is-compact');
+}
+
+function expandDropZone(focusPaste) {
+    dropZone.classList.remove('is-compact');
+    if (focusPaste) {
+        pasteInput.value = '';
+        pasteInput.focus();
+    }
+}
+
+loadedBar.querySelector('.loaded-paste').addEventListener('click', event => {
+    event.stopPropagation();
+    expandDropZone(true);
+});
+loadedBar.querySelector('.loaded-choose').addEventListener('click', event => {
+    event.stopPropagation();
+    fileInput.click();
+});
+
+// Files can be dropped anywhere on the page, not only on the drop zone.
+document.addEventListener('dragover', event => {
+    if (![...(event.dataTransfer?.types || [])].includes('Files')) return;
+    event.preventDefault();
+    dropZone.classList.add('hover');
+});
+document.addEventListener('dragleave', event => {
+    if (!event.relatedTarget) dropZone.classList.remove('hover');
+});
+document.addEventListener('drop', event => {
+    if (event.defaultPrevented || !event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    dropZone.classList.remove('hover');
+    processFile(event.dataTransfer.files[0]);
+});
+
+// Pasting an email anywhere (outside text fields) analyzes it straight away.
+function looksLikeEmail(text) {
+    return (text.match(/^[A-Za-z][A-Za-z0-9-]*:[ \t]*\S/gm) || []).length >= 2;
+}
+
+document.addEventListener('paste', event => {
+    if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable]')) return;
+    const file = [...(event.clipboardData?.files || [])][0];
+    if (file) {
+        event.preventDefault();
+        processFile(file);
+        return;
+    }
+    const text = event.clipboardData?.getData('text/plain') || '';
+    if (!text.trim()) return;
+    event.preventDefault();
+    if (!looksLikeEmail(text)) {
+        showToast(false, 'That doesn\'t look like an email. Paste the full message source, starting with its headers.');
+        return;
+    }
+    pasteInput.value = text;
+    processRawEmail(text, startRun(), { name: 'Pasted email', size: new Blob([text]).size });
+});
 const copyFailedIcon = `<svg width="16" height="16" ${iconAttrs}><path d="M6 6l12 12M18 6 6 18"/></svg>`;
 const clockIcon = `<svg width="18" height="18" ${iconAttrs}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
 
@@ -160,7 +415,7 @@ const lockIcon = `<svg class="lock-icon" aria-hidden="true" focusable="false" wi
 // How a header is covered by DKIM, best first; each header shows the best signature that lists it.
 const signatureBadges = {
     verified: { rank: 5, label: 'Covered by a verified DKIM signature', short: 'Verified', icon: statusIcon('pass') },
-    headers: { rank: 4, label: 'Covered by a DKIM signature whose headers verify; the body changed after signing', short: 'Headers verify, body changed', icon: statusIcon('ring') },
+    headers: { rank: 4, label: 'Covered by a DKIM signature whose headers verify; its body changed after signing or wasn\'t included', short: 'Headers verify, body doesn\'t', icon: statusIcon('ring') },
     expired: { rank: 3, label: 'Covered by an expired DKIM signature that still verifies', short: 'Expired', icon: statusIcon('warn') },
     unchecked: { rank: 2, label: 'Listed in a DKIM signature that couldn\'t be checked', short: 'Not checked', icon: statusIcon('unknown') },
     failed: { rank: 1, label: 'Listed in a DKIM signature that doesn\'t verify', short: 'Doesn\'t verify', icon: statusIcon('fail') }
@@ -187,7 +442,7 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 dropZone.addEventListener('click', (event) => {
-    if (!event.target.closest('.paste-container')) fileInput.click();
+    if (!event.target.closest('.paste-container, .loaded-actions')) fileInput.click();
 });
 
 fileInput.addEventListener('change', (e) => {
@@ -197,6 +452,16 @@ fileInput.addEventListener('change', (e) => {
     }
     // Reset value to allow re-selecting the same file
     fileInput.value = '';
+});
+
+let headersSearchTimer;
+headersSearch.addEventListener('input', () => {
+    clearTimeout(headersSearchTimer);
+    headersSearchTimer = setTimeout(displayHeaders, 120);
+});
+headersRawToggle.addEventListener('click', () => {
+    headersRawToggle.setAttribute('aria-pressed', String(headersRawToggle.getAttribute('aria-pressed') !== 'true'));
+    displayHeaders();
 });
 
 headersSignedToggle.innerHTML = lockIcon + '<span>Signed only</span>';
@@ -215,6 +480,7 @@ try {
     // The theme switcher still works when the browser blocks local storage.
 }
 applyTheme(allThemes.some(theme => theme.id === savedTheme) ? savedTheme : 'theme-auto');
+buildNetworkPanel();
 themeSelector.addEventListener('click', (event) => {
     const button = event.target.closest('.theme-btn');
     if (!button) return;
@@ -251,6 +517,8 @@ document.addEventListener('click', (event) => {
     button.setAttribute('aria-expanded', String(expanded));
     if (button.classList.contains('toggle-section-btn')) {
         button.title = expanded ? 'Collapse section' : 'Expand section';
+    } else if (button.classList.contains('link-toggle')) {
+        button.textContent = expanded ? 'Hide links' : 'Show links';
     } else if (button.classList.contains('toggle-all-spf')) {
         button.querySelector('span').textContent = expanded ? 'Collapse all' : 'Expand all';
     }
@@ -258,7 +526,7 @@ document.addEventListener('click', (event) => {
 
 // Every value field copies itself on click (or Enter/Space when focused) and confirms with a toast.
 const copyableSelector = [
-    '.data-card', '.subject-text', '.facts dd.mono', '.relay-details dd', '.route-host', '.route-ip', '.route-embedded', '.route-from', '.dmarc-domain', '.dmarc-address', '.spf-token', '.spf-ptr-name', '.dkim-domain',
+    '.data-card', '.subject-text', '.facts dd.mono', '.relay-details dd', '.route-host', '.route-ip', '.route-embedded', '.route-from', '.dmarc-domain', '.dmarc-address', '.spf-token', '.spf-ptr-name', '.net-owner-name', '.link-url', '.link-domain', '.dkim-domain',
     '.dkim-check-value', '.tech-value', '.spf-trace-record', '.spf-dns-cmd'
 ].join(', ');
 
@@ -302,6 +570,14 @@ async function writeClipboard(text) {
 }
 
 let toastTimer;
+function showToast(ok, message) {
+    copyToast.innerHTML = `${ok ? copiedIcon : copyFailedIcon}<span>${escapeHtml(message)}</span>`;
+    copyToast.classList.toggle('is-error', !ok);
+    copyToast.classList.add('visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => copyToast.classList.remove('visible'), 2600);
+}
+
 function showCopyToast(copied, text) {
     const flat = text.replace(/\s+/g, ' ').trim();
     const preview = flat.length > 48 ? flat.slice(0, 47) + '…' : flat;
@@ -346,7 +622,7 @@ async function processFile(file) {
     const run = startRun();
     try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        if (run === latestRun) await processRawEmail(bytes, run);
+        if (run === latestRun) await processRawEmail(bytes, run, { name: file.name, size: file.size });
     } catch (error) {
         showError(run, 'Could not read the file', error);
     }
@@ -355,6 +631,9 @@ async function processFile(file) {
 function startRun() {
     clearTimeout(pasteTimeout);
     currentEmail = null;
+    bimiCache.clear();
+    network.requests = [];
+    scheduleNetworkUpdate();
     errorMsg.classList.add('hidden');
     errorMsg.textContent = '';
     resultsDiv.classList.add('hidden');
@@ -365,55 +644,884 @@ function showError(run, message, error) {
     if (run !== latestRun) return;
     errorMsg.textContent = message + ': ' + error.message;
     errorMsg.classList.remove('hidden');
+    expandDropZone(false);
     console.error(error);
 }
 
-async function processRawEmail(input, run) {
+// source names a file or a page-wide paste; typing in the text box passes none, so the box stays open.
+async function processRawEmail(input, run, source = null) {
     if (run !== latestRun) return;
     try {
         const parser = new EmailParser();
         const email = typeof input === 'string' ? parser.parse(input) : parser.parseBytes(input);
         currentEmail = email;
+        lastInput = { input, source };
         const dkimParser = new DkimParser();
         email.dkim = new DkimValidator().getRawHeaderFields(email.rawHeaders)
             .filter(field => field.key === 'dkim-signature')
             .map((field, index) => dkimParser.parse(field.raw.slice(field.raw.indexOf(':') + 1), index));
 
-        displaySummary(getHeaderValue(email.headers, 'Subject'));
+        summaryState.checks = {};
+        summaryState.arc = null;
+        summaryState.reported = reportedAtDelivery(email);
+        summaryState.spam = HeaderInsights.spamVerdicts(headerFieldList(email));
+        Object.assign(summaryState, { bimi: null, dmarcDto: null, logoImg: null, logoFailed: false });
+        for (const id of Object.keys(jumpState)) delete jumpState[id];
+        for (const id of ['dkim', 'spf', 'dmarc', 'arc']) jumpState['section-' + id] = { result: 'pending', note: 'checking' };
+        jumpActive = null;
+        headersSearch.value = '';
+        displaySummary();
+        displayContent(email);
+        displayDomain(email, run);
         displayHeaders();
         displayRelay(traceHeaders(email), getHeaderValue(email.headers, 'Date'), relayHints(email));
-        displayServerValidation(getHeaderValue(email.headers, 'Authentication-Results'));
         displayDkim(email.dkim);
         displaySpfLoading();
         displayDmarcLoading();
-        
+        arcOutput.innerHTML = '<p class="note">Checking the ARC chain…</p>';
+        renderJumpBar();
+        const senderDomain = fromDomainOf(email);
+        if (senderDomain && !network.offline) {
+            bimiLookup(senderDomain).then(result => {
+                if (run !== latestRun) return;
+                summaryState.bimi = { ...result, domain: senderDomain };
+                displaySummary();
+                updateBimiNote();
+            });
+        }
+
         resultsDiv.classList.remove('hidden');
+        if (source) showLoaded(source);
+        scheduleJumpUpdate();
         await runVerification(email, run);
     } catch (err) {
         showError(run, 'Could not analyze the email', err);
     }
 }
 
-function displaySummary(subject, results = {}) {
-    const subj = Array.isArray(subject) ? subject[0] : subject;
-    const safeSubject = escapeHtml(subj ? decodeMimeWords(subj) : '(No Subject)');
-    const checks = ['DKIM', 'SPF', 'DMARC'].map(label => {
-        const result = results[label.toLowerCase()] || 'pending';
-        return `<div class="summary-group">
-            <div class="summary-label">${label}</div>
-            <div><span class="${verdictClass(result)} summary-pill">${escapeHtml(verdictLabel(result))}</span></div>
+// --- Jump bar: section links that stay at the top while scrolling, each with its section's status ---
+const jumpBar = document.getElementById('jump-bar');
+const jumpLabels = { 'section-summary': 'Summary', 'section-relay': 'Hops', 'section-content': 'Content', 'section-dmarc': 'DMARC',
+    'section-spf': 'SPF', 'section-dkim': 'DKIM', 'section-arc': 'ARC', 'section-domain': 'Domain', 'section-headers': 'Headers' };
+const jumpState = {};
+let jumpActive = null;
+
+function jumpTone(result) {
+    if (!result) return null;
+    if (result === 'pending' || result === 'pass') return result;
+    if (['fail', 'softfail', 'permerror'].includes(result)) return 'fail';
+    if (['temperror', 'unavailable', 'expired', 'warn'].includes(result)) return 'warn';
+    return 'neutral';
+}
+
+function setJumpStatus(id, result, note = null) {
+    const next = result ? { result, note } : null;
+    if (JSON.stringify(jumpState[id] ?? null) === JSON.stringify(next)) return;
+    if (next) jumpState[id] = next;
+    else delete jumpState[id];
+    renderJumpBar();
+}
+
+function jumpSections() {
+    return [...resultsDiv.querySelectorAll(':scope > section.section[id]')];
+}
+
+function renderJumpBar() {
+    jumpBar.innerHTML = jumpSections().map(section => {
+        const label = jumpLabels[section.id] || section.id;
+        const state = jumpState[section.id];
+        const tone = jumpTone(state?.result);
+        const said = state ? state.note || verdictLabel(state.result).toLowerCase() : '';
+        return `<a class="jump-link" href="#${section.id}" data-target="${section.id}"${section.id === jumpActive ? ' aria-current="location"' : ''}
+            ${said ? ` aria-label="${label}, ${escapeHtml(said)}" title="${label}: ${escapeHtml(said)}"` : ''}>${tone ? `<span class="jump-dot is-${tone}" aria-hidden="true"></span>` : ''}${label}</a>`;
+    }).join('') + `<button type="button" class="jump-offline"${network.offline ? '' : ' hidden'} title="Offline mode is on. Open the network settings">
+        <span class="network-dot" aria-hidden="true"></span>Offline</button>`;
+}
+
+function updateJumpActive() {
+    if (resultsDiv.classList.contains('hidden')) return;
+    const bar = jumpBar.getBoundingClientRect();
+    jumpBar.classList.toggle('is-stuck', bar.top <= 0.5 && scrollY > 0);
+    const sections = jumpSections().filter(section => section.offsetParent);
+    let active = null;
+    for (const section of sections) {
+        if (section.getBoundingClientRect().top <= bar.bottom + 24) active = section.id;
+        else break;
+    }
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2 && sections.length) active = sections.at(-1).id;
+    if (active === jumpActive) return;
+    jumpActive = active;
+    for (const link of jumpBar.querySelectorAll('.jump-link')) {
+        if (link.dataset.target === active) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+    }
+    // On narrow screens the bar scrolls sideways; keep the current section's link in view.
+    const link = jumpBar.querySelector('[aria-current]');
+    if (link && (link.offsetLeft < jumpBar.scrollLeft || link.offsetLeft + link.offsetWidth > jumpBar.scrollLeft + jumpBar.clientWidth)) {
+        jumpBar.scrollTo({ left: link.offsetLeft - 12, behavior: 'smooth' });
+    }
+}
+
+let jumpFrame = 0;
+function scheduleJumpUpdate() {
+    if (!jumpFrame) jumpFrame = requestAnimationFrame(() => {
+        jumpFrame = 0;
+        updateJumpActive();
+    });
+}
+addEventListener('scroll', scheduleJumpUpdate, { passive: true });
+addEventListener('resize', scheduleJumpUpdate);
+
+jumpBar.addEventListener('click', event => {
+    if (event.target.closest('.jump-offline')) {
+        // Keep the page-level handler from closing the menu this opens.
+        event.stopPropagation();
+        scrollTo({ top: 0, behavior: 'instant' });
+        if (networkPanel.classList.contains('hidden')) networkMenuButton.click();
+        return;
+    }
+    const link = event.target.closest('.jump-link');
+    if (!link) return;
+    event.preventDefault();
+    const section = document.getElementById(link.dataset.target);
+    if (!section) return;
+    section.querySelector('.toggle-section-btn[aria-expanded="false"]')?.click();
+    const motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+    section.scrollIntoView({ behavior: motion, block: 'start' });
+    section.setAttribute('tabindex', '-1');
+    section.focus({ preventScroll: true });
+});
+
+// --- Summary: the message at a glance, its verdict, and each check now vs at delivery ---
+const summaryState = { checks: {}, reported: null };
+
+function firstHeader(email, name) {
+    const value = getHeaderValue(email.headers, name);
+    return Array.isArray(value) ? value[0] : value;
+}
+
+// What the receiving server recorded, from the topmost (most recent) Authentication-Results header.
+function reportedAtDelivery(email) {
+    const dto = new ServerValidationParser().parse(getHeaderValue(email.headers, 'Authentication-Results'));
+    const top = dto.headers[0] || null;
+    const byMethod = {};
+    for (const method of ['dkim', 'spf', 'dmarc']) {
+        const entries = top ? top.results.filter(entry => entry.method === method) : [];
+        if (!entries.length) continue;
+        const passed = entries.filter(entry => entry.result === 'pass').length;
+        const [first] = entries;
+        const note = method === 'dkim'
+            ? (entries.length > 1 ? `${passed} of ${entries.length} signatures passed` : first.props['header.d'] || (first.props['header.i'] || '').replace(/^.*@/, ''))
+            : method === 'spf' ? (first.props['smtp.mailfrom'] || '').replace(/^.*@/, '')
+            : (first.comment?.match(/\bp=(\w+)/i)?.[1] ? 'policy ' + first.comment.match(/\bp=(\w+)/i)[1].toLowerCase() : '');
+        byMethod[method] = { result: passed ? 'pass' : first.result, note };
+    }
+    return { dto, top, byMethod };
+}
+
+function fromDomainOf(email) {
+    const from = firstHeader(email, 'From');
+    const mailboxes = from ? EmailAddress.parseMailboxes(from) : [];
+    return mailboxes.length === 1 ? mailboxes[0].domain.toLowerCase() : null;
+}
+
+// BIMI: the From domain's record, or its organization's. One lookup per run, shared by the Summary and Sender Domain.
+const bimiCache = new Map();
+function bimiLookup(domain) {
+    if (!bimiCache.has(domain)) {
+        const org = registrableDomain(domain) || domain;
+        bimiCache.set(domain, Promise.all([txtRecords('default._bimi.' + domain), org !== domain ? txtRecords('default._bimi.' + org) : Promise.resolve([])])
+            .then(([own, parent]) => {
+                if (own === null && parent === null) return { error: true, record: null };
+                const record = (own || []).find(value => /^v=BIMI1/i.test(value)) || (parent || []).find(value => /^v=BIMI1/i.test(value)) || null;
+                if (!record) return { record: null };
+                const { tags } = EmailDns.parseTags(record);
+                return { record, tags, logo: tags.l && /^https:\/\//i.test(tags.l) ? tags.l : null, authority: tags.a && /^https:\/\//i.test(tags.a) ? tags.a : null };
+            }));
+    }
+    return bimiCache.get(domain);
+}
+
+// Mail clients show a BIMI logo only when DMARC passes under a policy that quarantines or rejects all failing mail.
+function bimiStatus() {
+    const bimi = summaryState.bimi;
+    const dmarc = summaryState.dmarcDto;
+    if (!bimi?.logo || !dmarc) return null;
+    const subdomain = dmarc.fetchedDomain && dmarc.fetchedDomain !== dmarc.domain;
+    const policy = String((subdomain ? dmarc.tags.sp || dmarc.tags.p : dmarc.tags.p) || '').toLowerCase();
+    const partial = dmarc.tags.pct && dmarc.tags.pct !== '100';
+    const enforced = ['quarantine', 'reject'].includes(policy) && !partial;
+    const then = summaryState.reported?.byMethod.dmarc?.result;
+    const passed = dmarc.result === 'pass' || then === 'pass';
+    const failed = !passed && (dmarc.result === 'fail' || then === 'fail');
+    return { bimi, policy, partial, enforced, passed, failed, show: enforced && passed && !network.offline };
+}
+
+function updateBimiNote() {
+    const slot = document.getElementById('bimi-eligibility');
+    if (!slot) return;
+    const status = bimiStatus();
+    slot.textContent = !status ? ''
+        : status.show ? 'This message qualifies: DMARC passed under a policy that blocks failures, so mail clients that support BIMI can show the logo.'
+        : status.failed ? 'This message failed DMARC, so mail clients won\'t show the logo.'
+        : !status.enforced ? `Mail clients won't show it: the DMARC policy is ${status.policy ? `p=${status.policy}` : 'missing'}${status.partial ? ` and covers only ${summaryState.dmarcDto.tags.pct}% of mail` : ''}, and BIMI needs quarantine or reject for all mail.`
+        : 'Mail clients won\'t show it, because DMARC couldn\'t be confirmed for this message.';
+    slot.hidden = !slot.textContent;
+}
+
+function attachSummaryLogo(url) {
+    const slot = summaryOutput.querySelector('[data-logo-slot]');
+    if (!slot || network.offline) return;
+    if (summaryState.logoImg?.dataset.src !== url) {
+        const image = new Image(48, 48);
+        image.alt = 'Brand logo';
+        image.decoding = 'async';
+        image.referrerPolicy = 'no-referrer';
+        image.dataset.src = url;
+        // An <img> never runs scripts inside an SVG, so the logo is safe to show.
+        image.addEventListener('error', () => {
+            summaryState.logoFailed = true;
+            displaySummary();
+        });
+        image.src = url;
+        logRequest(new URL(url), 'logo');
+        summaryState.logoImg = image;
+    }
+    slot.appendChild(summaryState.logoImg);
+}
+
+const spamTones = { pass: 'status-pass', fail: 'status-fail', warn: 'status-pending', neutral: 'status-neutral' };
+function spamSummary(spam) {
+    if (!spam) return '';
+    return `
+        <div class="summary-spam">
+            <span class="summary-spam-label">Spam filter${spam.provider ? ` · ${escapeHtml(spam.provider)}` : ''}</span>
+            <span class="summary-spam-items">${spam.items.map(item => `
+                <span class="summary-spam-item" title="${escapeHtml(item.title)}"><span class="${spamTones[item.tone]}">${escapeHtml(item.label)}</span>${item.detail
+                    ? `<span class="summary-then-note">${escapeHtml(item.detail)}</span>` : ''}</span>`).join('')}</span>
         </div>`;
+}
+
+function setSummaryCheck(check, result, note) {
+    summaryState.checks[check] = { result, note };
+    setJumpStatus('section-' + check, result, note);
+    displaySummary();
+}
+
+function dkimSummaryNote(dkimResults) {
+    if (!dkimResults.length) return 'No signature';
+    const verified = [...new Set(dkimResults.filter(({ result }) => result.valid).map(({ dkim }) => dkim.tags.d))];
+    if (verified.length) return 'Verified for ' + verified.join(', ');
+    if (dkimResults.some(({ result }) => result.bodyMissing && result.headersVerified === true)) return 'Headers verify; body not provided';
+    if (dkimResults.some(({ result }) => result.headersVerified === true || result.bodyHash?.valid === false)) return 'Body changed after signing';
+    if (network.offline && dkimResults.some(({ result }) => result.status === 'temperror')) return 'Keys not looked up';
+    if (dkimResults.some(({ result }) => result.status === 'expired')) return 'Signature expired';
+    return 'Signature doesn\'t verify';
+}
+
+function spfSummaryNote(spf) {
+    const ip = spf.senderIp ? normalizeIp(spf.senderIp) : 'The sending IP';
+    switch (spf.result) {
+        case 'pass': return `${ip} allowed for ${spf.domain}`;
+        case 'fail': case 'softfail': return `${ip} not allowed for ${spf.domain}`;
+        case 'neutral': return `${spf.domain} takes no position on ${ip}`;
+        case 'none': return `${spf.domain} has no SPF record`;
+        default: return network.offline ? 'Record not looked up' : 'Not checked';
+    }
+}
+
+function dmarcSummaryNote(dmarc) {
+    switch (dmarc.result) {
+        case 'pass': return 'Passed via ' + dmarc.passedBy.join(' and ');
+        case 'fail': return 'No passing check matches the From domain';
+        case 'unavailable': return 'Can\'t be confirmed from this email';
+        case 'none': return 'No DMARC policy';
+        case 'temperror': return network.offline ? 'Policy not looked up' : 'DNS error';
+        default: return '';
+    }
+}
+
+function summaryVerdict(fromDomain, reported) {
+    const dmarc = summaryState.checks.dmarc;
+    const domain = fromDomain ? `<code>${escapeHtml(fromDomain)}</code>` : 'the From domain';
+    const delivered = reported.byMethod.dmarc;
+    const service = `<code>${escapeHtml(reported.top?.service || 'the receiving server')}</code>`;
+    const atDelivery = !delivered ? ''
+        : delivered.result === dmarc?.result ? ` ${service} reported the same at delivery.`
+        : ` At delivery ${service} reported DMARC <span class="${verdictClass(delivered.result)}">${escapeHtml(verdictLabel(delivered.result))}</span>.`;
+    if (!dmarc) return ['is-neutral', network.offline ? 'Checking what can be checked offline…' : 'Checking DKIM, SPF and DMARC…'];
+    if (network.offline) return ['is-neutral', offlineVerdict(`Nothing was looked up, so DKIM, SPF and DMARC can't be confirmed.${atDelivery}`)];
+    switch (dmarc.result) {
+        case 'pass': return ['is-pass', `Authenticated: DMARC passed for ${domain}, ${escapeHtml(dmarc.note.replace(/^Passed/, 'passed').replace(/^passed via/, 'via'))}.${atDelivery}`];
+        case 'fail': return ['is-fail', `Not authenticated: DMARC failed for ${domain}.${atDelivery}`];
+        case 'unavailable': return ['is-warn', `Couldn't be fully verified from this email.${atDelivery}`];
+        case 'none': return ['is-neutral', `${domain} publishes no DMARC policy, so only DKIM and SPF apply.${atDelivery}`];
+        case 'temperror': return ['is-warn', 'A DNS lookup failed, so the checks are incomplete. <button type="button" class="link-toggle recheck-btn">Recheck</button>'];
+        default: return ['is-neutral', escapeHtml(verdictLabel(dmarc.result))];
+    }
+}
+
+function reportedDetails(reported) {
+    return reported.dto.headers.map((header, position) => `
+        <h4>${escapeHtml(header.service || 'Unknown server')}${position === 0 && reported.dto.headers.length > 1 ? ' · most recent' : ''}</h4>
+        <table class="reported-results"><tbody>
+            ${header.results.map(entry => `
+            <tr>
+                <th scope="row">${escapeHtml(entry.method.toUpperCase())}</th>
+                <td><span class="${verdictClass(entry.result)}">${escapeHtml(verdictLabel(entry.result))}</span></td>
+                <td>${Object.entries(entry.props).map(([key, value]) =>
+                    `<span class="reported-prop">${escapeHtml(key)}=<span class="reported-value">${escapeHtml(value)}</span></span>`).join('')}
+                    ${entry.comment ? checkNote(escapeHtml(entry.comment)) : ''}</td>
+            </tr>`).join('') || '<tr><td colspan="3" class="check-note">No results in this header.</td></tr>'}
+        </tbody></table>
+        <div class="data-card"><div class="data-value" data-copy="Authentication-Results: ${escapeHtml(header.raw)}">${escapeHtml(header.raw)}</div></div>`).join('');
+}
+
+function displaySummary() {
+    const email = currentEmail;
+    if (!email) return;
+    const reported = summaryState.reported || reportedAtDelivery(email);
+    const subject = firstHeader(email, 'Subject');
+    const from = firstHeader(email, 'From');
+    const to = firstHeader(email, 'To');
+    const replyTo = firstHeader(email, 'Reply-To');
+    const date = firstHeader(email, 'Date');
+    const fromMailboxes = from ? EmailAddress.parseMailboxes(from) : [];
+    const fromDomain = fromMailboxes.length === 1 ? fromMailboxes[0].domain : null;
+    const replyMailbox = replyTo ? EmailAddress.parseMailboxes(replyTo)[0] : null;
+    const showReplyTo = replyMailbox && replyMailbox.address.toLowerCase() !== (fromMailboxes[0]?.address || '').toLowerCase();
+    const replyElsewhere = showReplyTo && fromDomain && replyMailbox.domain.toLowerCase() !== fromDomain.toLowerCase();
+    const sentAt = date ? parseMailDate(date) : NaN;
+    const [tone, verdict] = summaryVerdict(fromDomain, reported);
+    const checked = Boolean(summaryState.checks.dmarc);
+    setJumpStatus('section-summary', checked ? { 'is-pass': 'pass', 'is-fail': 'fail', 'is-warn': 'warn' }[tone] || 'neutral' : 'pending',
+        checked ? plainText(verdict).replace(/\s+(Turn it off and recheck|Recheck)$/, '') : 'checking');
+    const wasOpen = document.getElementById('summary-reported') && !document.getElementById('summary-reported').classList.contains('hidden');
+
+    const tiles = [['dkim', 'DKIM'], ['spf', 'SPF'], ['dmarc', 'DMARC']].map(([id, label]) => {
+        const now = summaryState.checks[id];
+        const then = reported.byMethod[id];
+        return `
+            <a class="summary-check" href="#section-${id}" title="Go to the ${label} section">
+                <span class="summary-check-head">
+                    <span class="summary-check-name">${label}</span>
+                    <span class="${verdictClass(now?.result || 'pending')} summary-pill">${escapeHtml(verdictLabel(now?.result || 'pending'))}</span>
+                </span>
+                <span class="summary-check-note">${escapeHtml(now?.note || 'Checking…')}</span>
+                <span class="summary-check-then">At delivery ${then
+                    ? `<span class="${verdictClass(then.result)}">${escapeHtml(verdictLabel(then.result))}</span>${then.note ? ` <span class="summary-then-note">${escapeHtml(then.note)}</span>` : ''}`
+                    : '<span class="summary-then-note">not recorded</span>'}</span>
+            </a>`;
     }).join('');
-    
+
+    const logo = bimiStatus();
+    const subjectHtml = `<div class="subject-text" title="${escapeHtml(subject ? decodeMimeWords(subject) : '')}">${escapeHtml(subject ? decodeMimeWords(subject) : '(No subject)')}</div>`;
+    const logoNote = logo?.show ? `Brand logo (BIMI) for <code>${escapeHtml(logo.bimi.domain)}</code> · ${summaryState.logoFailed ? 'the image couldn\'t be loaded'
+        : logo.bimi.authority ? 'mark certificate published, not verified here' : 'no mark certificate, so Gmail and Apple Mail won\'t show it'}` : '';
     summaryOutput.innerHTML = `
-        <div class="summary-layout">
-            <div class="summary-group">
-                <div class="summary-label">Subject</div>
-                <div class="summary-value subject-text" title="${safeSubject}">${safeSubject}</div>
-            </div>
-            <div class="summary-checks">${checks}</div>
+        ${logo?.show ? `
+        <div class="summary-head">
+            ${summaryState.logoFailed ? '' : '<span class="summary-logo" data-logo-slot></span>'}
+            <div class="summary-head-text">${subjectHtml}<p class="summary-logo-note">${logoNote}</p></div>
+        </div>` : subjectHtml}
+        <dl class="facts summary-facts">
+            <div><dt>From</dt><dd class="mono summary-address">${from ? breakable(decodeMimeWords(from)) : 'Unknown'}</dd></div>
+            <div><dt>To</dt><dd class="mono summary-address">${to ? breakable(decodeMimeWords(to)) : 'Unknown'}</dd></div>
+            <div><dt>Sent</dt><dd>${Number.isNaN(sentAt) ? escapeHtml(date || 'Unknown') : escapeHtml(new Date(sentAt).toLocaleString())}</dd></div>
+            ${showReplyTo ? `<div><dt>Reply-To</dt><dd class="mono summary-address">${breakable(decodeMimeWords(replyTo))}</dd>
+                <dd class="fact-note${replyElsewhere ? ' summary-reply-elsewhere' : ''}">${replyElsewhere
+                    ? `Replies go to a different domain (<code>${escapeHtml(replyMailbox.domain)}</code>) than From`
+                    : 'A different address on the same domain as From'}</dd></div>` : ''}
+        </dl>
+        ${email.headersOnly ? '<p class="note summary-headers-only">Only headers were provided, so checks that need the message body are skipped.</p>' : ''}
+        <div class="summary-verdict ${tone}">${verdict}</div>
+        ${logo?.failed ? `<p class="note summary-bimi-warning"><code>${escapeHtml(logo.bimi.domain)}</code> publishes a brand logo, but this message failed DMARC,
+            so mail clients won't show it. Be wary of anything in it that looks branded.</p>` : ''}
+        <div class="summary-checks">${tiles}</div>
+        ${spamSummary(summaryState.spam)}
+        ${reported.top ? `
+        <button type="button" class="dkim-advanced-toggle" aria-controls="summary-reported" aria-expanded="${wasOpen}">
+            ${detailDisclosureIcon}<span>Reported at delivery</span>
+            <span class="toggle-meta">${escapeHtml(reported.top.service || '')} · ${reported.top.results.length} results${reported.dto.headers.length > 1 ? ` · ${reported.dto.headers.length} headers` : ''}${arcSealed(reported) ? ' · ARC-sealed' : ''}</span>
+        </button>
+        <div id="summary-reported" class="${wasOpen ? '' : 'hidden'}">${reportedDetails(reported)}</div>`
+            : '<p class="note summary-unreported">No Authentication-Results header, so there\'s no record of what the receiving server decided.</p>'}`;
+    if (logo?.show && !summaryState.logoFailed) attachSummaryLogo(logo.bimi.logo);
+}
+
+// --- Plain-text report, for pasting into a ticket or message ---
+function plainText(html) {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    return box.textContent.replace(/\s+/g, ' ').trim();
+}
+
+async function buildReport() {
+    const email = currentEmail;
+    const reported = summaryState.reported || reportedAtDelivery(email);
+    const header = name => {
+        const value = firstHeader(email, name);
+        return value ? decodeMimeWords(value).replace(/\s+/g, ' ').trim() : null;
+    };
+    const fromMailboxes = header('From') ? EmailAddress.parseMailboxes(firstHeader(email, 'From')) : [];
+    const fromDomain = fromMailboxes.length === 1 ? fromMailboxes[0].domain : null;
+    const sentAt = header('Date') ? parseMailDate(header('Date')) : NaN;
+    const lines = ['Email authentication report', ''];
+    lines.push(`Subject:  ${header('Subject') || '(No subject)'}`, `From:     ${header('From') || 'Unknown'}`, `To:       ${header('To') || 'Unknown'}`);
+    if (header('Reply-To')) lines.push(`Reply-To: ${header('Reply-To')}`);
+    lines.push(`Sent:     ${Number.isNaN(sentAt) ? header('Date') || 'Unknown' : new Date(sentAt).toLocaleString()}`);
+    if (email.headersOnly) lines.push('', 'Only headers were provided; checks that need the body were skipped.');
+    lines.push('', `Verdict: ${plainText(summaryVerdict(fromDomain, reported)[1])}`, '');
+    for (const [id, label] of [['dkim', 'DKIM'], ['spf', 'SPF'], ['dmarc', 'DMARC']]) {
+        const now = summaryState.checks[id];
+        const then = reported.byMethod[id];
+        lines.push(`${label.padEnd(6)} ${verdictLabel(now?.result || 'pending')}${now?.note ? ' - ' + now.note : ''}`
+            + (then ? ` (at delivery: ${verdictLabel(then.result)}${then.note ? ', ' + then.note : ''})` : ''));
+    }
+
+    const spam = summaryState.spam;
+    if (spam) lines.push(`Spam filter${spam.provider ? ` (${spam.provider})` : ''}: ${spam.items.map(item => item.label + (item.detail ? ` (${item.detail})` : '')).join(', ')}`);
+
+    const route = relayState.route;
+    if (route?.steps.length) {
+        lines.push('', `Route, oldest first (${route.zone ? 'times in ' + route.zone : 'local time'}):`);
+        if (route.sent) lines.push(`  ${hopTime(route.sent, route).padEnd(12)} Sent (Date header)`);
+        for (const step of route.steps) {
+            const group = route.groups.findIndex(entry => entry.steps.includes(step));
+            const role = orgRole(group, route);
+            const parts = [
+                step.source === 'Reported' ? '' : hopTime(step, route), step.host,
+                step.delay !== null && step.delay !== undefined ? formatDuration(step.delay) : '',
+                step.ip ? normalizeIp(step.ip) : '', step.tls || '',
+                route.groups[group]?.org ? `[${route.groups[group].org}${role ? ', ' + role : ''}]` : ''
+            ];
+            lines.push(`  ${parts[0].padEnd(12)} ${parts.slice(1).filter(Boolean).join('  ')}`);
+        }
+        const entry = route.steps.find(step => step.entry);
+        if (entry?.ip) {
+            // The owner lookup is normally cached already; don't hold the copy up waiting for it.
+            const owner = await Promise.race([IpAddress.networkOwner(entry.ip), new Promise(resolve => setTimeout(resolve, 1500, null))]);
+            const name = owner && (owner.organization || owner.asName);
+            lines.push('', `Sending network: ${normalizeIp(entry.ip)}${name ? ` - ${name}${owner.asn ? ' (AS' + owner.asn + ')' : ''}` : ''}`);
+        }
+    }
+    lines.push('', `Checked ${new Date().toLocaleString()} with Email Parser & DKIM Validator; DNS records as published at that time.`);
+    return lines.join('\n');
+}
+
+document.getElementById('copy-report').addEventListener('click', async () => {
+    if (!currentEmail) return;
+    const copied = await writeClipboard(await buildReport());
+    showToast(copied, copied ? 'Report copied' : 'Couldn\'t copy the report');
+});
+
+// --- Message content: readable text, links and attachments. The email's HTML is only ever
+// parsed into an inert document (no scripts run, no images load); it is never put into the page.
+const clickTrackers = [
+    ['list-manage.com', 'Mailchimp'], ['mailchi.mp', 'Mailchimp'], ['mcsv.net', 'Mailchimp'], ['sendgrid.net', 'SendGrid'],
+    ['mailgun.org', 'Mailgun'], ['exct.net', 'Salesforce Marketing Cloud'], ['klclick.com', 'Klaviyo'], ['klclick1.com', 'Klaviyo'],
+    ['klclick2.com', 'Klaviyo'], ['awstrack.me', 'Amazon SES'], ['hubspotlinks.com', 'HubSpot'], ['mandrillapp.com', 'Mailchimp Transactional'],
+    ['sparkpostmail.com', 'SparkPost'], ['ct.sendgrid.net', 'SendGrid'], ['safelinks.protection.outlook.com', 'Microsoft Safe Links'],
+    ['urldefense.com', 'Proofpoint URL Defense'], ['cmail19.com', 'Campaign Monitor'], ['cmail20.com', 'Campaign Monitor']
+];
+const riskyExtensions = {
+    code: ['exe', 'scr', 'js', 'jse', 'vbs', 'vbe', 'bat', 'cmd', 'com', 'msi', 'ps1', 'jar', 'hta', 'lnk', 'wsf', 'cpl', 'reg', 'app', 'dmg', 'pkg'],
+    browser: ['html', 'htm', 'shtml', 'svg', 'xhtml'],
+    macro: ['docm', 'xlsm', 'pptm', 'xlam', 'dotm'],
+    container: ['iso', 'img', 'vhd', 'vhdx', 'zip', 'rar', '7z', 'gz', 'tar', 'cab']
+};
+
+function htmlToText(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script, style, head, noscript, template, title').forEach(node => node.remove());
+    doc.querySelectorAll('br').forEach(node => node.replaceWith('\n'));
+    doc.querySelectorAll('p, div, tr, li, h1, h2, h3, h4, h5, h6, table, section, article, header, footer, blockquote')
+        .forEach(node => node.append('\n'));
+    return cleanText(doc.body?.textContent || '');
+}
+
+// Removes invisible padding characters that marketing emails use, and collapses whitespace.
+function cleanText(text) {
+    return text.replace(/[\u200b-\u200f\u034f\u00ad\u2060\ufeff\u2007\u2028]/g, '')
+        .replace(/[ \t ]+/g, ' ')
+        .split('\n').map(line => line.trim()).join('\n')
+        .replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function looksLikeDomain(text) {
+    const match = text.trim().match(/^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[/:?#]\S*)?$/i);
+    return match ? match[1].toLowerCase() : null;
+}
+
+function collectLinks(htmlPart, textPart) {
+    const links = [];
+    const images = [];
+    if (htmlPart) {
+        const doc = new DOMParser().parseFromString(htmlPart.text, 'text/html');
+        for (const anchor of doc.querySelectorAll('a[href], area[href]')) {
+            links.push({ href: anchor.getAttribute('href').trim(), text: cleanText(anchor.textContent || anchor.getAttribute('alt') || '') });
+        }
+        for (const image of doc.querySelectorAll('img[src]')) {
+            const width = image.getAttribute('width'), height = image.getAttribute('height');
+            images.push({ src: image.getAttribute('src').trim(), pixel: (width === '1' || width === '0') && (height === '1' || height === '0') });
+        }
+    } else if (textPart) {
+        for (const [href] of textPart.text.matchAll(/https?:\/\/[^\s<>()"']+/gi)) links.push({ href: href.replace(/[.,;:!?]+$/, ''), text: '' });
+    }
+    return { links, images };
+}
+
+function linkGroups(links, fromDomain) {
+    const groups = new Map();
+    const other = [];
+    for (const link of links) {
+        let url;
+        try {
+            url = new URL(link.href);
+        } catch {
+            continue;
+        }
+        if (!/^https?:$/.test(url.protocol)) {
+            if (/^(mailto|tel):$/.test(url.protocol)) other.push(link);
+            continue;
+        }
+        const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
+        const domain = isIp ? host : registrableDomain(host) || host;
+        const group = groups.get(domain) || { domain, hosts: new Set(), links: [], flags: new Set(), mismatches: [] };
+        group.hosts.add(host);
+        group.links.push({ ...link, href: url.href });
+        if (isIp) group.flags.add('ip');
+        if (url.protocol === 'http:') group.flags.add('http');
+        if (host.includes('xn--')) group.flags.add('punycode');
+        const shown = looksLikeDomain(link.text);
+        if (shown && (registrableDomain(shown) || shown) !== domain) {
+            group.flags.add('mismatch');
+            group.mismatches.push({ shown, href: url.href });
+        }
+        groups.set(domain, group);
+    }
+    const tracker = domain => clickTrackers.find(([key]) => domain === key || domain.endsWith('.' + key))?.[1] || null;
+    const from = fromDomain ? registrableDomain(fromDomain) : null;
+    return {
+        groups: [...groups.values()].map(group => ({ ...group, tracker: tracker(group.domain), isFrom: group.domain === from }))
+            .sort((a, b) => (b.flags.has('mismatch') - a.flags.has('mismatch')) || b.links.length - a.links.length),
+        other
+    };
+}
+
+function attachmentWarning(name) {
+    const lower = (name || '').toLowerCase();
+    const parts = lower.split('.');
+    const ext = parts.length > 1 ? parts.at(-1) : '';
+    if (parts.length > 2 && riskyExtensions.code.includes(ext) && /^(pdf|docx?|xlsx?|jpe?g|png|txt)$/.test(parts.at(-2))) {
+        return ['status-fail', 'Disguised file type', `Looks like .${parts.at(-2)} but is a .${ext}`];
+    }
+    if (riskyExtensions.code.includes(ext)) return ['status-fail', 'Can run code', 'Programs and scripts can take over a computer when opened'];
+    if (riskyExtensions.macro.includes(ext)) return ['status-pending', 'Contains macros', 'Office files with macros can run code'];
+    if (riskyExtensions.browser.includes(ext)) return ['status-pending', 'Opens in a browser', 'Often used to show fake sign-in pages'];
+    if (riskyExtensions.container.includes(ext)) return ['status-pending', 'Archive or disk image', 'Its contents aren\'t checked here'];
+    return null;
+}
+
+function displayContent(email) {
+    if (email.headersOnly) {
+        contentOutput.innerHTML = '<p class="note">Only headers were provided, so there\'s no message content to show.</p>';
+        return;
+    }
+    let leaves;
+    try {
+        const mime = new MimeParser();
+        leaves = mime.flatten(mime.parse(email));
+    } catch (error) {
+        contentOutput.innerHTML = `<div class="error">Couldn't read the message structure: ${escapeHtml(error.message)}</div>`;
+        return;
+    }
+    const textPart = leaves.find(part => !part.attachment && part.contentType === 'text/plain' && cleanText(part.text).length > 40);
+    const htmlPart = leaves.find(part => !part.attachment && part.contentType === 'text/html');
+    const attachments = leaves.filter(part => part.attachment);
+    const text = textPart ? cleanText(textPart.text) : htmlPart ? htmlToText(htmlPart.text) : '';
+    const from = firstHeader(email, 'From');
+    const fromMailboxes = from ? EmailAddress.parseMailboxes(from) : [];
+    const fromDomain = fromMailboxes.length === 1 ? fromMailboxes[0].domain : null;
+    const { links, images } = collectLinks(htmlPart, textPart);
+    const { groups, other } = linkGroups(links, fromDomain);
+    const remote = images.filter(image => /^https?:/i.test(image.src));
+    const pixels = remote.filter(image => image.pixel).length;
+    const mismatches = groups.flatMap(group => group.mismatches);
+    const webLinks = groups.reduce((sum, group) => sum + group.links.length, 0);
+    const formats = [textPart && 'plain text', htmlPart && 'HTML'].filter(Boolean).join(' and ') || 'no readable text';
+
+    const flagLabels = {
+        mismatch: ['status-fail', 'Text shows another domain'], ip: ['status-fail', 'Raw IP address'],
+        http: ['status-pending', 'Not encrypted (http)'], punycode: ['status-pending', 'Look-alike characters (punycode)']
+    };
+    const groupRows = groups.map((group, index) => `
+        <tr${group.flags.has('mismatch') || group.flags.has('ip') ? ' class="is-risky"' : ''}>
+            <th scope="row"><span class="link-domain">${escapeHtml(group.domain)}</span>
+                ${group.hosts.size > 1 || !group.hosts.has(group.domain) ? checkNote([...group.hosts].slice(0, 3).map(escapeHtml).join(', ') + (group.hosts.size > 3 ? ` +${group.hosts.size - 3}` : '')) : ''}</th>
+            <td class="link-count">${group.links.length}</td>
+            <td>${[group.isFrom ? '<span class="status-pass">From domain</span>' : '',
+                group.tracker ? `<span class="status-neutral">Click tracking · ${escapeHtml(group.tracker)}</span>` : '',
+                ...[...group.flags].map(flag => `<span class="${flagLabels[flag][0]}">${flagLabels[flag][1]}</span>`)].join(' ')}
+                ${group.mismatches.slice(0, 2).map(item => checkNote(`Text shows <code>${escapeHtml(item.shown)}</code>, but the link goes to <code>${escapeHtml(new URL(item.href).hostname)}</code>`)).join('')}
+                <button type="button" class="link-toggle" aria-controls="links-${index}" aria-expanded="false">Show links</button>
+                <ul id="links-${index}" class="link-list hidden">${group.links.slice(0, 40).map(link =>
+                    `<li><span class="link-url">${escapeHtml(link.href)}</span>${link.text && link.text !== link.href ? `<span class="check-note">${escapeHtml(link.text.slice(0, 120))}</span>` : ''}</li>`).join('')}
+                    ${group.links.length > 40 ? `<li class="check-note">and ${group.links.length - 40} more</li>` : ''}</ul></td>
+        </tr>`).join('');
+
+    const attachmentFlags = attachments.map(part => attachmentWarning(part.filename || '')?.[0]).filter(Boolean);
+    if (mismatches.length || groups.some(group => group.flags.has('ip')) || attachmentFlags.includes('status-fail')) {
+        setJumpStatus('section-content', 'fail', 'has warning signs');
+    } else if (attachmentFlags.length || groups.some(group => group.flags.has('punycode'))) {
+        setJumpStatus('section-content', 'warn', 'has items to check');
+    }
+
+    contentOutput.innerHTML = `
+        ${mismatches.length ? `<div class="error">${mismatches.length === 1 ? 'A link shows' : `${mismatches.length} links show`} one domain but go${mismatches.length === 1 ? 'es' : ''} to another. That's a common phishing trick; check before clicking.</div>` : ''}
+        <dl class="facts content-facts">
+            <div><dt>Body</dt><dd>${escapeHtml(formats.replace(/^./, letter => letter.toUpperCase()))}</dd><dd class="fact-note">${leaves.length} ${leaves.length === 1 ? 'part' : 'parts'}</dd></div>
+            <div><dt>Links</dt><dd>${webLinks ? `${webLinks} to ${groups.length} ${groups.length === 1 ? 'domain' : 'domains'}` : 'None'}</dd>${other.length ? `<dd class="fact-note">${other.length} email or phone links</dd>` : ''}</div>
+            <div><dt>Remote images</dt><dd>${remote.length || 'None'}</dd>${remote.length ? `<dd class="fact-note">Loading them tells the sender you opened it${pixels ? ` · ${pixels} tracking pixel${pixels === 1 ? '' : 's'}` : ''}</dd>` : ''}</div>
+            <div><dt>Attachments</dt><dd>${attachments.length || 'None'}</dd></div>
+        </dl>
+
+        ${attachments.length ? `
+        <h4>Attachments</h4>
+        <table class="content-table attachments"><tbody>${attachments.map(part => {
+            const warning = attachmentWarning(part.filename);
+            const inline = part.contentId && part.contentType.startsWith('image/') && part.disposition !== 'attachment';
+            return `<tr${warning?.[0] === 'status-fail' ? ' class="is-risky"' : ''}>
+                <th scope="row"><span class="link-domain">${escapeHtml(part.filename || (part.contentType === 'message/rfc822' ? 'Attached email' : 'Unnamed'))}</span></th>
+                <td class="mono">${escapeHtml(part.contentType)}</td>
+                <td class="link-count">${formatBytes(part.size)}</td>
+                <td>${warning ? `<span class="${warning[0]}">${warning[1]}</span>${checkNote(warning[2])}` : inline ? '<span class="check-note">Inline image</span>' : ''}</td>
+            </tr>`;
+        }).join('')}</tbody></table>` : ''}
+
+        ${groups.length ? `
+        <h4>Links by domain</h4>
+        <table class="content-table link-groups"><tbody>${groupRows}</tbody></table>` : ''}
+
+        <h4>Text</h4>
+        ${text ? `<div class="content-preview${text.length > 900 ? ' is-long' : ''}" id="content-preview">${escapeHtml(text)}</div>
+            ${text.length > 900 ? '<button type="button" class="btn btn-secondary content-more" aria-expanded="false">Show full text</button>' : ''}
+            <p class="note content-source">${textPart ? 'From the plain-text part.' : 'Converted from HTML; images and formatting aren\'t shown.'}</p>`
+            : '<p class="note">No readable text in this message.</p>'}`;
+
+    contentOutput.querySelector('.content-more')?.addEventListener('click', event => {
+        const expanded = event.currentTarget.getAttribute('aria-expanded') !== 'true';
+        event.currentTarget.setAttribute('aria-expanded', String(expanded));
+        event.currentTarget.textContent = expanded ? 'Show less' : 'Show full text';
+        document.getElementById('content-preview').classList.toggle('is-expanded', expanded);
+    });
+}
+
+// --- Sender domain: how the From domain is set up beyond SPF, DKIM and DMARC ---
+async function txtRecords(name) {
+    try {
+        return (await EmailDns.lookup(name, 'TXT')).map(value => EmailDns.txt(value));
+    } catch {
+        return null;
+    }
+}
+
+function domainRow(label, cls, status, detail) {
+    return `<tr><th scope="row">${label}</th><td><span class="${cls}">${escapeHtml(status)}</span></td><td>${detail || ''}</td></tr>`;
+}
+
+async function domainRegistration(domain) {
+    try {
+        const response = await fetch('https://rdap.org/domain/' + encodeURIComponent(domain),
+            { headers: { Accept: 'application/rdap+json' }, signal: AbortSignal.timeout(8000) });
+        if (!response.ok) return null;
+        const json = await response.json();
+        const event = action => json.events?.find(item => item.eventAction === action)?.eventDate;
+        const registrar = json.entities?.find(entity => entity.roles?.includes('registrar'))
+            ?.vcardArray?.[1]?.find(item => item[0] === 'fn')?.[3];
+        return { registered: event('registration'), expires: event('expiration'), registrar: registrar || null };
+    } catch {
+        return null;
+    }
+}
+
+function ageText(date) {
+    const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+    if (days < 60) return `${days} days ago`;
+    if (days < 730) return `${Math.round(days / 30.4)} months ago`;
+    return `${Math.floor(days / 365.25)} years ago`;
+}
+
+async function displayDomain(email, run) {
+    const from = firstHeader(email, 'From');
+    const mailboxes = from ? EmailAddress.parseMailboxes(from) : [];
+    if (mailboxes.length !== 1) {
+        domainOutput.innerHTML = '<p class="note">The From header doesn\'t name a single sender domain.</p>';
+        return;
+    }
+    const domain = mailboxes[0].domain.toLowerCase();
+    const org = registrableDomain(domain) || domain;
+    if (network.offline) {
+        domainOutput.innerHTML = `<p class="note">${offlineVerdict(`The checks for <code>${escapeHtml(domain)}</code> (registration, MX, BIMI, MTA-STS and TLS reporting) need lookups.`)}</p>`;
+        return;
+    }
+    domainOutput.innerHTML = `<p class="note">Checking <code>${escapeHtml(domain)}</code>…</p>`;
+    setJumpStatus('section-domain', 'pending', 'checking');
+
+    const [mx, bimi, sts, tlsrpt, registration] = await Promise.all([
+        EmailDns.lookup(domain, 'MX').catch(() => null), bimiLookup(domain),
+        txtRecords('_mta-sts.' + domain), txtRecords('_smtp._tls.' + domain), domainRegistration(org)
+    ]);
+    if (run !== latestRun) return;
+
+    const rows = [];
+    setJumpStatus('section-domain', null);
+    if (registration?.registered) {
+        const date = new Date(registration.registered);
+        const days = (Date.now() - date.getTime()) / 86400000;
+        if (days < 180) setJumpStatus('section-domain', days < 30 ? 'fail' : 'warn', `registered ${ageText(date)}`);
+        rows.push(domainRow('Registered', days < 30 ? 'status-fail' : days < 180 ? 'status-pending' : 'status-pass', ageText(date),
+            `<code>${escapeHtml(org)}</code> on ${escapeHtml(date.toLocaleDateString())}${registration.registrar ? ` · ${escapeHtml(registration.registrar)}` : ''}`
+            + (days < 180 ? checkNote('Newly registered domains are often used for phishing') : '')));
+    } else {
+        rows.push(domainRow('Registered', 'status-neutral', 'Unknown', checkNote('The registry didn\'t answer for <code>' + escapeHtml(org) + '</code>')));
+    }
+
+    const exchanges = (mx || []).map(value => value.trim().split(/\s+/)).filter(parts => parts.length === 2)
+        .map(([priority, host]) => ({ priority: Number(priority), host: host.replace(/\.$/, '') })).sort((a, b) => a.priority - b.priority);
+    if (mx === null) {
+        rows.push(domainRow('Receives mail', 'status-pending', 'Lookup failed', ''));
+    } else if (exchanges.length && !(exchanges.length === 1 && exchanges[0].host === '')) {
+        const provider = spfProvider(registrableDomain(exchanges[0].host) || exchanges[0].host) || null;
+        rows.push(domainRow('Receives mail', 'status-pass', 'Yes', `${exchanges.slice(0, 3).map(item => `<span class="spf-token">${escapeHtml(item.host)}</span>`).join(', ')}`
+            + (exchanges.length > 3 ? ` +${exchanges.length - 3}` : '') + (provider ? checkNote(`Mail handled by ${escapeHtml(provider)}`) : '')));
+    } else {
+        rows.push(domainRow('Receives mail', 'status-neutral', 'No', checkNote(`<code>${escapeHtml(domain)}</code> has no MX record, so replies to the From address won't arrive`)));
+    }
+
+    if (bimi.record) {
+        const logo = bimi.logo;
+        rows.push(domainRow('BIMI logo', logo ? 'status-pass' : 'status-neutral', logo ? 'Published' : 'Record without logo',
+            (logo ? `<span class="link-url">${escapeHtml(logo)}</span> <button type="button" class="link-toggle bimi-show" data-logo="${escapeHtml(logo)}">Show logo</button><span class="bimi-logo"></span>` : '')
+            + checkNote(bimi.authority ? 'Has a mark certificate (not checked here); mail clients show the logo next to verified mail' : 'No mark certificate, so most mail clients won\'t show the logo')
+            + (logo ? '<span id="bimi-eligibility" class="check-note" hidden></span>' : '')));
+    } else if (bimi.error) {
+        rows.push(domainRow('BIMI logo', 'status-pending', 'Lookup failed', ''));
+    } else {
+        rows.push(domainRow('BIMI logo', 'status-neutral', 'None', checkNote('No brand logo published for mail clients')));
+    }
+
+    const stsRecord = (sts || []).find(value => /^v=STSv1/i.test(value));
+    rows.push(stsRecord
+        ? domainRow('MTA-STS', 'status-pass', 'Published', `Mail sent to this domain must use verified TLS.
+            <a class="link-url" href="https://mta-sts.${escapeHtml(domain)}/.well-known/mta-sts.txt" target="_blank" rel="noopener noreferrer">View policy</a>`)
+        : domainRow('MTA-STS', 'status-neutral', 'None', checkNote('No policy requiring encrypted delivery to this domain')));
+
+    const tlsRecord = (tlsrpt || []).find(value => /^v=TLSRPTv1/i.test(value));
+    rows.push(tlsRecord
+        ? domainRow('TLS reporting', 'status-pass', 'Published', checkNote('Reports of TLS delivery problems go to ' + escapeHtml(EmailDns.parseTags(tlsRecord).tags.rua || 'an unspecified address')))
+        : domainRow('TLS reporting', 'status-neutral', 'None', checkNote('Servers sending to this domain have nowhere to report TLS delivery problems')));
+
+    domainOutput.innerHTML = `
+        <p class="domain-intro">Checks for <code>${escapeHtml(domain)}</code>${org !== domain ? `, part of <code>${escapeHtml(org)}</code>` : ''}. SPF, DKIM and DMARC have their own sections.</p>
+        <table class="content-table domain-checks"><tbody>${rows.join('')}</tbody></table>`;
+    domainOutput.querySelector('.bimi-show')?.addEventListener('click', event => {
+        const button = event.currentTarget;
+        // An <img> never runs scripts inside an SVG, so the logo is safe to show.
+        button.nextElementSibling.innerHTML = `<img src="${escapeHtml(button.dataset.logo)}" alt="Brand logo" width="56" height="56" referrerpolicy="no-referrer">`;
+        logRequest(new URL(button.dataset.logo), 'logo');
+        button.remove();
+    });
+    updateBimiNote();
+}
+
+// --- ARC chain ---
+// True when the receiving server's results were also sealed with ARC and every seal verifies.
+function arcSealed(reported) {
+    const arc = summaryState.arc;
+    if (!arc?.sets.length || arc.sets.some(set => set.seal.valid !== true)) return false;
+    const service = reported.top?.service?.toLowerCase();
+    return Boolean(service) && arc.sets.some(set => new ServerValidationParser().parseOne(set.recorded).service?.toLowerCase() === service);
+}
+
+// Headers a signature lists that this copy of the message no longer has.
+function missingSignedHeaders(dkim) {
+    const present = new Set(Object.keys(currentEmail?.headers || {}).map(name => name.toLowerCase()));
+    const names = String(dkim?.tags?.h || '').split(':').map(name => name.trim()).filter(Boolean);
+    return [...new Map(names.filter(name => !present.has(name.toLowerCase())).map(name => [name.toLowerCase(), name])).values()];
+}
+
+function arcAmsCell(ams) {
+    const missing = missingSignedHeaders(ams.dkim);
+    if (!ams.valid && ams.headersVerified === false && missing.length) {
+        return pill('status-fail', 'Doesn\'t verify') + checkNote(`${missing.length} signed ${missing.length === 1 ? 'header is' : 'headers are'} missing from this copy`);
+    }
+    if (ams.valid) return pill('status-pass', 'Verifies');
+    if (ams.bodyMissing) return pill('status-neutral', 'Body not provided') + checkNote(ams.headersVerified ? 'Signed headers verify' : '');
+    if (ams.headersVerified === true) return pill('status-fail', 'Body changed') + checkNote('Signed headers still verify');
+    if (ams.headersVerified === false) return pill('status-fail', 'Doesn\'t verify') + checkNote('The signed headers and body changed after sealing');
+    return pill(verdictClass(ams.status || 'fail'), ams.status === 'unavailable' || ams.status === 'temperror' ? 'Not checked' : 'Doesn\'t verify')
+        + checkNote(network.offline && ams.status === 'temperror' ? '' : escapeHtml(ams.error || ''));
+}
+
+function arcVerdict(result) {
+    const sets = result.sets;
+    const sealers = [...new Set(sets.map(set => set.sealer).filter(Boolean))].map(name => `<code>${escapeHtml(name)}</code>`).join(', ');
+    const sealsOk = sets.length && sets.every(set => set.seal.valid === true);
+    switch (result.status) {
+        case 'none': return 'No ARC headers. Forwarding services and mailing lists add them, and so do some providers, such as Gmail, when mail arrives.';
+        case 'pass': return sets.length === 1
+            ? `${sealers} sealed the authentication results it recorded, and the seal verifies, so those results haven't been altered since.`
+            : `All ${sets.length} seals verify (${sealers}), so the results each server recorded haven't been altered since.`;
+        case 'unavailable': return network.offline
+            ? offlineVerdict(`The sealers' public keys weren't looked up, so the seals weren't checked. The ${sets.length === 1 ? 'set is' : 'sets are'} listed as found.`)
+            : escapeHtml(result.error || sets.find(set => set.seal.valid === null)?.seal.error || 'Part of the chain could not be checked.');
+        default:
+            if (result.error) return `The chain is broken: ${escapeHtml(result.error)}.`;
+            if (sets.some((set, index) => set.cv !== (index === 0 ? 'none' : 'pass'))) return 'The chain is broken: a server recorded that the chain before it had already failed.';
+            const missing = sealsOk ? missingSignedHeaders(sets[sets.length - 1].ams.dkim) : [];
+            if (missing.length) {
+                return `The seals verify, so the recorded results are intact. The latest message signature fails because this copy is missing headers it signed (${missing.map(name => `<code>${escapeHtml(name)}</code>`).join(', ')}). Outlook removes these when a message is saved or exported.`;
+            }
+            return sealsOk
+                ? 'The seals verify, so the recorded results are intact, but the message changed after the last seal.'
+                : 'A seal doesn\'t verify, so the recorded results can\'t be trusted.';
+    }
+}
+
+function displayArc(result) {
+    const rows = result.sets.map(set => {
+        const recorded = new ServerValidationParser().parseOne(set.recorded);
+        return `
+            <tr>
+                <th scope="row">${set.instance}</th>
+                <td data-label="Sealed by"><span class="dmarc-domain">${escapeHtml(set.sealer || 'unknown')}</span>
+                    ${checkNote(`selector <code>${escapeHtml(set.selector || '')}</code>${set.time ? ' · ' + escapeHtml(formatUnixTime(set.time)) : ''}`)}</td>
+                <td data-label="Seal">${set.seal.valid === true ? pill('status-pass', 'Verifies') : set.seal.valid === false ? pill('status-fail', 'Doesn\'t verify') : pill('status-pending', 'Not checked')}
+                    ${set.seal.error && !network.offline ? checkNote(escapeHtml(set.seal.error)) : ''}</td>
+                <td data-label="Message signature">${arcAmsCell(set.ams)}</td>
+                <td data-label="Chain before">${pill(set.cv === 'pass' || (set.instance === 1 && set.cv === 'none') ? 'status-pass' : set.cv === 'fail' ? 'status-fail' : 'status-neutral', set.cv || '?')}</td>
+                <td data-label="Recorded">${recorded.service ? `<span class="check-note">${escapeHtml(recorded.service)}</span>` : ''}
+                    <span class="arc-recorded">${recorded.results.filter(entry => ['dkim', 'spf', 'dmarc', 'arc'].includes(entry.method))
+                        .map(entry => `<span class="${['none', 'neutral'].includes(entry.result) ? 'status-neutral' : verdictClass(entry.result)}" title="${escapeHtml(entry.raw)}">${escapeHtml(entry.method.toUpperCase())} ${escapeHtml(verdictLabel(entry.result))}</span>`).join('')}</span></td>
+            </tr>`;
+    }).join('');
+    arcOutput.innerHTML = `
+        <div class="dmarc-verdict">
+            <span class="${result.status === 'none' ? 'status-neutral' : verdictClass(offlineStatus(result.status))} summary-pill">${escapeHtml(verdictLabel(offlineStatus(result.status)))}</span>
+            <span class="dmarc-verdict-text">${arcVerdict(result)}</span>
         </div>
-    `;
+        ${rows ? `
+        <p class="note arc-explain">Each server that handles the message can add a numbered set: the results it recorded, a signature of the message, and a seal over every set so far. Oldest first.</p>
+        <table class="dmarc-checks arc-sets">
+            <thead><tr><th scope="col">Set</th><th scope="col">Sealed by</th><th scope="col">Seal</th><th scope="col">Message signature</th><th scope="col">Chain before</th><th scope="col">Recorded</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <button type="button" class="dkim-advanced-toggle" aria-controls="arc-raw" aria-expanded="false">
+            ${detailDisclosureIcon}<span>ARC headers</span><span class="toggle-meta">${result.sets.length * 3} headers</span>
+        </button>
+        <div id="arc-raw" class="hidden"><pre class="tech-value code scrollable-pre">${escapeHtml(result.sets.flatMap(set => set.raw).join('\r\n'))}</pre></div>` : ''}`;
 }
 
 // What a signature's result says about the headers it lists.
@@ -425,10 +1533,125 @@ function headerCoverage(dkim, result) {
     return headers === false ? 'failed' : 'unchecked';
 }
 
+// --- Headers: in message order with hop markers, or grouped by purpose ---
+const headersUi = { email: null, view: storedHeadersView(), openRows: new Set(), groups: {} };
+const chevronIcon = `<svg class="hdr-chevron" width="14" height="14" ${iconAttrs}><path d="m9 6 6 6-6 6"/></svg>`;
+const headerSections = {
+    'dkim-signature': ['section-dkim', 'DKIM'], 'arc-seal': ['section-arc', 'ARC'], 'arc-message-signature': ['section-arc', 'ARC'],
+    'arc-authentication-results': ['section-arc', 'ARC'], 'authentication-results': ['section-summary', 'Summary'], 'received-spf': ['section-spf', 'SPF'],
+    'return-path': ['section-spf', 'SPF'], 'received': ['section-relay', 'Hops'], 'x-received': ['section-relay', 'Hops'], 'from': ['section-dmarc', 'DMARC'],
+    'content-type': ['section-content', 'Content']
+};
+
+function storedHeadersView() {
+    try {
+        return localStorage.getItem('emailParserHeadersView') === 'purpose' ? 'purpose' : 'order';
+    } catch {
+        return 'order';
+    }
+}
+
+for (const button of document.querySelectorAll('.headers-views .relay-tab')) {
+    button.addEventListener('click', () => {
+        headersUi.view = button.dataset.view;
+        try {
+            localStorage.setItem('emailParserHeadersView', headersUi.view);
+        } catch {
+            // Only persistence is optional.
+        }
+        displayHeaders();
+    });
+}
+
+// Remember what the reader opened, so re-rendering (search, DKIM results arriving) keeps it open.
+headersOutput.addEventListener('click', event => {
+    const row = event.target.closest('.hdr-name');
+    if (row) {
+        const index = Number(row.dataset.index);
+        if (row.getAttribute('aria-expanded') === 'true') headersUi.openRows.delete(index);
+        else headersUi.openRows.add(index);
+    }
+    const group = event.target.closest('.hdr-group-head');
+    if (group) headersUi.groups[group.dataset.group] = group.getAttribute('aria-expanded') !== 'true';
+});
+
+// Every header field in message order (newest first), with its value unfolded.
+function headerFieldList(email) {
+    if (!email.headerFields) {
+        email.headerFields = new DkimValidator().getRawHeaderFields(email.rawHeaders).map((field, index) => {
+            const colon = field.raw.indexOf(':');
+            return { index, key: field.key, instance: field.instance, name: field.raw.slice(0, colon).trim(),
+                value: field.raw.slice(colon + 1).replace(/\r?\n[ \t]+/g, ' ').trim(), raw: field.raw };
+        });
+    }
+    return email.headerFields;
+}
+
+function highlight(text, query) {
+    if (!query) return escapeHtml(text);
+    const lower = text.toLowerCase();
+    let html = '';
+    let at = 0;
+    for (let found = lower.indexOf(query); found >= 0; found = lower.indexOf(query, at)) {
+        html += escapeHtml(text.slice(at, found)) + `<mark>${escapeHtml(text.slice(found, found + query.length))}</mark>`;
+        at = found + query.length;
+    }
+    return html + escapeHtml(text.slice(at));
+}
+
+// A header's time in the reader's time zone: the Date header, or the date at the end of a Received line.
+function headerLocalTime(field) {
+    const text = field.key === 'date' || field.key === 'resent-date' ? field.value
+        : field.key === 'received' || field.key === 'x-received' ? field.value.slice(field.value.lastIndexOf(';') + 1) : null;
+    const time = text ? parseMailDate(text) : NaN;
+    return Number.isNaN(time) ? null : new Date(time).toLocaleString();
+}
+
+function headerRow(field, { coverage, issues, query, hop }) {
+    const badge = signatureBadges[coverage];
+    const open = headersUi.openRows.has(field.index);
+    const decoded = decodeMimeWords(field.value);
+    const note = HeaderInsights.describe(field.key);
+    const section = headerSections[field.key];
+    const time = headerLocalTime(field);
+    const classes = ['hdr-row', coverage && 'coverage-' + coverage, issues.length && 'is-flagged', hop && 'is-hop'].filter(Boolean).join(' ');
+    return `
+        <div class="${classes}">
+            <button type="button" class="hdr-name" data-index="${field.index}" aria-expanded="${open}" aria-controls="hdr-detail-${field.index}">
+                ${chevronIcon}${badge ? `<span class="signature-badge ${coverage}" role="img" aria-label="${badge.label}" title="${badge.label}">${badge.icon}</span>` : ''}
+                <span class="hdr-name-text">${highlight(field.name, query)}</span>${hop ? `<span class="hdr-hop">Hop ${hop}</span>` : ''}
+            </button>
+            <span class="hdr-value" data-copy="${escapeHtml(field.value)}">${highlight(decoded, query)}</span>
+            <div id="hdr-detail-${field.index}" class="hdr-detail${open ? '' : ' hidden'}">
+                ${issues.map(issue => `<p class="hdr-issue">${escapeHtml(issue.message)}</p>`).join('')}
+                ${note || section ? `<p class="hdr-note">${note ? escapeHtml(note) : ''}${section ? ` <a class="hdr-link" href="#${section[0]}">See ${section[1]}</a>` : ''}</p>` : ''}
+                ${badge ? `<p class="hdr-note">${badge.label}.</p>` : ''}
+                <pre class="tech-value code hdr-full" data-copy="${escapeHtml(field.name + ': ' + field.value)}">${escapeHtml(field.raw)}</pre>
+                ${decoded !== field.value ? `<p class="hdr-extra"><span class="tech-label">Decoded</span>${escapeHtml(decoded)}</p>` : ''}
+                ${time ? `<p class="hdr-extra"><span class="tech-label">Your time</span>${escapeHtml(time)}</p>` : ''}
+            </div>
+        </div>`;
+}
+
 function displayHeaders() {
     if (!currentEmail) return;
-    const headers = currentEmail.headers;
+    if (headersUi.email !== currentEmail) {
+        headersUi.email = currentEmail;
+        headersUi.openRows.clear();
+        headersUi.groups = {};
+    }
+    const fields = headerFieldList(currentEmail);
     const showSignedOnly = headersSignedToggle.getAttribute('aria-pressed') === 'true';
+    const query = headersSearch.value.trim().toLowerCase();
+    const matches = field => !query || field.name.toLowerCase().includes(query) || field.value.toLowerCase().includes(query)
+        || decodeMimeWords(field.value).toLowerCase().includes(query);
+    const raw = headersRawToggle.getAttribute('aria-pressed') === 'true';
+    // The signed-only filter and the arrangement don't apply to the raw view.
+    headersSignedToggle.disabled = raw;
+    for (const button of document.querySelectorAll('.headers-views .relay-tab')) {
+        button.setAttribute('aria-pressed', String(button.dataset.view === headersUi.view));
+        button.disabled = raw;
+    }
 
     const coverageByHeader = new Map();
     for (const { dkim, result } of currentEmail.dkimResults || []) {
@@ -440,36 +1663,84 @@ function displayHeaders() {
             if (!current || signatureBadges[coverage].rank > signatureBadges[current].rank) coverageByHeader.set(id, coverage);
         }
     }
+    const covered = new Set([...coverageByHeader].filter(([, kind]) => kind !== 'failed').map(([id]) => id));
+    const issues = HeaderInsights.anomalies(fields, { covered, receiver: summaryState.reported?.top?.service || null });
+    setJumpStatus('section-headers', issues.length ? 'fail' : null, issues.length ? `${issues.length} warning ${issues.length === 1 ? 'sign' : 'signs'}` : null);
+    const issuesFor = index => issues.filter(issue => issue.indexes.includes(index));
+    const warnings = issues.length ? `
+        <div class="error headers-warnings">
+            <strong>${issues.length === 1 ? 'Warning sign' : `${issues.length} warning signs`}</strong>
+            <ul>${issues.map(issue => `<li>${escapeHtml(issue.message)}</li>`).join('')}</ul>
+        </div>` : '';
+
+    if (raw) {
+        const shown = fields.filter(matches);
+        headersCount.textContent = query ? `${shown.length} of ${fields.length} headers` : `${fields.length} headers`;
+        const text = shown.map(field => field.raw).join('\r\n');
+        headersOutput.innerHTML = `
+            <div class="headers-raw-actions"><button type="button" class="btn btn-secondary headers-copy-all">Copy ${query ? 'these' : 'all'}</button></div>
+            <pre class="tech-value code headers-raw">${escapeHtml(text) || 'No headers match.'}</pre>`;
+        headersOutput.querySelector('.headers-copy-all').addEventListener('click', async () => {
+            const copied = await writeClipboard(text);
+            showToast(copied, copied ? `Copied ${shown.length} headers` : 'Couldn\'t copy the headers');
+        });
+        return;
+    }
     if (showSignedOnly && !coverageByHeader.size) {
+        headersCount.textContent = '';
         const checking = !currentEmail.dkimResults && currentEmail.dkim.length > 0;
-        headersOutput.innerHTML = '<p class="note">' + (checking ? 'Checking DKIM signatures…'
+        headersOutput.innerHTML = warnings + '<p class="note">' + (checking ? 'Checking DKIM signatures…'
             : currentEmail.dkim.length ? 'No DKIM signature lists any of these headers.' : 'This message has no DKIM signature.') + '</p>';
         return;
     }
 
-    const kinds = Object.keys(signatureBadges).filter(kind => [...coverageByHeader.values()].includes(kind));
-    let html = kinds.length ? `<div class="header-legend">${kinds.map(kind =>
-        `<span class="header-legend-item signature-badge ${kind}">${signatureBadges[kind].icon}${escapeHtml(signatureBadges[kind].short)}</span>`).join('')}</div>` : '';
-    html += '<div class="headers-grid">';
-    for (const [key, value] of Object.entries(headers)) {
-        const values = Array.isArray(value) ? value : [value];
-        for (const [instance, rawValue] of values.entries()) {
-            const coverage = coverageByHeader.get(key.toLowerCase() + ':' + instance);
-            if (showSignedOnly && !coverage) continue;
-            const badge = signatureBadges[coverage];
-            const displayValue = escapeHtml(rawValue);
+    const coverageOf = field => coverageByHeader.get(field.key + ':' + field.instance);
+    const pool = showSignedOnly ? fields.filter(coverageOf) : fields;
+    const visible = pool.filter(matches);
+    const hops = fields.filter(field => field.key === 'received');
+    const hopNumber = field => field.key === 'received' ? hops.length - hops.indexOf(field) : null;
+    const row = field => headerRow(field, { coverage: coverageOf(field), issues: issuesFor(field.index), query, hop: hopNumber(field) });
+    const kinds = Object.keys(signatureBadges).filter(kind => visible.some(field => coverageOf(field) === kind));
+    let html = warnings + (kinds.length ? `<div class="header-legend">${kinds.map(kind =>
+        `<span class="header-legend-item signature-badge ${kind}">${signatureBadges[kind].icon}${escapeHtml(signatureBadges[kind].short)}</span>`).join('')}</div>` : '');
+
+    if (headersUi.view === 'order') {
+        const filtered = Boolean(query) || showSignedOnly;
+        const oldest = hops.at(-1);
+        const microsoftBelow = oldest && fields.some(field => field.index > oldest.index && /^x-(ms|microsoft|forefront)-/.test(field.key));
+        if (!filtered) html += '<p class="hdr-order-note">Newest first: each server adds its headers above the ones already there.</p>';
+        html += '<div class="hdr-list">';
+        for (const field of visible) {
+            html += row(field);
+            if (!filtered && field === oldest && field !== fields.at(-1)) {
+                html += `<div class="hdr-divider">Below the oldest hop: written by the sending software${microsoftBelow ? ', plus headers Microsoft adds at delivery' : ''}</div>`;
+            }
+        }
+        html += '</div>';
+    } else {
+        for (const group of HeaderInsights.groups) {
+            const members = visible.filter(field => HeaderInsights.category(field.key) === group.id);
+            if (!members.length) continue;
+            const open = query ? true : headersUi.groups[group.id] ?? !group.folded;
             html += `
-                <div class="data-card${coverage ? ' coverage-' + coverage : ''}"${badge ? ` aria-label="${escapeHtml(key)}, ${badge.label}: ${displayValue}"` : ''}>
-                    <div class="data-key">
-                        ${badge ? `<span class="signature-badge ${coverage}" role="img" aria-label="${badge.label}" title="${badge.label}">${badge.icon}</span>` : ''}
-                        <span>${escapeHtml(key)}</span>
-                    </div>
-                    <div class="data-value" title="${displayValue}">${displayValue}</div>
-                </div>`;
+                <section class="hdr-group">
+                    <button type="button" class="hdr-group-head" data-group="${group.id}" aria-expanded="${open}" aria-controls="hdr-group-${group.id}">
+                        ${chevronIcon}<span>${escapeHtml(group.title)}</span><span class="hdr-group-count">${members.length}</span>
+                        ${group.folded ? '<span class="hdr-group-hint">internal bookkeeping, rarely useful</span>' : ''}
+                    </button>
+                    <div id="hdr-group-${group.id}" class="hdr-list${open ? '' : ' hidden'}">${members.map(row).join('')}</div>
+                </section>`;
         }
     }
-    html += '</div>';
+    if (!visible.length) html += '<p class="note">No headers match this filter.</p>';
+    if (showSignedOnly && query) {
+        const hidden = fields.filter(field => !coverageOf(field) && matches(field)).length;
+        if (hidden) html += `<p class="note headers-hidden-matches">${hidden} unsigned ${hidden === 1 ? 'header matches' : 'headers match'}.
+            <button type="button" class="link-toggle headers-show-all">Show all headers</button></p>`;
+    }
+    headersCount.textContent = query || showSignedOnly ? `${visible.length} of ${fields.length} headers` : `${fields.length} headers`;
     headersOutput.innerHTML = html;
+    headersOutput.querySelector('.headers-show-all')?.addEventListener('click', () => headersSignedToggle.click());
 }
 
 // Received and X-Received fields in header order (newest first), so internal steps
@@ -497,6 +1768,7 @@ function displayRelay(trace, dateHeader, hints = {}) {
     if (!container) {
         const section = document.createElement('section');
         section.className = 'section';
+        section.id = 'section-relay';
         section.innerHTML = `
             <h2 class="section-heading">
                 <span>Email Hops <span class="header-stats hidden"></span></span>
@@ -647,6 +1919,8 @@ function buildRoute(hops, dateHeader, hints = {}) {
     // Your provider took the message from outside at the hop whose IP it checked SPF against. Start a
     // new group there even when both sides are the same company (Microsoft mail to an Outlook.com box).
     const entry = hints.clientIp && [...steps].reverse().find(step => step.ip && normalizeIp(step.ip) === normalizeIp(hints.clientIp));
+    // The server that handed the message to your provider: worth naming who runs its IP.
+    if (entry && entry.source !== 'Reported') entry.entry = true;
     const groups = [];
     for (const step of steps) {
         if (!groups.length || groups.at(-1).org !== step.org || step === entry) groups.push({ org: step.org, steps: [] });
@@ -724,6 +1998,31 @@ function embeddedNote(value) {
     return found ? `carries IPv4 ${found.ipv4} (${found.kind})` : '';
 }
 
+// A placeholder filled in with the IP's network owner once the lookup finishes (public IPs only).
+function ownerSlot(ip) {
+    return ip && ipScope(ip) === 'public' && !network.offline
+        ? `<span class="net-owner" data-owner-ip="${escapeHtml(normalizeIp(ip))}">Looking up who runs this IP…</span>` : '';
+}
+
+function fillNetworkOwners(root) {
+    for (const slot of root.querySelectorAll('[data-owner-ip]:not([data-owner-done])')) {
+        slot.dataset.ownerDone = '';
+        IpAddress.networkOwner(slot.dataset.ownerIp).then(info => {
+            if (!slot.isConnected) return;
+            if (!info) {
+                slot.textContent = 'Network owner unknown';
+                return;
+            }
+            const name = info.organization || info.asName || info.network;
+            slot.title = [info.network && `Network ${info.network}${info.range ? ` (${info.range})` : ''}`,
+                info.registry && `registered with ${info.registry}`,
+                info.asn && `announced by AS${info.asn}${info.asName ? ' ' + info.asName : ''}`,
+                info.country].filter(Boolean).join(' · ');
+            slot.innerHTML = `<span class="net-owner-name">${escapeHtml(name)}</span>${info.asn ? ` · AS${escapeHtml(info.asn)}` : ''}`;
+        });
+    }
+}
+
 function hopChips(step) {
     const scope = ipScope(step.ip);
     return [
@@ -732,7 +2031,8 @@ function hopChips(step) {
         step.ip ? `<span class="route-chip is-mono route-ip" data-copy="${escapeHtml(normalizeIp(step.ip))}">${scope === 'public' ? '' : `<span class="route-ip-scope">${scope}</span>`}${escapeHtml(normalizeIp(step.ip))}</span>` : '',
         step.ip ? embeddedChip(step.ip) : '',
         step.ip && normalizeIp(step.ip) === relayState.spfIp
-            ? `<span class="route-spf">${copiedIcon}SPF checked this IP</span>` : ''
+            ? `<span class="route-spf">${copiedIcon}SPF checked this IP</span>` : '',
+        step.entry ? `<span class="route-owner">${ownerSlot(step.ip)}</span>` : ''
     ].join('');
 }
 
@@ -831,17 +2131,19 @@ function renderMapDetail(route) {
     const ip = step.ip && normalizeIp(step.ip) + (ipScope(step.ip) === 'public' ? '' : ` (${ipScope(step.ip)})`)
         + (embeddedNote(step.ip) ? `, ${embeddedNote(step.ip)}` : '');
     const reported = step.source === 'Reported';
-    const fields = (reported ? [['Named by', step.reportedBy], ['IP', ip], ['HELO', step.helo]] : [
+    // A third element marks a value that is already HTML.
+    const network = ownerSlot(step.ip);
+    const fields = (reported ? [['Named by', step.reportedBy], ['IP', ip], ['Network', network, true], ['HELO', step.helo]] : [
         ['Received', step.timestamp ? new Date(step.timestamp).toLocaleString() : 'No readable date'],
         ['Gap', step.delay !== null ? formatDuration(step.delay) + (step.firstRecorded ? ' after the Date header' : '') : step.firstRecorded ? 'First step' : 'Unknown'],
-        ['From', step.from], ['IP', ip], ['HELO', step.helo], ['Protocol', step.protocol],
+        ['From', step.from], ['IP', ip], ['Network', network, true], ['HELO', step.helo], ['Protocol', step.protocol],
         ['TLS', step.tls && step.tls + (step.cipher ? ', ' + step.cipher : '')],
         ['Note', step.delayedDelivery && 'Microsoft held this message before this step (X-MS-DelayedDelivery: true)']
     ]).filter(([, value]) => value);
     const note = reported ? 'Sending server · no Received header of its own' : step.source === 'X-Received' ? 'internal processing' : '';
     return `
         <div class="map-detail-head"><span class="route-host">${escapeHtml(step.host)}</span>${embeddedChip(step.host)}<span class="route-note">Step ${step.index} of ${route.steps.length}${note ? ' · ' + note : ''}</span></div>
-        <dl class="relay-details">${fields.map(([label, value]) => `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>`).join('')}</dl>
+        <dl class="relay-details">${fields.map(([label, value, html]) => `<dt>${label}</dt><dd${html ? ' class="is-html"' : ''}>${html ? value : escapeHtml(value)}</dd>`).join('')}</dl>
         <div class="dns-command-label">Raw header</div>
         <pre class="tech-value code">${reported ? 'Received' : step.source}: ${escapeHtml(step.raw)}</pre>`;
 }
@@ -862,6 +2164,7 @@ function renderRelay() {
         </div>
         <div class="relay-panel" id="relay-panel-route" role="tabpanel" aria-labelledby="relay-tab-route"${view === 'route' ? '' : ' hidden'}>${renderRouteView(route)}</div>
         <div class="relay-panel" id="relay-panel-map" role="tabpanel" aria-labelledby="relay-tab-map"${view === 'map' ? '' : ' hidden'}>${renderPathMap(route)}</div>`;
+    fillNetworkOwners(container);
 }
 
 function selectRelayView(view, focus) {
@@ -884,7 +2187,10 @@ function selectMapStep(index) {
     relayState.selected = index;
     for (const node of document.querySelectorAll('.map-node')) node.setAttribute('aria-pressed', String(Number(node.dataset.step) === index));
     const detail = document.querySelector('.map-detail');
-    if (detail) detail.innerHTML = renderMapDetail(relayState.route);
+    if (detail) {
+        detail.innerHTML = renderMapDetail(relayState.route);
+        fillNetworkOwners(detail);
+    }
 }
 
 function markRelaySpfIp(ip) {
@@ -909,71 +2215,6 @@ resultsDiv.addEventListener('keydown', event => {
     selectRelayView(ids[next], true);
 });
 
-function displayServerValidation(headerValue) {
-    let container = document.getElementById('server-validation-output');
-    if (!container) {
-        const section = document.createElement('section');
-        section.className = 'section';
-        section.innerHTML = `
-            <h2 class="section-heading">
-                <span>Reported Authentication Results</span>
-                <span class="header-controls">
-                    <button type="button" class="toggle-section-btn" aria-controls="server-validation-output" aria-expanded="true" title="Collapse section">${sectionDisclosureIcon}</button>
-                </span>
-            </h2>
-            <div id="server-validation-output"></div>
-        `;
-        
-        // Insert after summary section to ensure it appears right after summary
-        // Note: displayRelay also inserts after summary. If called in order (Relay then ServerValidation),
-        // ServerValidation will be inserted immediately after summary, pushing Relay down.
-        // Result: Summary -> ServerValidation -> Relay
-        const summarySection = summaryOutput.closest('.section');
-        if (summarySection) {
-            summarySection.after(section);
-        } else {
-            resultsDiv.insertBefore(section, headersOutput.closest('.section'));
-        }
-        container = document.getElementById('server-validation-output');
-    }
-
-    if (!headerValue) {
-        container.innerHTML = '<p class="note">No Authentication-Results header found.</p>';
-        return;
-    }
-
-    const parser = new ServerValidationParser();
-    const dto = parser.parse(headerValue);
-
-    let html = `
-        <div class="auth-results-container">
-            <div class="auth-results-grid">
-    `;
-
-    dto.results.forEach(res => {
-        const statusClass = res.result === 'pass' ? 'status-pass' : 
-                          (res.result === 'fail' ? 'status-fail' : 'status-pending');
-        html += `
-            <div class="auth-result-card">
-                <div class="auth-method">${escapeHtml(res.method.toUpperCase())}</div>
-                <div class="auth-status ${statusClass}">${escapeHtml(res.result.toUpperCase())}</div>
-            </div>
-        `;
-    });
-
-    html += `
-            </div>
-            <div class="mt-15">
-                <div class="dns-command-label">Raw header</div>
-                <div class="data-card">
-                    <div class="data-value">${escapeHtml(dto.fullHeader)}</div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = html;
-}
 
 function displayDkim(dkimList) {
     if (!dkimList || dkimList.length === 0) {
@@ -1191,6 +2432,19 @@ function countTraceRecords(node) {
 }
 
 function displaySpf(spfDto) {
+    if (network.offline && spfDto.result === 'temperror') {
+        const ip = spfDto.senderIp ? normalizeIp(spfDto.senderIp) : null;
+        spfOutput.innerHTML = `
+            <div class="spf-record-card">
+                <div class="dmarc-verdict">
+                    <span class="status-neutral summary-pill">Offline</span>
+                    <span class="dmarc-verdict-text">${offlineVerdict(`The SPF record${spfDto.domain ? ` for <code>${escapeHtml(spfDto.domain)}</code>` : ''} wasn't looked up${ip ? `, so <code>${escapeHtml(ip)}</code> can't be checked against it` : ''}.`)}</span>
+                </div>
+                <div class="dmarc-reported">${spfDto.headerResult ? `At delivery <code>${escapeHtml(spfDto.reportedBy || 'the receiving server')}</code> recorded
+                    <span class="${verdictClass(spfDto.headerResult)}">${escapeHtml(verdictLabel(spfDto.headerResult))}</span>` : 'No SPF result was recorded at delivery'}</div>
+            </div>`;
+        return;
+    }
     const dnsOutput = spfDto.rawDns || 'No record';
     const dnsOutputDisplay = escapeHtml(dnsOutput.length > 255 ? dnsOutput.substring(0, 255) + '…' : dnsOutput);
     const reported = spfDto.headerResult;
@@ -1230,6 +2484,7 @@ function displaySpf(spfDto) {
                 <div><dt>Sending server</dt>
                     <dd class="mono">${ip ? escapeHtml(ip) : 'Unknown'}${ip ? embeddedChip(ip) : ''}</dd>
                     ${ip ? `<dd class="fact-note spf-ptr" data-ip="${escapeHtml(ip)}">Looking up its name…</dd>` : ''}
+                    ${ownerSlot(ip) ? `<dd class="fact-note">${ownerSlot(ip)}</dd>` : ''}
                     ${spfDto.ipSource ? `<dd class="fact-note">Taken from ${ipSources[spfDto.ipSource] || escapeHtml(spfDto.ipSource)}</dd>` : ''}</div>
                 ${lookups !== null && lookups !== undefined ? `<div><dt>DNS lookups</dt>
                     <dd${lookups >= 9 ? ' class="spf-lookups-high"' : ''}>${lookups} of 10 used</dd>
@@ -1267,7 +2522,8 @@ function displaySpf(spfDto) {
             </div>` : ''}
         </div>`;
 
-    // Reverse DNS is only for display, so it loads after the panel and never blocks it.
+    // Reverse DNS and the network owner are only for display, so they load after the panel.
+    fillNetworkOwners(spfOutput);
     const ptr = spfOutput.querySelector('.spf-ptr');
     if (ptr) {
         new SpfValidator().reverseName(ptr.dataset.ip)
@@ -1370,6 +2626,18 @@ function dmarcPolicyRows(dto) {
 
 function displayDmarc(dmarcDto) {
     const dto = dmarcDto;
+    if (network.offline && dto.result === 'temperror') {
+        dmarcOutput.innerHTML = `
+            <div class="dmarc-record-card">
+                <div class="dmarc-verdict">
+                    <span class="status-neutral summary-pill">Offline</span>
+                    <span class="dmarc-verdict-text">${offlineVerdict(`The DMARC policy${dto.domain ? ` for <code>${escapeHtml(dto.domain)}</code>` : ''} wasn't looked up.`)}</span>
+                </div>
+                ${dto.reported ? `<div class="dmarc-reported">At delivery <code>${escapeHtml(dto.reported.authServId)}</code> reported
+                    <span class="${verdictClass(dto.reported.result)}">${escapeHtml(verdictLabel(dto.reported.result))}</span></div>` : ''}
+            </div>`;
+        return;
+    }
     const dnsOutput = dto.rawDns || 'No record';
     const dnsOutputDisplay = escapeHtml(dnsOutput.length > 255 ? dnsOutput.substring(0, 255) + '…' : dnsOutput);
     const checks = dto.checks || [];
@@ -1424,18 +2692,21 @@ function displayDmarc(dmarcDto) {
 
 async function runVerification(email, run) {
     const validator = new DkimValidator();
-    const summary = {};
-    const subject = getHeaderValue(email.headers, 'Subject');
-    const updateSummary = (check, result) => {
-        summary[check] = result;
-        displaySummary(subject, summary);
-    };
+    new ArcValidator(validator).verify(email)
+        .catch(error => ({ status: 'unavailable', error: error.message, sets: [] }))
+        .then(result => {
+            if (run !== latestRun) return;
+            summaryState.arc = result;
+            displayArc(result);
+            setJumpStatus('section-arc', offlineStatus(result.status));
+            displaySummary();
+        });
     const spfCheck = new SpfValidator().verify(email)
         .catch(error => ({ result: 'unavailable', error: error.message }))
         .then(result => {
             if (run === latestRun) {
                 displaySpf(result);
-                updateSummary('spf', result.result);
+                setSummaryCheck('spf', offlineStatus(result.result), spfSummaryNote(result));
                 markRelaySpfIp(result.senderIp);
             }
             return result;
@@ -1457,7 +2728,7 @@ async function runVerification(email, run) {
     displayHeaders();
     const dkimStatuses = dkimResults.map(({ result }) => result.valid ? 'pass' : result.status || 'fail');
     const dkim = ['pass', 'temperror', 'unavailable', 'fail', 'expired'].find(status => dkimStatuses.includes(status)) || 'none';
-    updateSummary('dkim', dkim);
+    setSummaryCheck('dkim', offlineStatus(dkim), dkimSummaryNote(dkimResults));
 
     const spf = await spfCheck;
     if (run !== latestRun) return;
@@ -1466,7 +2737,9 @@ async function runVerification(email, run) {
     if (run !== latestRun) return;
     displayDmarc(dmarc);
 
-    updateSummary('dmarc', dmarc.result);
+    summaryState.dmarcDto = dmarc;
+    setSummaryCheck('dmarc', offlineStatus(dmarc.result), dmarcSummaryNote(dmarc));
+    updateBimiNote();
 }
 
 // Headers worth knowing about when a signature leaves them out.
@@ -1491,6 +2764,11 @@ function dkimVerdict(dkim, result) {
     const expiry = dkim.tags.x ? escapeHtml(formatUnixTime(dkim.tags.x)) : '';
     const headers = dkimHeadersVerified(result);
     if (result.valid) return { cls: 'dkim-verdict', text: `Verified: the signed headers and body are exactly as ${domain} signed them.` };
+    if (result.bodyMissing) {
+        return headers === true ? { cls: 'notice', text: 'Only the headers were provided, so the body can\'t be checked. The signed headers verify against the current key.' }
+            : headers === false ? { cls: 'error', text: 'Only the headers were provided, and the signed headers don\'t verify against the current key.' }
+            : { cls: 'note', text: 'Only the headers were provided, so the body can\'t be checked, and the signed headers couldn\'t be checked either.' };
+    }
     if (result.headersVerified === true) {
         return { cls: 'notice', text: 'The body no longer matches what was signed, but the signed headers still verify against the current key, '
             + 'so the body was changed after signing. Messages saved or exported from Outlook or Exchange often look like this, '
@@ -1502,6 +2780,12 @@ function dkimVerdict(dkim, result) {
             : { cls: 'dkim-verdict', text: `The signature expired on ${expiry}, and its key could not be checked.` };
     }
     if (result.headersVerified === false) return { cls: 'error', text: 'Neither the body nor the signed headers match this signature.' };
+    if (network.offline && (result.status === 'temperror' || result.keyError)) {
+        const keyName = `<code>${escapeHtml(dkim.tags.s || '')}._domainkey.${escapeHtml(dkim.tags.d || '')}</code>`;
+        return result.bodyHash?.valid === false
+            ? { cls: 'notice', text: offlineVerdict(`The body changed after signing, so this signature fails whatever the key says. The key ${keyName} wasn't looked up, so the signed headers weren't checked.`) }
+            : { cls: 'note', text: offlineVerdict(`The key ${keyName} wasn't looked up, so the signed headers weren't checked.${result.bodyHash?.valid ? ' The body matches what was signed.' : ''}`) };
+    }
     if (result.keyError) return { cls: 'error', text: `The key ${escapeHtml(dkim.tags.s || '')}._domainkey.${escapeHtml(dkim.tags.d || '')} could not be used: ${escapeHtml(result.keyError)}.` };
     return { cls: 'error', text: escapeHtml(result.error || 'The signature does not verify.') };
 }
@@ -1548,7 +2832,7 @@ function dkimCoverage(dkim, result) {
 function displayDkimResult(i, dkim, result) {
     const statusDiv = document.getElementById(`dkim-status-${i}`);
     const verificationDiv = document.getElementById(`dkim-verification-${i}`);
-    const status = result.valid ? 'pass' : result.status || 'fail';
+    const status = result.valid ? 'pass' : result.bodyMissing ? result.status : offlineStatus(result.status || 'fail');
     const bhResult = result.bodyHash || {};
     statusDiv.className = `dkim-status-badge ${verdictClass(status)}`;
     statusDiv.textContent = verdictLabel(status);
@@ -1558,20 +2842,22 @@ function displayDkimResult(i, dkim, result) {
     const expired = dkimExpired(dkim);
     const keyName = `${dkim.tags.s || ''}._domainkey.${dkim.tags.d || ''}`;
     const key = result.key;
-    const keyText = key ? (key.type === 'rsa' ? `RSA, ${key.bits}-bit` : 'Ed25519') : dkim.publicKey ? 'Published' : 'Not found';
+    const keyText = key ? (key.type === 'rsa' ? `RSA, ${key.bits}-bit` : 'Ed25519') : dkim.publicKey ? 'Published' : network.offline ? 'Not looked up' : 'Not found';
     const weakKey = key?.type === 'rsa' && key.bits < 2048;
     const identity = dkim.tags.i && dkim.tags.i !== '@' + dkim.tags.d ? dkim.tags.i : null;
 
     const checks = [
-        bhResult.valid === undefined ? dkimCheckRow(null, 'Body not checked', escapeHtml(result.error || ''))
+        result.bodyMissing ? dkimCheckRow(null, 'Body not provided', 'Only headers were given, so the body hash can\'t be checked')
+            : bhResult.valid === undefined ? dkimCheckRow(null, 'Body not checked', escapeHtml(result.error || ''))
             : bhResult.valid ? dkimCheckRow(true, 'Body matches what was signed', '')
             : dkimCheckRow(false, 'Body changed after signing', 'Its hash differs from the one in the signature'),
         headers === true ? dkimCheckRow(true, 'Signed headers verify', 'Checked against the key published today')
             : headers === false ? dkimCheckRow(false, 'Signed headers don\'t verify', 'The signature doesn\'t match them with the key published today')
-            : dkimCheckRow(null, 'Signed headers not checked', escapeHtml(result.keyError || (result.status === 'unavailable' ? result.error : '') || '')),
+            : dkimCheckRow(null, 'Signed headers not checked', network.offline ? 'The key wasn\'t looked up' : escapeHtml(result.keyError || (result.status === 'unavailable' ? result.error : '') || '')),
         expired ? dkimCheckRow('warn', `Expired on ${escapeHtml(formatUnixTime(dkim.tags.x))}`, 'Receivers ignore signatures past their expiry')
             : dkimCheckRow(true, dkim.tags.x ? `Valid until ${escapeHtml(formatUnixTime(dkim.tags.x))}` : 'No expiry set', ''),
         key ? dkimCheckRow(weakKey ? 'warn' : true, `Key found: ${keyText}`, weakKey ? '2048-bit keys are recommended; 1024-bit keys are considered weak' : `<code>${escapeHtml(keyName)}</code>`)
+            : network.offline ? dkimCheckRow(null, 'Key not looked up', `<code>${escapeHtml(keyName)}</code> · offline mode`)
             : dkimCheckRow(dkim.publicKey ? null : false, dkim.publicKey ? 'Key published' : 'Key not found', `<code>${escapeHtml(keyName)}</code>${result.keyError ? ' · ' + escapeHtml(result.keyError) : ''}`)
     ].join('');
 
