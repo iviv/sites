@@ -1,456 +1,454 @@
-(function(root, factory) {
+(function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    // Node.js
-    const https = require('https');
-    module.exports = factory(true, https);
+    module.exports = factory(require('./v2_dns'), require('./v2_email_parser').EmailAddress);
   } else {
-    // Browser globals
-    const modules = factory(false, window.fetch);
-    root.SpfValidator = modules.SpfValidator;
-    root.SpfDTO = modules.SpfDTO;
+    Object.assign(root, factory(root.EmailDns, root.EmailAddress));
   }
-}(typeof self !== 'undefined' ? self : this, function(isNode, netLib) {
+}(typeof self !== 'undefined' ? self : this, function (dns, address) {
+  const verdicts = { '+': 'Pass', '-': 'Fail', '~': 'SoftFail', '?': 'Neutral' };
+
+  class SpfError extends Error {
+    constructor(result, message) {
+      super(message);
+      this.result = result;
+    }
+  }
+
+  function parseIp(text) {
+    if (!text.includes(':')) {
+      const octets = text.split('.');
+      if (octets.length !== 4 || !octets.every(value => /^(?:0|[1-9]\d{0,2})$/.test(value) && Number(value) <= 255)) return null;
+      return { bits: 32, value: octets.reduce((value, byte) => (value << 8n) + BigInt(byte), 0n), macro: text };
+    }
+
+    if (text.includes('.')) {
+      const colon = text.lastIndexOf(':');
+      const ipv4 = parseIp(text.slice(colon + 1));
+      if (!ipv4 || ipv4.bits !== 32) return null;
+      text = text.slice(0, colon + 1) + (ipv4.value >> 16n).toString(16) + ':' + (ipv4.value & 65535n).toString(16);
+    }
+    const sides = text.split('::');
+    if (sides.length > 2) return null;
+    const left = sides[0] ? sides[0].split(':') : [];
+    const right = sides[1] ? sides[1].split(':') : [];
+    const missing = 8 - left.length - right.length;
+    if (sides.length === 1 ? missing !== 0 : missing < 1) return null;
+    const groups = [...left, ...Array(missing).fill('0'), ...right];
+    if (!groups.every(value => /^[\da-f]{1,4}$/i.test(value))) return null;
+    const hex = groups.map(value => value.toLowerCase().padStart(4, '0')).join('');
+    return { bits: 128, value: BigInt('0x' + hex), macro: [...hex].join('.') };
+  }
+
+  function matchesCidr(ip, network, prefix = ip.bits) {
+    if (network?.bits !== ip.bits) return false;
+    const shift = BigInt(ip.bits - prefix);
+    return (ip.value >> shift) === (network.value >> shift);
+  }
+
+  function prefixLength(value, bits) {
+    if (value === undefined) return bits;
+    const number = Number(value);
+    if (!/^(?:0|[1-9]\d{0,2})$/.test(value) || number > bits) throw new SpfError('PermError', 'Invalid SPF CIDR prefix');
+    return number;
+  }
+
+  function parsePolicy(record) {
+    const terms = [];
+    const modifiers = new Map();
+    for (const token of record.split(/ +/).slice(1).filter(Boolean)) {
+      const modifier = token.match(/^([a-z][a-z0-9_.-]*)=(.+)$/i);
+      if (modifier) {
+        const name = modifier[1].toLowerCase();
+        if (name !== 'redirect' && name !== 'exp') continue;
+        if (modifiers.has(name)) throw new SpfError('PermError', 'Duplicate SPF modifier');
+        modifiers.set(name, modifier[2]);
+        continue;
+      }
+
+      const qualifier = /^[+~?-]/.test(token) ? token[0] : '+';
+      const mechanism = token.slice(/^[+~?-]/.test(token) ? 1 : 0);
+      const ipRange = mechanism.match(/^(ip4|ip6):([^/]+)(?:\/(\d+))?$/i);
+      if (ipRange) {
+        const network = parseIp(ipRange[2]);
+        const bits = ipRange[1].toLowerCase() === 'ip4' ? 32 : 128;
+        if (network?.bits !== bits) throw new SpfError('PermError', 'Invalid SPF IP address');
+        terms.push({ token, qualifier, type: 'ip', network, prefix: prefixLength(ipRange[3], bits) });
+        continue;
+      }
+      const dnsAddress = mechanism.match(/^(a|mx)(?::((?:%\{[^}]+\}|%(?!\{)|[^/%])+))?(?:\/(\d+))?(?:\/\/(\d+))?$/i);
+      if (dnsAddress) {
+        terms.push({ token, qualifier, type: dnsAddress[1].toLowerCase(), target: dnsAddress[2],
+          ipv4Prefix: prefixLength(dnsAddress[3], 32), ipv6Prefix: prefixLength(dnsAddress[4], 128) });
+        continue;
+      }
+      const domainMechanism = mechanism.match(/^(include|exists|ptr):(.+)$/i);
+      if (domainMechanism) {
+        terms.push({ token, qualifier, type: domainMechanism[1].toLowerCase(), target: domainMechanism[2] });
+        continue;
+      }
+      if (/^(all|ptr)$/i.test(mechanism)) {
+        terms.push({ token, qualifier, type: mechanism.toLowerCase() });
+        continue;
+      }
+      throw new SpfError('PermError', 'Invalid or unsupported SPF mechanism: ' + token);
+    }
+    return { terms, redirect: modifiers.get('redirect') };
+  }
+
+  function headerValues(headers, name) {
+    const value = address.getHeader(headers, name);
+    return Array.isArray(value) ? value : value ? [value] : [];
+  }
+
+  function traceClauses(header) {
+    let clause = { text: '', comment: '' };
+    const clauses = [clause];
+    let depth = 0;
+    // Semicolons in quoted values and comments do not separate methods or properties.
+    for (const [token] of header.matchAll(/"(?:[^"\\]|\\.)*"|\\.|[();]|[^"\\();]+|["\\]/g)) {
+      if (token === '(') {
+        if (!depth) clause.text += ' ';
+        depth++;
+      } else if (token === ')' && depth) {
+        depth--;
+        if (!depth) clause.comment += ' ';
+      } else if (depth) {
+        clause.comment += token;
+      } else if (token === ';') {
+        clause = { text: '', comment: '' };
+        clauses.push(clause);
+      } else {
+        clause.text += token;
+      }
+    }
+    return clauses;
+  }
+
+  function traceProperties(text) {
+    const fields = new Map();
+    for (const [, name, quoted, bare] of text.matchAll(/(?:^|[\s;])([a-z][\w.-]*)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;]+))/gi)) {
+      const key = name.toLowerCase();
+      if (!fields.has(key)) fields.set(key, quoted?.replace(/\\(.)/g, '$1') ?? bare);
+    }
+    return fields;
+  }
+
+  function envelopeFrom(value, allowDomain = false) {
+    if (typeof value !== 'string') return null;
+    if (value.trim() === '<>') return { empty: true };
+    const mailboxes = address.parseMailboxes(value);
+    if (mailboxes.length === 1) return mailboxes[0];
+    const domain = allowDomain ? dns.mailboxDomain(value.trim()) : null;
+    return domain ? { domain, address: null, localPart: null } : null;
+  }
+
+  function peerIp(value) {
+    const ipText = value?.trim().replace(/^\[|\]$/g, '').replace(/^IPv6:/i, '');
+    return ipText && parseIp(ipText) ? ipText : null;
+  }
+
+  function readSpfReports(headers) {
+    const received = headerValues(headers, 'Received-SPF').flatMap(header => {
+      const clauses = traceClauses(header);
+      const result = clauses[0].text.match(/^\s*(pass|fail|softfail|neutral|none|temperror|permerror)\b/i)?.[1];
+      if (!result) return [];
+      const props = traceProperties(clauses.map(clause => clause.text).join(';'));
+      const hintedIp = clauses[0].comment.match(/\bdesignates\s+(\S+)\s+as\b/i)?.[1];
+      return [{
+        result: result.toLowerCase(), source: 'Received-SPF',
+        envelope: envelopeFrom(props.get('envelope-from'), true),
+        ip: peerIp(props.get('client-ip')) || peerIp(hintedIp),
+        helo: dns.mailboxDomain(props.get('helo')),
+        receiver: dns.mailboxDomain(props.get('receiver')),
+        heloOnly: props.get('identity')?.toLowerCase() === 'helo'
+      }];
+    });
+    const auth = headerValues(headers, 'Authentication-Results').flatMap(header => {
+      const clauses = traceClauses(header);
+      const receiver = dns.mailboxDomain(clauses[0].text.trim().split(/[\s/]+/)[0]);
+      return clauses.flatMap(({ text, comment }) => {
+        const match = text.match(/^\s*spf(?:\/\d+)?\s*=\s*(pass|fail|softfail|neutral|none|temperror|permerror)\b(.*)$/i);
+        if (!match) return [];
+        const props = traceProperties(match[2]);
+        const reason = traceProperties(props.get('reason') || '');
+        const hintedIp = comment.match(/\b(?:sender IP is|designates)\s+(\[?(?:IPv6:)?[\da-f:.]+\]?)/i)?.[1];
+        return [{
+          result: match[1].toLowerCase(), source: 'Authentication-Results', receiver,
+          envelope: envelopeFrom(props.get('smtp.mailfrom') ?? reason.get('smtp.mailfrom'), true),
+          ip: peerIp(props.get('smtp.remote-ip') ?? props.get('client-ip') ?? reason.get('client-ip')) || peerIp(hintedIp),
+          helo: dns.mailboxDomain(props.get('smtp.helo') ?? reason.get('smtp.helo')),
+          heloOnly: !props.has('smtp.mailfrom') && !reason.has('smtp.mailfrom') && props.has('smtp.helo')
+        }];
+      });
+    });
+    return { received, auth };
+  }
+
+  function relayPeer(header) {
+    const from = header.match(/^\s*from\s+(.+?)\s+by\s+([^\s;(]+)/i);
+    if (!from) return null;
+    const peers = from[1].matchAll(/\[([^\]]+)\]|([^\s()[\];]+)/g);
+    const ip = Array.from(peers, match => peerIp(match[1] ?? match[2])).find(Boolean);
+    if (!ip) return null;
+    return {
+      ip, source: 'Received', helo: dns.mailboxDomain(from[1].split(/\s+/)[0]),
+      receiver: dns.mailboxDomain(from[2])
+    };
+  }
+
+  function inferSession(headers, reports) {
+    const allReports = [...reports.received, ...reports.auth];
+    const envelope = envelopeFrom(address.getHeader(headers, 'Return-Path')) ||
+      allReports.find(report => report.envelope && !report.heloOnly)?.envelope;
+    const relevant = allReports.filter(report =>
+      (!report.heloOnly || envelope?.empty) &&
+      (!report.envelope || (report.envelope.domain === envelope?.domain && report.envelope.empty === envelope?.empty)));
+    const explicitPeer = relevant.find(report => report.ip);
+    const receiver = explicitPeer?.receiver || relevant.find(report => report.receiver)?.receiver;
+    const hops = headerValues(headers, 'Received').map(relayPeer).filter(Boolean);
+    const relay = hops.find(hop => hop.ip === explicitPeer?.ip) ||
+      hops.find(hop => receiver && hop.receiver === receiver) || (!explicitPeer ? hops[0] : null);
+    const peer = explicitPeer || relay;
+    const helo = explicitPeer?.helo ||
+      relevant.find(report => report.helo && (!explicitPeer || report.receiver === receiver))?.helo || relay?.helo;
+    const mailbox = envelope?.empty ? envelopeFrom(helo ? 'postmaster@' + helo : null) : envelope;
+    return { mailbox, helo, ipText: peer?.ip, ipSource: peer?.source, emptyEnvelope: envelope?.empty };
+  }
 
   class SpfDTO {
-    constructor(domain) {
+    constructor(domain = null) {
       this.domain = domain;
+      this.result = 'unavailable';
       this.record = null;
       this.mechanisms = [];
       this.dnsCommand = null;
       this.rawDns = null;
-      this.headerResult = null; // From Authentication-Results
+      this.headerResult = null;
       this.senderIp = null;
+      this.ipSource = null;
+      this.source = null;
       this.error = null;
-      this.trace = null; // Recursive evaluation trace
+      this.trace = null;
       this.matchChain = null;
+      this.mailbox = null;
+      this.reportedBy = null;
+      this.lookups = null;
+      this.voidLookups = null;
     }
   }
 
   class SpfValidator {
-    
-    // Generic DNS fetcher
     queryDns(name, type) {
-      if (isNode) {
-        return new Promise((resolve, reject) => {
-          const options = {
-            hostname: 'cloudflare-dns.com',
-            path: `/dns-query?name=${name}&type=${type}`,
-            method: 'GET',
-            headers: { 'Accept': 'application/dns-json' }
-          };
-          const req = netLib.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-            });
-          });
-          req.on('error', reject);
-          req.end();
-        });
-      } else {
-        const url = `https://cloudflare-dns.com/dns-query?name=${name}&type=${type}`;
-        return netLib(url, { headers: { 'Accept': 'application/dns-json' } })
-          .then(res => res.json());
-      }
+      return dns.lookup(name, type);
     }
 
-    async fetchSPF(domain) {
-      const dnsCommand = `dig TXT ${domain}`;
-      try {
-        const json = await this.queryDns(domain, 'TXT');
-        
-        if (json.Status !== 0 || !json.Answer) {
-          // No answer or error, but might just be no SPF record
-          return { record: null, rawDns: 'No TXT record found', dnsCommand };
-        }
-        
-        let rawData = null;
-        const spfRecord = json.Answer.find(r => {
-          if (r.type !== 16) return false;
-          let d = r.data;
-          if (d.startsWith('"')) {
-            d = d.replace(/^"|"$/g, '').replace(/" "/g, '').replace(/\\"/g, '"');
+    async lookup(name, type, budget) {
+      const records = await this.queryDns(name, type);
+      if (budget && !records.length && ++budget.voids > 2) throw new SpfError('PermError', 'SPF void lookup limit exceeded');
+      return records;
+    }
+
+    async fetchSPF(domain, budget) {
+      const dnsCommand = 'dig TXT ' + domain;
+      const answers = await this.lookup(domain, 'TXT', budget);
+      const records = answers.map(rawDns => ({ rawDns, record: dns.txt(rawDns) }))
+        .filter(({ record }) => /^v=spf1(?: |$)/i.test(record));
+      if (records.length > 1) throw new SpfError('PermError', 'Multiple SPF records');
+      return { ...records[0], dnsCommand };
+    }
+
+    countTerm(budget) {
+      if (++budget.terms > 10) throw new SpfError('PermError', 'SPF DNS lookup limit exceeded');
+    }
+
+    async validatedPtr(ip, budget) {
+      if (!budget.ptr) {
+        budget.ptr = (async () => {
+          const reverse = ip.macro.split('.').reverse().join('.') + (ip.bits === 32 ? '.in-addr.arpa' : '.ip6.arpa');
+          const names = await this.lookup(reverse, 'PTR', budget);
+          const validated = [];
+          for (const value of names.slice(0, 10)) {
+            const name = dns.normalizeName(value);
+            if (!name) continue;
+            const records = await this.lookup(name, ip.bits === 32 ? 'A' : 'AAAA', budget);
+            if (records.some(text => matchesCidr(ip, parseIp(text)))) validated.push(name);
           }
-          if (d.trim().startsWith('v=spf1')) {
-            rawData = d;
-            return true;
-          }
-          return false;
-        });
+          return validated;
+        })();
+      }
+      return budget.ptr;
+    }
 
-        if (!spfRecord || !rawData) {
-          return { record: null, rawDns: 'No SPF record found in TXT records', dnsCommand };
+    async expandDomain(spec, domain, session, budget) {
+      if (!spec) return domain;
+      const { ip, mailbox, helo } = session;
+      let result = '';
+      let end = 0;
+      const macros = /%(?:[%_-]|\{([a-z])(\d*)(r?)([-.+,/_=]*)\})/gi;
+      for (const match of spec.matchAll(macros)) {
+        const literal = spec.slice(end, match.index);
+        if (literal.includes('%')) throw new SpfError('PermError', 'Invalid SPF macro');
+        result += literal;
+        end = match.index + match[0].length;
+        if (!match[1]) {
+          result += { '%%': '%', '%_': ' ', '%-': '%20' }[match[0]];
+          continue;
         }
-        
-        return {
-          record: rawData,
-          rawDns: spfRecord.data,
-          dnsCommand
-        };
-      } catch (e) {
-        return { record: null, rawDns: 'DNS Error: ' + e.message, dnsCommand };
-      }
-    }
-
-    // Helper to convert IPv4 to integer
-    ip4ToLong(ip) {
-      return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-    }
-
-    // Helper to check CIDR match
-    checkCidr(ip, cidr, isIp6) {
-      if (isIp6) {
-        // Simplified IPv6: Exact match or simple prefix check could be added here
-        // For now, just check if the IP starts with the CIDR IP (very basic)
-        const [rangeIp] = cidr.split('/');
-        return ip === rangeIp; 
-      }
-      try {
-        const [rangeIp, bitsStr] = cidr.split('/');
-        const bits = bitsStr ? parseInt(bitsStr, 10) : 32;
-        const mask = ~(2 ** (32 - bits) - 1);
-        return (this.ip4ToLong(ip) & mask) === (this.ip4ToLong(rangeIp) & mask);
-      } catch (e) { return false; }
-    }
-
-    // Helper for IPv6 expansion
-    expandIp6(ip) {
-      let fullIp = ip;
-      if (ip.includes('::')) {
-        const parts = ip.split('::');
-        const left = parts[0] ? parts[0].split(':').filter(Boolean) : [];
-        const right = parts[1] ? parts[1].split(':').filter(Boolean) : [];
-        const missing = 8 - (left.length + right.length);
-        const zeros = Array(Math.max(0, missing)).fill('0000');
-        fullIp = [...left, ...zeros, ...right].join(':');
-      }
-      const groups = fullIp.split(':');
-      const nibbles = groups.map(g => g.padStart(4, '0').split('')).flat();
-      return nibbles.join('.');
-    }
-
-    expandMacros(str, ip, domain, sender) {
-      if (!str || !str.includes('%')) return str;
-      
-      // Helper to split/join/reverse
-      const process = (val, digits, reverse, delimiters) => {
-        if (!val) return '';
-        // Default delimiter is '.'
-        const delimRegex = delimiters ? new RegExp(`[${delimiters.replace(/[-[\]/{}()*+?.\\^$|]/g, "\\$&")}]`) : /\./;
-        
-        let parts = val.split(delimRegex);
+        const [, letter, digits, reverse, delimiters] = match;
+        const values = { s: mailbox.address, l: mailbox.localPart, o: mailbox.domain, d: domain,
+          i: ip.macro, v: ip.bits === 32 ? 'in-addr' : 'ip6', h: helo };
+        const key = letter.toLowerCase();
+        if (key === 'p') {
+          const names = await this.validatedPtr(ip, budget);
+          values.p = names.find(name => name === domain) || names.find(name => name.endsWith('.' + domain)) || names[0] || 'unknown';
+        }
+        if (!Object.hasOwn(values, key) || (digits && Number(digits) === 0)) throw new SpfError('PermError', 'Invalid SPF macro');
+        if (!values[key]) {
+          throw new SpfError('Unavailable', key === 'h' ? 'The SPF policy needs the SMTP HELO name' :
+            'The SPF policy needs the complete envelope sender address');
+        }
+        const parts = [...values[key].split(delimiters ? new RegExp('[' + delimiters.replace(/-/g, '\\-') + ']') : '.')];
         if (reverse) parts.reverse();
-        if (digits && digits > 0) parts = parts.slice(-digits);
-        return parts.join('.');
-      };
-
-      return str.replace(/%\{([a-zA-Z])(\d+)?(r)?([-.+,/_=]*)?\}/g, (match, letter, digits, reverse, delimiters) => {
-        let val = '';
-        const safeSender = sender || '';
-        switch (letter.toLowerCase()) {
-          case 'i': val = ip.includes(':') ? this.expandIp6(ip) : ip; break;
-          case 's': val = safeSender; break;
-          case 'l': val = safeSender.split('@')[0]; break;
-          case 'o': val = safeSender.split('@')[1] || safeSender; break;
-          case 'd': val = domain; break;
-          case 'v': val = ip.includes(':') ? 'ip6' : 'in-addr'; break;
-          case 'h': val = domain; break; // Fallback for HELO
-          default: return match;
-        }
-        return process(val, digits, reverse === 'r', delimiters);
-      })
-      .replace(/%%/g, '%')
-      .replace(/%_/g, ' ')
-      .replace(/%-/g, '%20');
+        const expanded = (digits ? parts.slice(-Number(digits)) : parts).join('.');
+        result += letter === key ? expanded : encodeURIComponent(expanded).replace(/[!'()*]/g, char => '%' + char.charCodeAt(0).toString(16));
+      }
+      if (spec.slice(end).includes('%')) throw new SpfError('PermError', 'Invalid SPF macro');
+      result += spec.slice(end);
+      const name = dns.normalizeName(result, true);
+      if (!name?.includes('.')) throw new SpfError('PermError', 'Invalid SPF lookup name');
+      return name;
     }
 
-    async evaluateRecursive(ip, domain, depth = 0, sender = null) {
-      if (depth > 10) return { result: 'PermError', reason: 'Max depth exceeded', domain };
+    async evaluateRecursive(ipText, domain, depth = 0, sender = null, session = null, budget = null) {
+      const node = { domain, record: null, rawDns: null, dnsCommand: null, children: [], terms: [],
+        result: 'None', reason: 'No SPF record found', matchMechanism: null };
+      let current = null;
+      try {
+        const name = dns.normalizeName(domain, true);
+        const ip = session?.ip || parseIp(ipText);
+        if (!ip || !name) throw new SpfError('PermError', 'Invalid SPF address or domain');
+        session ||= { ip, mailbox: address.parseMailboxes(sender || 'postmaster@' + name)[0], helo: null };
+        if (!session.mailbox) throw new SpfError('PermError', 'Invalid SMTP MAIL FROM');
+        budget ||= { terms: depth, voids: 0, ptr: null };
+        Object.assign(node, await this.fetchSPF(name, budget));
+        if (!node.record) return node;
 
-      const fetchRes = await this.fetchSPF(domain);
-      const node = {
-        domain,
-        record: fetchRes.record,
-        rawDns: fetchRes.rawDns,
-        dnsCommand: fetchRes.dnsCommand,
-        children: [],
-        result: 'None',
-        reason: 'No match found',
-        matchMechanism: null
-      };
-
-      if (!node.record) {
-        node.result = 'None';
-        node.reason = 'No SPF record found';
-        return node;
-      }
-
-      const terms = node.record.split(/\s+/).filter(t => t && t !== 'v=spf1');
-      const isIp6 = ip.includes(':');
-      let redirectDomain = null;
-
-      for (const term of terms) {
-        let qualifier = '+';
-        let mechanism = term;
-        if (/^[-+?~]/.test(term)) {
-          qualifier = term[0];
-          mechanism = term.substring(1);
-        }
-
-        const qualResult = (q) => {
-          if (q === '-') return 'Fail';
-          if (q === '~') return 'SoftFail';
-          if (q === '?') return 'Neutral';
-          return 'Pass';
-        };
-
-        if (mechanism.startsWith('ip4:') && !isIp6) {
-          if (this.checkCidr(ip, mechanism.substring(4), false)) {
-            node.result = qualResult(qualifier);
-            node.matchMechanism = term;
-            node.reason = `Matched IP ${ip} against ${mechanism}`;
-            return node;
-          }
-        } else if (mechanism.startsWith('ip6:') && isIp6) {
-          if (this.checkCidr(ip, mechanism.substring(4), true)) {
-            node.result = qualResult(qualifier);
-            node.matchMechanism = term;
-            node.reason = `Matched IP ${ip} against ${mechanism}`;
-            return node;
-          }
-        } else if (mechanism === 'all') {
-          node.result = qualResult(qualifier);
-          node.matchMechanism = term;
-          node.reason = `Hit default '${term}' mechanism`;
-          return node;
-        } else if (mechanism.startsWith('a') || mechanism.startsWith('mx')) {
-          // Parse a/mx mechanism: type[:domain][/cidr]
-          const match = mechanism.match(/^(a|mx)(?::([^/]+))?(?:\/(\d+))?$/);
-          if (match) {
-            const type = match[1];
-            let targetDomain = match[2] || domain;
-            targetDomain = this.expandMacros(targetDomain, ip, domain, sender);
-            const cidr = match[3]; // Optional CIDR override
-            
-            let ipsToCheck = [];
-            
-            if (type === 'a') {
-              const json = await this.queryDns(targetDomain, 'A');
-              if (json.Answer) ipsToCheck = json.Answer.filter(r => r.type === 1).map(r => r.data);
+        const { terms, redirect } = parsePolicy(node.record);
+        const addressType = ip.bits === 32 ? 'A' : 'AAAA';
+        for (const term of terms) {
+          current = term.token;
+          let matched = term.type === 'all';
+          if (term.type === 'ip') {
+            matched = matchesCidr(ip, term.network, term.prefix);
+          } else if (term.type !== 'all') {
+            this.countTerm(budget);
+            const target = await this.expandDomain(term.target, name, session, budget);
+            if (term.type === 'include') {
+              const trace = await this.evaluateRecursive(ipText, target, depth + 1, sender, session, budget);
+              node.children.push({ type: 'include', val: target, trace });
+              if (trace.result === 'None') throw new SpfError('PermError', 'SPF include has no policy');
+              if (['PermError', 'TempError', 'Unavailable'].includes(trace.result)) throw new SpfError(trace.result, trace.reason);
+              matched = trace.result === 'Pass';
+              if (matched) node.matchTarget = target;
+            } else if (term.type === 'exists') {
+              matched = (await this.lookup(target, 'A', budget)).length > 0;
+            } else if (term.type === 'ptr') {
+              matched = (await this.validatedPtr(ip, budget)).some(name => name === target || name.endsWith('.' + target));
             } else {
-              // MX: Fetch MX records, then A records for each
-              const mxJson = await this.queryDns(targetDomain, 'MX');
-              if (mxJson.Answer) {
-                const exchanges = mxJson.Answer.filter(r => r.type === 15).map(r => {
-                  // MX data format: "preference exchange"
-                  const parts = r.data.split(' ');
-                  return parts.length > 1 ? parts[1] : parts[0];
-                });
-                
-                for (const exchange of exchanges) {
-                  const aJson = await this.queryDns(exchange, 'A');
-                  if (aJson.Answer) ipsToCheck.push(...aJson.Answer.filter(r => r.type === 1).map(r => r.data));
+              let names = [target];
+              if (term.type === 'mx') {
+                const exchanges = await this.lookup(target, 'MX', budget);
+                if (exchanges.length > 10) throw new SpfError('PermError', 'Too many SPF MX records');
+                names = exchanges.map(value => dns.normalizeName(value.trim().split(/\s+/)[1])).filter(Boolean);
+              }
+              const prefix = ip.bits === 32 ? term.ipv4Prefix : term.ipv6Prefix;
+              for (const host of names) {
+                const addresses = await this.lookup(host, addressType, budget);
+                if (addresses.some(text => matchesCidr(ip, parseIp(text), prefix))) {
+                  matched = true;
+                  break;
                 }
               }
             }
-
-            // Check IPs
-            for (const checkIp of ipsToCheck) {
-              // If cidr specified, use it, otherwise /32 (exact match)
-              const range = cidr ? `${checkIp}/${cidr}` : `${checkIp}/32`;
-              if (this.checkCidr(ip, range, isIp6)) {
-                node.result = qualResult(qualifier);
-                node.matchMechanism = term;
-                node.reason = `Matched ${type} record of ${targetDomain} (${checkIp})`;
-                return node;
-              }
-            }
           }
-        } else if (mechanism.startsWith('exists:')) {
-          let target = mechanism.substring(7);
-          target = this.expandMacros(target, ip, domain, sender);
-          const json = await this.queryDns(target, 'A');
-          if (json.Answer && json.Answer.length > 0) {
-            node.result = qualResult(qualifier);
-            node.matchMechanism = term;
-            node.reason = `Matched 'exists' mechanism (DNS A record found for ${target})`;
-            return node;
-          }
-        } else if (mechanism.startsWith('include:')) {
-          let subDomain = mechanism.substring(8);
-          subDomain = this.expandMacros(subDomain, ip, domain, sender);
-          const subResult = await this.evaluateRecursive(ip, subDomain, depth + 1, sender);
-          node.children.push({ type: 'include', val: subDomain, trace: subResult });
-          if (subResult.result === 'Pass') {
-            node.result = qualResult(qualifier);
-            node.matchMechanism = term;
-            node.reason = `Matched include:${subDomain}`;
-            return node;
-          }
-        } else if (mechanism.startsWith('redirect=')) {
-          redirectDomain = mechanism.substring(9);
-          redirectDomain = this.expandMacros(redirectDomain, ip, domain, sender);
+          node.terms.push({ token: term.token, outcome: matched ? 'matched' : 'no-match' });
+          current = null;
+          if (matched) return { ...node, result: verdicts[term.qualifier], reason: 'Matched ' + term.token, matchMechanism: term.token };
         }
-      }
 
-      if (redirectDomain) {
-        const subResult = await this.evaluateRecursive(ip, redirectDomain, depth + 1, sender);
-        node.children.push({ type: 'redirect', val: redirectDomain, trace: subResult });
-        node.result = subResult.result;
-        node.matchMechanism = `redirect=${redirectDomain}`;
-        node.reason = `Followed redirect to ${redirectDomain}`;
-        return node;
+        if (redirect) {
+          current = 'redirect=' + redirect;
+          this.countTerm(budget);
+          const target = await this.expandDomain(redirect, name, session, budget);
+          const trace = await this.evaluateRecursive(ipText, target, depth + 1, sender, session, budget);
+          node.children.push({ type: 'redirect', val: target, trace });
+          if (trace.result === 'None') throw new SpfError('PermError', 'SPF redirect has no policy');
+          node.terms.push({ token: 'redirect=' + redirect, outcome: trace.result === 'Pass' ? 'matched' : 'no-match' });
+          return { ...node, result: trace.result, reason: trace.reason, matchTarget: target, matchMechanism: 'redirect=' + redirect };
+        }
+        return { ...node, result: 'Neutral', reason: 'No mechanism matched' };
+      } catch (error) {
+        if (current) node.terms.push({ token: current, outcome: 'error' });
+        return { ...node, result: error.result || 'TempError', reason: error.message };
       }
+    }
 
-      node.result = 'Neutral'; // Default if no match and no redirect
-      node.reason = 'Defaulted to Neutral (no match)';
-      return node;
+    // The reverse DNS name of the sending IP, for display only.
+    async reverseName(ipText) {
+      const ip = parseIp(ipText);
+      if (!ip) return null;
+      const reverse = ip.macro.split('.').reverse().join('.') + (ip.bits === 32 ? '.in-addr.arpa' : '.ip6.arpa');
+      const names = await this.queryDns(reverse, 'PTR');
+      return names.map(name => dns.normalizeName(name)).find(Boolean) || null;
     }
 
     getMatchChain(trace) {
-      if (!trace) return null;
       const chain = [];
-      let current = trace;
-      
-      while (current) {
-        chain.push({
-          domain: current.domain,
-          mechanism: current.matchMechanism,
-          result: current.result
-        });
-
-        if (!current.matchMechanism) break;
-
-        const mech = current.matchMechanism.replace(/^[-+?~]/, '');
-        let nextDomain = null;
-
-        if (mech.startsWith('include:')) {
-          nextDomain = mech.substring(8);
-        } else if (mech.startsWith('redirect=')) {
-          nextDomain = mech.substring(9);
-        }
-
-        if (nextDomain && current.children) {
-          const child = current.children.find(c => c.val === nextDomain);
-          current = child ? child.trace : null;
-        } else {
-          current = null;
-        }
+      for (let node = trace; node; node = node.children.find(child => child.val === node.matchTarget)?.trace) {
+        chain.push({ domain: node.domain, mechanism: node.matchMechanism, result: node.result });
       }
       return chain;
     }
 
-    async verify(email) {
-      // Helper for case-insensitive header lookup
-      const getHeader = (name) => {
-        const key = Object.keys(email.headers).find(k => k.toLowerCase() === name.toLowerCase());
-        return key ? email.headers[key] : null;
-      };
-
-      // 1. Determine Domain
-      let domain = null;
-      let sender = null;
-      const returnPath = getHeader('Return-Path');
-      if (returnPath) {
-        const val = Array.isArray(returnPath) ? returnPath[0] : returnPath;
-        sender = val.replace(/[<>]/g, '').trim();
-        const parts = sender.split('@');
-        if (parts.length > 1) domain = parts[parts.length - 1].trim();
+    async verify(email, smtp = null) {
+      const dto = new SpfDTO();
+      const reports = readSpfReports(email.headers);
+      dto.headerResult = reports.auth[0]?.result ?? reports.received[0]?.result ?? null;
+      dto.reportedBy = (reports.auth[0] ? reports.auth[0].receiver : reports.received[0]?.receiver) ?? null;
+      dto.source = smtp ? 'smtp' : 'headers';
+      let session;
+      if (smtp) {
+        const helo = dns.mailboxDomain(smtp.helo?.trim());
+        const envelope = envelopeFrom(smtp.mailFrom);
+        const mailbox = envelope?.empty ? envelopeFrom(helo ? 'postmaster@' + helo : null) : envelope;
+        session = { ipText: peerIp(smtp.ip), mailbox, helo, emptyEnvelope: envelope?.empty };
+      } else {
+        session = inferSession(email.headers, reports);
       }
-      if (!domain) {
-        const fromHeader = getHeader('From');
-        if (fromHeader) {
-          const val = Array.isArray(fromHeader) ? fromHeader[0] : fromHeader;
-          const match = val.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
-          if (match) {
-             sender = match[1];
-             const parts = sender.split('@');
-             if (parts.length > 1) domain = parts[parts.length - 1];
-          }
+      const { ipText, ipSource, mailbox, helo, emptyEnvelope } = session;
+      dto.domain = mailbox?.domain ?? null;
+      dto.mailbox = mailbox?.address ?? null;
+      dto.senderIp = ipText ?? null;
+      dto.ipSource = ipSource ?? null;
+      if (mailbox && ipText) {
+        const ip = parseIp(ipText);
+        const budget = { terms: 0, voids: 0, ptr: null };
+        dto.trace = await this.evaluateRecursive(ipText, dto.domain, 0, mailbox.address, { ip, mailbox, helo }, budget);
+        dto.lookups = budget.terms;
+        dto.voidLookups = budget.voids;
+        const { record, rawDns, dnsCommand, result } = dto.trace;
+        Object.assign(dto, { record, rawDns, dnsCommand, result: result.toLowerCase(), matchChain: this.getMatchChain(dto.trace) });
+      } else {
+        const missing = [];
+        if (!mailbox) missing.push(emptyEnvelope ? 'the HELO name for the empty envelope sender' : 'the envelope sender domain');
+        if (!ipText) missing.push('the sending IP');
+        dto.error = 'Unable to check SPF without ' + missing.join(' and ') + '.';
+        if (mailbox) {
+          try { Object.assign(dto, await this.fetchSPF(dto.domain)); }
+          catch (error) { dto.error += ' DNS lookup failed: ' + error.message; }
         }
       }
-      if (domain && !sender) sender = `postmaster@${domain}`;
-
-      const dto = new SpfDTO(domain);
-      if (!domain) {
-        dto.error = 'Could not determine domain from Return-Path or From header';
-        return dto;
-      }
-
-      // 2. Extract Header Results (Authentication-Results or Received-SPF)
-      // This is "what the server thought"
-      let authResults = getHeader('Authentication-Results');
-      if (Array.isArray(authResults)) {
-        authResults = authResults.find(h => h.toLowerCase().includes('spf='));
-      }
-
-      let receivedSpf = getHeader('Received-SPF');
-      if (Array.isArray(receivedSpf)) {
-        receivedSpf = receivedSpf[0];
-      }
-
-      if (authResults && authResults.toLowerCase().includes('spf=')) {
-        const match = authResults.match(/spf=([a-z]+)/i);
-        if (match) dto.headerResult = match[1].toLowerCase();
-        
-        // Try to find IP in Auth-Results
-        const ipMatch = authResults.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/);
-        if (ipMatch) dto.senderIp = ipMatch[1];
-      }
-      
-      if (!dto.headerResult && receivedSpf) {
-        const match = receivedSpf.match(/^([a-z]+)/i);
-        if (match) dto.headerResult = match[1].toLowerCase();
-        
-        // Try to find IP in Received-SPF
-        const ipMatch = receivedSpf.match(/client-ip=([^;\s)]+)/);
-        if (ipMatch) dto.senderIp = ipMatch[1];
-      }
-
-      // Fallback: Try to find IP in Received headers
-      if (!dto.senderIp) {
-        const received = getHeader('Received');
-        if (received) {
-          const lines = Array.isArray(received) ? received : [received];
-          for (const line of lines) {
-            // Look for IP in brackets, e.g. [1.2.3.4]
-            const match = line.match(/\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/);
-            if (match) {
-              dto.senderIp = match[1];
-              break;
-            }
-          }
-        }
-      }
-
-      // 3. Recursive Evaluation
-      try {
-        if (dto.senderIp) {
-          dto.trace = await this.evaluateRecursive(dto.senderIp, domain, 0, sender);
-          dto.matchChain = this.getMatchChain(dto.trace);
-          dto.record = dto.trace.record;
-          dto.rawDns = dto.trace.rawDns;
-          dto.dnsCommand = dto.trace.dnsCommand;
-
-          // If no header result was found, use the calculated result
-          if (!dto.headerResult && dto.trace.result) {
-            dto.headerResult = dto.trace.result.toLowerCase();
-          }
-        } else {
-          // Fallback to simple fetch if no IP
-          const result = await this.fetchSPF(domain);
-          dto.record = result.record;
-          dto.rawDns = result.rawDns;
-          dto.dnsCommand = result.dnsCommand;
-        }
-        if (dto.record) {
-            dto.mechanisms = dto.record.split(/\s+/).filter(s => s && s !== 'v=spf1');
-        }
-      } catch (e) {
-        dto.error = e.message;
-      }
-
+      if (dto.record) dto.mechanisms = dto.record.split(/ +/).slice(1).filter(Boolean);
       return dto;
     }
   }

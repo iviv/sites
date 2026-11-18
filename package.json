@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest && npm run test:v2",
+    "test:v2": "node --test tests/v2-validator.cjs"
   },
   "repository": {
     "type": "git",

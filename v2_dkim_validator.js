@@ -1,25 +1,46 @@
-(function(root, factory) {
+(function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    // Node.js
-    const crypto = require('crypto');
-    const https = require('https');
-    module.exports = factory(true, crypto, https);
+    module.exports = factory(require('./v2_dns'), require('node:crypto').webcrypto);
   } else {
-    // Browser globals
-    const modules = factory(false, window.crypto, window.fetch);
-    root.DkimValidator = modules.DkimValidator;
-    root.DkimParser = modules.DkimParser;
-    root.DkimDTO = modules.DkimDTO;
+    Object.assign(root, factory(root.EmailDns, root.crypto));
   }
-}(typeof self !== 'undefined' ? self : this, function(isNode, cryptoLib, netLib) {
+}(typeof self !== 'undefined' ? self : this, function (dns, crypto) {
+  const algorithms = { 'rsa-sha256': 'rsa', 'ed25519-sha256': 'ed25519' };
+  const rsaAlgorithm = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+  const fieldName = /^[!-9;-~]+$/;
+  const trimWsp = value => value.replace(/^[ \t]+|[ \t]+$/g, '');
+  const splitTagList = value => value.replace(/\r\n(?=[ \t])/g, '').split(':').map(trimWsp);
 
-  /**
-   * Data Transfer Object for DKIM signature tags.
-   */
+  function decodeBase64(value) {
+    const text = value.replace(/[ \t\r\n]/g, '');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(text)) throw new Error('Invalid base64');
+    return Uint8Array.from(atob(text), char => char.charCodeAt(0));
+  }
+
+  function wireBytes(value, email) {
+    return email.wireBytes
+      ? Uint8Array.from(value, char => char.charCodeAt(0))
+      : new TextEncoder().encode(value);
+  }
+
+  // Web Crypto imports RSA keys as SPKI. DKIM also publishes bare PKCS#1 keys.
+  function wrapRsaKey(key) {
+    function der(tag, data) {
+      const size = data.length;
+      const length = size < 128 ? [size] : size < 256 ? [0x81, size] : [0x82, size >> 8, size & 255];
+      return [tag, ...length, ...data];
+    }
+    if (key.length > 8192) throw new Error('RSA key is too large');
+    const rsaIdentifier = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00];
+    return new Uint8Array(der(0x30, [...rsaIdentifier, ...der(0x03, [0, ...key])]));
+  }
+
   class DkimDTO {
-    constructor(tags, signedHeaders = []) {
+    constructor(tags, signedHeaders = [], signatureIndex = null, parseError = null) {
       this.tags = tags;
       this.signedHeaders = signedHeaders;
+      this.signatureIndex = signatureIndex;
+      this.parseError = parseError;
       this.dnsRaw = null;
       this.publicKey = null;
       this.dnsCommand = null;
@@ -27,303 +48,227 @@
     }
   }
 
-  /**
-   * Class responsible for parsing DKIM-Signature headers.
-   */
   class DkimParser {
-    parse(headerValue) {
-      const tags = {};
-      const parts = headerValue.split(';');
-      for (const part of parts) {
-        const trimmed = part.trim();
-        if (!trimmed) continue;
-        const eqIndex = trimmed.indexOf('=');
-        if (eqIndex !== -1) {
-          const key = trimmed.substring(0, eqIndex).trim();
-          const value = trimmed.substring(eqIndex + 1).trim();
-          tags[key] = value;
-        }
-      }
-
-      let signedHeaders = [];
-      if (tags.h) {
-        signedHeaders = tags.h.split(':').map(h => h.trim());
-      }
-
-      return new DkimDTO(tags, signedHeaders);
+    parse(headerValue, signatureIndex = null) {
+      const { tags, error } = dns.parseTags(headerValue);
+      const headers = tags.h ? splitTagList(tags.h) : [];
+      return new DkimDTO(tags, headers, signatureIndex, error);
     }
   }
 
-  /**
-   * Class responsible for validating DKIM signatures.
-   */
   class DkimValidator {
+    queryDns(name, type) {
+      return dns.lookup(name, type);
+    }
+
     canonicalizeBody(body, canonicalization) {
-      // Normalize newlines to CRLF
-      let normalized = body.replace(/\r?\n/g, '\r\n');
-
+      const normalized = body.replace(/\r?\n/g, '\r\n');
       if (canonicalization === 'simple') {
-        // Ignore all empty lines at the end of the message body.
-        while (normalized.endsWith('\r\n\r\n')) {
-          normalized = normalized.substring(0, normalized.length - 2);
-        }
-        // If non-empty and no trailing CRLF, add one.
-        if (normalized.length > 0 && !normalized.endsWith('\r\n')) {
-          normalized += '\r\n';
-        }
-        return normalized;
+        let end = normalized.length;
+        while (end > 1 && normalized.slice(end - 2, end) === '\r\n') end -= 2;
+        return normalized.slice(0, end) + '\r\n';
       }
-
-      if (canonicalization === 'relaxed') {
-        let lines = normalized.split('\r\n');
-        
-        // Remove last empty element from split if string ends with \r\n
-        if (lines.length > 0 && lines[lines.length - 1] === '') {
-          lines.pop();
-        }
-
-        lines = lines.map(line => {
-          // Reduce WSP to single space and ignore WSP at end of line
-          return line.replace(/[ \t]+/g, ' ').replace(/[ \t]+$/, '');
-        });
-
-        // Ignore empty lines at the end of the message body.
-        while (lines.length > 0 && lines[lines.length - 1] === '') {
-          lines.pop();
-        }
-
-        if (lines.length === 0) return '';
-
-        return lines.join('\r\n') + '\r\n';
-      }
-
-      return normalized;
+      const lines = normalized.split('\r\n').map(line => line.replace(/[ \t]+/g, ' ').replace(/ $/, ''));
+      while (lines.length && lines.at(-1) === '') lines.pop();
+      return lines.length ? lines.join('\r\n') + '\r\n' : '';
     }
 
     getRawHeaderFields(rawHeaders) {
       const fields = [];
-      const normalized = rawHeaders.replace(/\r?\n/g, '\r\n');
-      const lines = normalized.split('\r\n');
-      let currentField = null;
-      for (const line of lines) {
-        if (line === '') continue;
-        if (/^[ \t]/.test(line) && currentField) {
-          currentField.raw += '\r\n' + line;
-        } else {
-          if (currentField) fields.push(currentField);
-          const colonIdx = line.indexOf(':');
-          if (colonIdx !== -1) {
-            currentField = { key: line.substring(0, colonIdx).trim(), raw: line };
-          } else {
-            currentField = null;
-          }
+      const counts = new Map();
+      let current = null;
+      for (const line of rawHeaders.split(/\r?\n/)) {
+        if (/^[ \t]/.test(line)) {
+          if (current) current.raw += '\r\n' + line;
+          continue;
+        }
+        const colon = line.indexOf(':');
+        current = colon > 0 ? { key: trimWsp(line.slice(0, colon)).toLowerCase(), raw: line } : null;
+        if (current) {
+          current.instance = counts.get(current.key) || 0;
+          counts.set(current.key, current.instance + 1);
+          fields.push(current);
         }
       }
-      if (currentField) fields.push(currentField);
       return fields;
     }
 
-    canonicalizeHeader(rawField, algo) {
-      if (algo === 'simple') return rawField + '\r\n';
-      const colonIdx = rawField.indexOf(':');
-      const key = rawField.substring(0, colonIdx).toLowerCase().trim();
-      let value = rawField.substring(colonIdx + 1).replace(/\r\n/g, '').replace(/[ \t]+/g, ' ').trim();
-      return `${key}:${value}\r\n`;
+    canonicalizeHeader(rawField, algorithm) {
+      if (algorithm === 'simple') return rawField + '\r\n';
+      const colon = rawField.indexOf(':');
+      const key = trimWsp(rawField.slice(0, colon)).toLowerCase();
+      const value = trimWsp(rawField.slice(colon + 1).replace(/\r\n/g, '').replace(/[ \t]+/g, ' '));
+      return key + ':' + value + '\r\n';
     }
 
-    /**
-     * Verifies the body hash of the email against the DKIM signature.
-     * @param {EmailDTO} email
-     * @param {DkimDTO} dkim
-     * @returns {Promise<{valid: boolean, calculated?: string, expected?: string, error?: string}>}
-     */
     async verifyBodyHash(email, dkim) {
-      const bh = dkim.tags['bh'];
-      if (!bh) return { valid: false, error: 'No body hash (bh) tag' };
-
-      const c = dkim.tags['c'] || 'simple/simple';
-      const bodyCanonAlgo = c.split('/')[1] || 'simple';
-      const canonicalBody = this.canonicalizeBody(email.body, bodyCanonAlgo);
-
-      const a = dkim.tags['a'] || 'rsa-sha256';
-      const hashAlgo = a === 'rsa-sha1' ? 'sha1' : 'sha256';
-      
-      // Handle 'l' tag (length)
-      let bodyToHash = canonicalBody;
-      if (dkim.tags['l']) {
-        const length = parseInt(dkim.tags['l'], 10);
-        if (!isNaN(length) && length < canonicalBody.length) {
-          bodyToHash = canonicalBody.substring(0, length);
-        }
+      const expected = dkim.tags.bh;
+      if (!expected) return { valid: false, error: 'Missing body hash' };
+      const bodyAlgorithm = (dkim.tags.c || 'simple').split('/')[1] || 'simple';
+      const bytes = wireBytes(this.canonicalizeBody(email.body, bodyAlgorithm), email);
+      const length = dkim.tags.l === undefined ? bytes.length : Number(dkim.tags.l);
+      if ((dkim.tags.l !== undefined && !/^\d{1,76}$/.test(dkim.tags.l)) ||
+          !Number.isSafeInteger(length) || length > bytes.length) {
+        return { valid: false, expected, error: 'Invalid signed body length' };
       }
-
-      let calculatedBh;
-      if (isNode) {
-        calculatedBh = cryptoLib.createHash(hashAlgo).update(bodyToHash).digest('base64');
-      } else {
-        const algoName = a === 'rsa-sha1' ? 'SHA-1' : 'SHA-256';
-        const encoder = new TextEncoder();
-        const data = encoder.encode(bodyToHash);
-        const hashBuffer = await cryptoLib.subtle.digest(algoName, data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        calculatedBh = btoa(String.fromCharCode.apply(null, hashArray));
-      }
-
-      return {
-        valid: calculatedBh === bh.replace(/\s/g, ''),
-        calculated: calculatedBh,
-        expected: bh
-      };
+      const hash = await crypto.subtle.digest('SHA-256', bytes.subarray(0, length));
+      const calculated = btoa(String.fromCharCode(...new Uint8Array(hash)));
+      return { valid: calculated === expected.replace(/[ \t\r\n]/g, ''), calculated, expected, signedBytes: length, totalBytes: bytes.length };
     }
 
-    /**
-     * Fetches the DKIM public key from DNS (Cloudflare DoH).
-     * @param {string} selector
-     * @param {string} domain
-     * @returns {Promise<{publicKey: string, rawDns: string, dnsCommand: string, dnsTags: Object}>} Object containing public key, raw DNS data, dig command, and parsed tags
-     */
-    fetchPublicKey(selector, domain) {
-      const dnsCommand = `dig TXT ${selector}._domainkey.${domain}`;
-      const handleResponse = (json, resolve, reject) => {
-        if (json.Status !== 0 || !json.Answer) {
-          return reject(new Error(`DNS query failed for ${selector}._domainkey.${domain}`));
-        }
-        const txtRecord = json.Answer.find(r => r.type === 16);
-        if (!txtRecord) return reject(new Error('No TXT record found'));
-        
-        let rawData = txtRecord.data;
-        if (rawData.startsWith('"')) {
-          rawData = rawData.replace(/^"|"$/g, '').replace(/" "/g, '').replace(/\\"/g, '"');
-        }
-
-        const tags = {};
-        rawData.split(';').forEach(part => {
-          const trimmed = part.trim();
-          const eqIndex = trimmed.indexOf('=');
-          if (eqIndex !== -1) {
-            const k = trimmed.substring(0, eqIndex).trim();
-            const v = trimmed.substring(eqIndex + 1).trim();
-            tags[k] = v;
-          }
-        });
-
-        if (!tags.p) return reject(new Error('No public key (p tag) found'));
-        resolve({
-          publicKey: tags.p.replace(/\s/g, ''),
-          rawDns: rawData,
-          dnsCommand: dnsCommand,
-          dnsTags: tags
-        });
-      };
-
-      if (isNode) {
-        return new Promise((resolve, reject) => {
-          const options = {
-            hostname: 'cloudflare-dns.com',
-            path: `/dns-query?name=${selector}._domainkey.${domain}&type=TXT`,
-            method: 'GET',
-            headers: { 'Accept': 'application/dns-json' }
-          };
-          const req = netLib.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try { handleResponse(JSON.parse(data), resolve, reject); } catch (e) { reject(e); }
-            });
-          });
-          req.on('error', reject);
-          req.end();
-        });
-      } else {
-        const url = `https://cloudflare-dns.com/dns-query?name=${selector}._domainkey.${domain}&type=TXT`;
-        return netLib(url, { headers: { 'Accept': 'application/dns-json' } })
-          .then(res => res.json())
-          .then(json => new Promise((resolve, reject) => handleResponse(json, resolve, reject)));
+    async fetchPublicKey(selector, domain) {
+      const name = dns.normalizeName(selector + '._domainkey.' + domain, true);
+      if (!name) return { error: 'Invalid DKIM DNS name' };
+      const dnsCommand = 'dig TXT ' + name;
+      let records;
+      try {
+        records = await this.queryDns(name, 'TXT');
+      } catch (error) {
+        return { dnsCommand, status: 'temperror', error: 'DNS lookup failed: ' + error.message };
       }
+      if (records.length !== 1) return { dnsCommand, error: records.length ? 'Multiple DKIM key records' : 'No DKIM key record' };
+      const rawDns = dns.txt(records[0]);
+      const { tags: dnsTags, error } = dns.parseTags(rawDns);
+      const record = { dnsCommand, rawDns, dnsTags, publicKey: dnsTags.p };
+      if (error || !dnsTags.p || (dnsTags.v !== undefined && (dnsTags.v !== 'DKIM1' || Object.keys(dnsTags)[0] !== 'v'))) {
+        return { ...record, error: 'Invalid or revoked DKIM key' };
+      }
+      return record;
+    }
+
+    validateSignature(dkim) {
+      const { tags, signedHeaders } = dkim;
+      if (dkim.parseError) return dkim.parseError;
+      if (tags.v !== '1' || ['a', 'b', 'bh', 'd', 'h', 's'].some(tag => !tags[tag])) {
+        return 'Missing or invalid required DKIM tag';
+      }
+      if (!Object.hasOwn(algorithms, tags.a)) return 'Unsupported DKIM algorithm';
+      if (tags.c !== undefined && !/^(simple|relaxed)(\/(simple|relaxed))?$/.test(tags.c)) {
+        return 'Unsupported DKIM canonicalization';
+      }
+      if (tags.q !== undefined && !splitTagList(tags.q).includes('dns/txt')) {
+        return 'Unsupported DKIM query method';
+      }
+      if (!signedHeaders.every(name => fieldName.test(name))) return 'Invalid name in the DKIM signed header list';
+      if (!signedHeaders.some(name => name.toLowerCase() === 'from')) return 'The From header must be signed';
+      const domain = dns.normalizeName(tags.d);
+      if (!domain?.includes('.') || !dns.normalizeName(tags.s) || tags.d.endsWith('.') || tags.s.endsWith('.')) {
+        return 'Invalid DKIM selector or signing domain';
+      }
+      if (tags.i !== undefined) {
+        const at = tags.i.lastIndexOf('@');
+        const identity = at >= 0 ? dns.normalizeName(tags.i.slice(at + 1)) : null;
+        if (!identity || (identity !== domain && !identity.endsWith('.' + domain))) return 'Invalid DKIM signing identity';
+      }
+      if (['t', 'x'].some(tag => tags[tag] !== undefined && !/^\d{1,12}$/.test(tags[tag]))) return 'Invalid DKIM timestamp';
+      if (tags.x !== undefined && tags.t !== undefined && Number(tags.x) <= Number(tags.t)) {
+        return 'DKIM expiration must be after the signing time';
+      }
+      return null;
     }
 
     async verify(email, dkim) {
-      const bodyHashResult = await this.verifyBodyHash(email, dkim);
-      if (!bodyHashResult.valid) {
-        return { valid: false, stage: 'body_hash', details: bodyHashResult };
-      }
+      const error = this.validateSignature(dkim);
+      if (error) return { valid: false, error };
+      if (!crypto?.subtle) return { valid: false, status: 'unavailable', error: 'Web Crypto is unavailable' };
 
-      const s = dkim.tags['s'];
-      const d = dkim.tags['d'];
-      if (!s || !d) return { valid: false, error: 'Missing selector or domain' };
-
-      let publicKeyBase64;
+      const { tags } = dkim;
+      let signature;
       try {
-        const result = await this.fetchPublicKey(s, d);
-        dkim.publicKey = result.publicKey;
-        dkim.dnsRaw = result.rawDns;
-        dkim.dnsCommand = result.dnsCommand;
-        dkim.dnsTags = result.dnsTags;
-        publicKeyBase64 = result.publicKey;
-      } catch (e) {
-        return { valid: false, error: 'DNS Lookup failed: ' + e.message };
+        signature = decodeBase64(tags.b);
+        if (decodeBase64(tags.bh).length !== 32) throw new Error('Invalid SHA-256 body hash length');
+      } catch (error) {
+        return { valid: false, error: error.message };
       }
 
-      const c = dkim.tags['c'] || 'simple/simple';
-      const [headerAlgo] = c.split('/');
-      const hTags = dkim.signedHeaders.map(x => x.toLowerCase());
+      // A body that no longer matches still gets its header signature checked: if that verifies, the
+      // signer and headers are genuine and only the body changed after signing.
+      const bodyHash = await this.verifyBodyHash(email, dkim);
+      const bodyError = bodyHash.valid ? null : bodyHash.error || 'Body hash mismatch';
+
       const rawFields = this.getRawHeaderFields(email.rawHeaders);
-      const canonicalizedHeaders = [];
-      const fieldsReversed = [...rawFields].reverse();
+      const signatures = rawFields.filter(field => field.key === 'dkim-signature');
+      const matches = field => {
+        const parsed = dns.parseTags(field.raw.slice(field.raw.indexOf(':') + 1)).tags;
+        return Object.keys(parsed).length === Object.keys(tags).length &&
+          Object.keys(tags).every(key => parsed[key]?.replace(/\r\n[ \t]+/g, ' ') === tags[key].replace(/\r\n[ \t]+/g, ' '));
+      };
+      const ownField = dkim.signatureIndex === null ? signatures.find(matches) : signatures[dkim.signatureIndex];
+      if (!ownField || !matches(ownField)) return { valid: false, error: 'DKIM signature header could not be matched', bodyHash };
+      if (!rawFields.some(field => field.key === 'from')) return { valid: false, error: 'From header is absent', bodyHash };
 
-      for (const headerName of hTags) {
-        const idx = fieldsReversed.findIndex(f => f.key.toLowerCase() === headerName);
-        if (idx !== -1) canonicalizedHeaders.push(this.canonicalizeHeader(fieldsReversed.splice(idx, 1)[0].raw, headerAlgo));
+      const available = rawFields.filter(field => field !== ownField).reverse();
+      const signedFields = [];
+      for (const name of dkim.signedHeaders) {
+        const index = available.findIndex(field => field.key === name.toLowerCase());
+        if (index >= 0) signedFields.push(available.splice(index, 1)[0]);
+      }
+      const headerAlgorithm = (tags.c || 'simple').split('/')[0];
+      const splitAt = ownField.raw.indexOf(':') + 1;
+      const withoutSignature = ownField.raw.slice(0, splitAt) +
+        ownField.raw.slice(splitAt).replace(/(^|;)([ \t\r\n]*b[ \t\r\n]*=)[^;]*/, '$1$2');
+      const dataToVerify = signedFields.map(field => this.canonicalizeHeader(field.raw, headerAlgorithm)).join('') +
+        this.canonicalizeHeader(withoutSignature, headerAlgorithm).slice(0, -2);
+      const details = { dataToVerify, signedHeaders: signedFields.map(({ key, instance }) => ({ key, instance })) };
+      const result = { valid: false, bodyHash, details };
+      const expired = tags.x !== undefined && Number(tags.x) < Date.now() / 1000;
+
+      const record = await this.fetchPublicKey(tags.s, tags.d);
+      Object.assign(dkim, { publicKey: record.publicKey, dnsRaw: record.rawDns, dnsTags: record.dnsTags, dnsCommand: record.dnsCommand });
+      if (record.error) result.keyError = record.error;
+      // The current DNS record is useful for inspection even after expiration.
+      if (record.error) {
+        return bodyError ? { ...result, status: 'fail', error: bodyError }
+          : expired ? { ...result, status: 'expired', error: 'The DKIM signature has expired' }
+          : { ...result, status: record.status, error: record.error };
       }
 
-      const bValue = dkim.tags['b'].replace(/\s/g, '');
-      const dkimField = rawFields.find(f => f.key.toLowerCase() === 'dkim-signature' && f.raw.replace(/\s/g, '').includes(`b=${bValue}`));
-      if (!dkimField) return { valid: false, error: 'DKIM-Signature header not found in raw headers' };
+      const check = await this.checkSignature(record, tags, signature, wireBytes(dataToVerify, email));
+      if (bodyError) {
+        return { ...result, status: 'fail', error: bodyError, key: check.key, headersVerified: check.status === 'unavailable' ? null : check.valid };
+      }
+      if (!expired) return { ...result, ...check };
+      // An expired signature never passes, but whether it still verifies against the current key
+      // separates an old genuine message from one that was altered or forged.
+      const signatureValid = check.status === 'unavailable' ? null : check.valid;
+      return {
+        ...result, status: 'expired', signatureValid, key: check.key,
+        error: signatureValid ? 'The DKIM signature verifies against the current DNS key but has expired'
+          : signatureValid === false ? 'The DKIM signature has expired and does not verify against the current DNS key' +
+            (check.error ? ': ' + check.error : '')
+          : 'The DKIM signature has expired'
+      };
+    }
 
-      const dkimRaw = dkimField.raw.replace(/(\bb\s*=)([^;]*)/, '$1');
-      canonicalizedHeaders.push(this.canonicalizeHeader(dkimRaw, headerAlgo).slice(0, -2));
+    async checkSignature(record, tags, signature, data) {
+      const keyTags = record.dnsTags;
+      const keyType = algorithms[tags.a];
+      const services = splitTagList(keyTags.s || '*');
+      if ((keyTags.k || 'rsa') !== keyType ||
+          (keyTags.h !== undefined && !splitTagList(keyTags.h).includes('sha256')) ||
+          (!services.includes('*') && !services.includes('email')) ||
+          (splitTagList(keyTags.t || '').includes('s') && tags.i &&
+           dns.normalizeName(tags.i.slice(tags.i.lastIndexOf('@') + 1)) !== dns.normalizeName(tags.d))) {
+        return { valid: false, error: 'DKIM key restrictions do not permit this signature' };
+      }
 
-      const dataToVerify = canonicalizedHeaders.join('');
-
-      if (isNode) {
-        const publicKey = `-----BEGIN PUBLIC KEY-----\n${publicKeyBase64}\n-----END PUBLIC KEY-----`;
-        const verify = cryptoLib.createVerify(dkim.tags['a'] === 'rsa-sha1' ? 'RSA-SHA1' : 'RSA-SHA256');
-        verify.update(dataToVerify);
-        const isValid = verify.verify(publicKey, bValue, 'base64');
-        return { valid: isValid, details: { dataToVerify } };
-      } else {
-        const binaryDerString = atob(publicKeyBase64);
-        const binaryDer = new Uint8Array(binaryDerString.length);
-        for (let i = 0; i < binaryDerString.length; i++) {
-          binaryDer[i] = binaryDerString.charCodeAt(i);
+      try {
+        const keyData = decodeBase64(record.publicKey);
+        if (keyType === 'rsa') {
+          let key;
+          try {
+            key = await crypto.subtle.importKey('spki', keyData, rsaAlgorithm, false, ['verify']);
+          } catch {
+            key = await crypto.subtle.importKey('spki', wrapRsaKey(keyData), rsaAlgorithm, false, ['verify']);
+          }
+          const info = { type: 'rsa', bits: key.algorithm.modulusLength };
+          if (info.bits < 1024) return { valid: false, key: info, error: 'DKIM RSA key is shorter than 1024 bits' };
+          return { valid: await crypto.subtle.verify(rsaAlgorithm, key, signature, data), key: info };
         }
-        
-        const a = dkim.tags['a'] || 'rsa-sha256';
-        const hashAlgo = a === 'rsa-sha1' ? 'SHA-1' : 'SHA-256';
-
-        try {
-          const key = await cryptoLib.subtle.importKey(
-            "spki",
-            binaryDer.buffer,
-            { name: "RSASSA-PKCS1-v1_5", hash: hashAlgo },
-            false,
-            ["verify"]
-          );
-          
-          const encoder = new TextEncoder();
-          const data = encoder.encode(dataToVerify);
-          const signature = Uint8Array.from(atob(bValue), c => c.charCodeAt(0));
-          
-          const isValid = await cryptoLib.subtle.verify(
-            "RSASSA-PKCS1-v1_5",
-            key,
-            signature,
-            data
-          );
-          return { valid: isValid, details: { dataToVerify } };
-        } catch (e) {
-          return { valid: false, error: 'Crypto Verify failed: ' + e.message, details: { dataToVerify } };
-        }
+        const key = await crypto.subtle.importKey('raw', keyData, 'Ed25519', false, ['verify']);
+        return { valid: await crypto.subtle.verify('Ed25519', key, signature, await crypto.subtle.digest('SHA-256', data)), key: { type: 'ed25519', bits: 256 } };
+      } catch (error) {
+        return { valid: false, status: error.name === 'NotSupportedError' ? 'unavailable' : 'fail', error: error.message };
       }
     }
   }
