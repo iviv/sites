@@ -385,6 +385,7 @@ body {
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
     --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 6px 20px -8px rgb(0 0 0 / 0.12);
     --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.08), 0 18px 40px -12px rgb(0 0 0 / 0.28);
+    --shadow-raised: 0 2px 4px rgb(0 0 0 / 0.05), 0 14px 32px -12px rgb(0 0 0 / 0.24);
 
     color-scheme: light;
 }
@@ -1070,11 +1071,37 @@ h4::after {
     border-radius: var(--radius-lg);
     background: var(--container-bg);
     box-shadow: var(--shadow);
-    transition: background-color 0.3s ease, border-color 0.3s ease;
     scroll-margin-top: 64px;
 }
 
 .section:focus { outline: none; }
+
+/* Hover lift: the section or card under the pointer rises like a button, so it's easy to keep your place.
+   `translate` (not `transform`) so it doesn't fight the cards' fade-in animation;
+   `position` + `z-index` keep a hovered card's hints above the content after it. */
+.section,
+.dkim-signature-card,
+.dns-command-card,
+.tech-detail-card {
+    position: relative;
+    transition: background-color 0.3s ease, border-color 0.2s ease, box-shadow 0.2s ease, translate 0.2s ease;
+}
+
+@media (hover: hover) {
+    .section:hover {
+        z-index: 1;
+        translate: 0 -2px;
+        border-color: color-mix(in srgb, var(--accent-color) 35%, var(--line));
+        box-shadow: var(--shadow-raised);
+    }
+
+    :is(.dkim-signature-card, .dns-command-card, .tech-detail-card):hover {
+        z-index: 1;
+        translate: 0 -1px;
+        border-color: color-mix(in srgb, var(--accent-color) 45%, var(--line));
+        box-shadow: var(--shadow-sm);
+    }
+}
 
 .section-heading {
     position: relative;
