@@ -5,7 +5,7 @@
  * glowing "aura" borders, and a status line at the bottom.
  *
  * It lives on <html> (html.hacker-mode) because themes replace the body's
- * class list. Toggle with the ` key or Theme ▸ Hacker mode (v2_hacker.js).
+ * class list. Toggle with the ` key (v2_hacker.js).
  */
 
 @counter-style hacker-hex {
@@ -409,33 +409,7 @@ html.hacker-mode .copy-toast {
     background: rgb(3 12 7 / 0.96);
 }
 
-/* --- Hacker mode switch in the theme menu (shown in every theme) --- */
-.hacker-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
-    padding: 7px 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-xs);
-    font: inherit;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--heading);
-    background: var(--surface-2);
-    cursor: pointer;
-}
-
-.hacker-toggle:hover { border-color: color-mix(in srgb, var(--accent-color) 55%, var(--line)); }
-
-.hacker-toggle[aria-pressed="true"] {
-    color: var(--accent-color);
-    border-color: var(--accent-color);
-    box-shadow: var(--glow-sm, none);
-}
-
-.hacker-toggle kbd,
+/* --- Key hints in the status line and toast (shown in every theme) --- */
 .hacker-status kbd,
 .copy-toast kbd {
     padding: 0 6px;

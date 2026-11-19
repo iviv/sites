@@ -1,4 +1,4 @@
-// --- Hacker mode: a terminal look over any theme, toggled with the ` key or Theme ▸ Hacker mode ---
+// --- Hacker mode: a terminal look over any theme, toggled with the ` key ---
 // Purely visual. It reads the page's state (jumpState, summaryState, network, currentEmail, lastInput
 // from v2_render.js) and never changes a check. Styles are in v2_hacker.css.
 (() => {
@@ -294,7 +294,6 @@
         if (on === state.on) return;
         state.on = on;
         root.classList.toggle('hacker-mode', on);
-        toggleButton.setAttribute('aria-pressed', String(on));
         try {
             localStorage.setItem(storageKey, on ? '1' : '0');
         } catch {
@@ -324,22 +323,6 @@
             if (animate) announce('<span>Hacker mode off. Press</span><kbd>`</kbd><span>to turn it back on</span>');
         }
     }
-
-    // A switch in the theme menu, so it can be found without knowing the key.
-    const modeLabel = document.createElement('div');
-    modeLabel.className = 'theme-panel-label';
-    modeLabel.textContent = 'Mode';
-    const toggleButton = document.createElement('button');
-    toggleButton.type = 'button';
-    toggleButton.className = 'hacker-toggle';
-    toggleButton.setAttribute('aria-pressed', 'false');
-    toggleButton.title = 'Terminal look with animation. Shortcut: ` (backtick)';
-    toggleButton.innerHTML = '<span>Hacker mode</span><kbd aria-label="backtick">`</kbd>';
-    toggleButton.addEventListener('click', () => {
-        closeThemeMenu(false);
-        setHacker(!state.on);
-    });
-    themeSelector.append(modeLabel, toggleButton);
 
     // ` (the key left of 1, the console key in many games) toggles it, except while typing.
     document.addEventListener('keydown', event => {
