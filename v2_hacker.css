@@ -1,0 +1,619 @@
+/* Hacker mode
+ *
+ * A terminal look layered over whichever theme is chosen: phosphor palette,
+ * monospace type, a rain of the message's own header bytes behind the page,
+ * glowing "aura" borders, and a status line at the bottom.
+ *
+ * It lives on <html> (html.hacker-mode) because themes replace the body's
+ * class list. Toggle with the ` key or Theme ▸ Hacker mode (v2_hacker.js).
+ */
+
+@counter-style hacker-hex {
+    system: numeric;
+    symbols: '0' '1' '2' '3' '4' '5' '6' '7' '8' '9' 'A' 'B' 'C' 'D' 'E' 'F';
+    pad: 2 '0';
+}
+
+@property --aura-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+
+/* --- Palette: overrides every theme (html.hacker-mode body beats body.theme-*) --- */
+html.hacker-mode {
+    color-scheme: dark;
+    scrollbar-color: #11633a #020604;
+    background:
+        radial-gradient(ellipse 80% 50% at 50% -8%, rgb(0 255 136 / 0.13), transparent 70%),
+        radial-gradient(ellipse 70% 40% at 50% 108%, rgb(61 245 255 / 0.08), transparent 70%),
+        linear-gradient(rgb(0 255 136 / 0.035) 1px, transparent 1px) 0 0 / 100% 28px,
+        linear-gradient(90deg, rgb(0 255 136 / 0.035) 1px, transparent 1px) 0 0 / 28px 100%,
+        #020604;
+    background-attachment: fixed;
+}
+
+html.hacker-mode body {
+    --bg-color: #020604;
+    --text-color: #a6e6bf;
+    --heading-color: #e1ffec;
+    --container-bg: #06110b;
+    --border-color: #145233;
+    --header-bg: #041009;
+    --accent-color: #00ff88;
+    --link-color: #3df5ff;
+    --code-bg: #03190d;
+    --code-text: #7dffb6;
+    --success-color: #00ff88;
+    --fail-color: #ff2e6a;
+    --pending-color: #ffd23f;
+    --dropzone-bg: #041009;
+    --dropzone-hover: #072014;
+    --on-accent: #01140a;
+
+    --font-sans: var(--font-mono);
+    --radius-xs: 2px;
+    --radius-sm: 3px;
+    --radius: 4px;
+    --radius-lg: 6px;
+    --glow-sm: 0 0 6px rgb(0 255 136 / 0.45);
+    --shadow-sm: 0 0 0 1px rgb(0 255 136 / 0.08), 0 0 12px -4px rgb(0 255 136 / 0.35);
+    --shadow: 0 0 0 1px rgb(0 255 136 / 0.04), 0 0 28px -14px rgb(0 255 136 / 0.45);
+    --shadow-lg: 0 0 0 1px rgb(0 255 136 / 0.12), 0 0 40px -12px rgb(0 255 136 / 0.5);
+    --shadow-raised: 0 0 0 1px rgb(0 255 136 / 0.14), 0 0 36px -10px rgb(0 255 136 / 0.55);
+    --ring: 0 0 0 1px var(--accent-color), 0 0 14px rgb(0 255 136 / 0.6);
+
+    color-scheme: dark;
+    font-size: 14px;
+    background: transparent;
+    counter-reset: hacker-section;
+}
+
+html.hacker-mode ::selection {
+    color: #01140a;
+    background: var(--accent-color);
+}
+
+/* --- Backdrop: header-byte rain (canvas), scanlines and a vignette --- */
+#hacker-rain {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.26;
+}
+
+html.hacker-mode body::before,
+html.hacker-mode body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+}
+
+html.hacker-mode body::before {
+    z-index: 60;
+    background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px);
+    opacity: 0.45;
+    animation: hacker-flicker 7s steps(1) infinite;
+}
+
+html.hacker-mode body::after {
+    z-index: -1;
+    background: radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / 0.65) 100%);
+}
+
+/* --- Type --- */
+html.hacker-mode :is(h1, .section-heading, .subject-text) {
+    text-shadow: 0 0 10px rgb(0 255 136 / 0.35);
+}
+
+html.hacker-mode h1 {
+    letter-spacing: -0.01em;
+}
+
+html.hacker-mode h1::before {
+    content: '>_ ';
+    color: var(--accent-color);
+}
+
+html.hacker-mode h1::after {
+    content: '';
+    display: inline-block;
+    width: 0.55em;
+    height: 1.05em;
+    margin-left: 0.2em;
+    vertical-align: -0.17em;
+    background: var(--accent-color);
+    box-shadow: var(--glow-sm);
+    animation: hacker-blink 1.05s steps(1) infinite;
+}
+
+html.hacker-mode .brand:hover h1,
+html.hacker-mode.hacker-powerup h1 {
+    animation: hacker-glitch 0.5s steps(2) 2;
+}
+
+html.hacker-mode .tagline::before {
+    content: '// ';
+    color: var(--faint);
+}
+
+html.hacker-mode .brand-mark {
+    border-color: var(--accent-color);
+    background: rgb(0 255 136 / 0.06);
+    animation: hacker-breathe 3.2s ease-in-out infinite;
+}
+
+html.hacker-mode a {
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+}
+
+html.hacker-mode a:hover { text-shadow: 0 0 8px rgb(61 245 255 / 0.7); }
+
+html.hacker-mode code {
+    border: 1px solid rgb(0 255 136 / 0.12);
+    text-shadow: 0 0 6px rgb(0 255 136 / 0.3);
+}
+
+/* --- Buttons --- */
+html.hacker-mode .btn {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+html.hacker-mode .btn-primary {
+    color: var(--accent-color);
+    background: rgb(0 255 136 / 0.06);
+    border-color: var(--accent-color);
+    box-shadow: var(--glow-sm), inset 0 0 12px rgb(0 255 136 / 0.15);
+}
+
+html.hacker-mode .btn-primary:hover {
+    color: var(--on-accent);
+    background: var(--accent-color);
+    box-shadow: 0 0 22px rgb(0 255 136 / 0.65);
+}
+
+html.hacker-mode .btn-secondary {
+    background: rgb(0 255 136 / 0.03);
+    border-color: rgb(0 255 136 / 0.28);
+}
+
+html.hacker-mode .btn-secondary:hover {
+    border-color: var(--accent-color);
+    box-shadow: var(--glow-sm);
+}
+
+/* --- Sections: HUD corner brackets and a glow that follows the pointer ---
+   Two plain selectors, not :is(), so #drop-zone's weight doesn't lift .section above its :hover rule. */
+html.hacker-mode .section,
+html.hacker-mode #drop-zone {
+    --hud: rgb(0 255 136 / 0.85);
+    --hud-len: 14px;
+    background:
+        linear-gradient(var(--hud), var(--hud)) top left / var(--hud-len) 1px no-repeat,
+        linear-gradient(var(--hud), var(--hud)) top left / 1px var(--hud-len) no-repeat,
+        linear-gradient(var(--hud), var(--hud)) top right / var(--hud-len) 1px no-repeat,
+        linear-gradient(var(--hud), var(--hud)) top right / 1px var(--hud-len) no-repeat,
+        linear-gradient(var(--hud), var(--hud)) bottom left / var(--hud-len) 1px no-repeat,
+        linear-gradient(var(--hud), var(--hud)) bottom left / 1px var(--hud-len) no-repeat,
+        linear-gradient(var(--hud), var(--hud)) bottom right / var(--hud-len) 1px no-repeat,
+        linear-gradient(var(--hud), var(--hud)) bottom right / 1px var(--hud-len) no-repeat,
+        radial-gradient(380px circle at var(--mx, -999px) var(--my, -999px), rgb(0 255 136 / 0.09), transparent 65%),
+        linear-gradient(180deg, rgb(6 24 14 / 0.94), rgb(3 12 7 / 0.94));
+    background-origin: border-box;
+}
+
+html.hacker-mode .section {
+    counter-increment: hacker-section;
+    border-color: rgb(0 255 136 / 0.2);
+}
+
+@media (hover: hover) {
+    html.hacker-mode .section:hover {
+        --hud-len: 22px;
+        border-color: rgb(0 255 136 / 0.45);
+    }
+}
+
+html.hacker-mode .section-heading {
+    font-size: 0.95rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    border-bottom-color: rgb(0 255 136 / 0.16);
+}
+
+/* 0x01 SUMMARY, 0x02 MESSAGE CONTENT, … */
+html.hacker-mode .section-heading > span:first-child::before {
+    content: '0x' counter(hacker-section, hacker-hex);
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--faint);
+    text-shadow: none;
+}
+
+/* The accent bar under each heading sweeps across now and then. */
+html.hacker-mode .section-heading::after {
+    width: 64px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+    box-shadow: 0 0 8px var(--accent-color);
+    animation: hacker-sweep 6s ease-in-out infinite;
+}
+
+html.hacker-mode .section:nth-of-type(2n) .section-heading::after { animation-delay: -1.5s; }
+html.hacker-mode .section:nth-of-type(3n) .section-heading::after { animation-delay: -3s; }
+html.hacker-mode .section:nth-of-type(5n) .section-heading::after { animation-delay: -4.2s; }
+
+/* --- The aura: Summary's border spins in the colour of the overall status --- */
+html.hacker-mode #section-summary { --aura: var(--link-color); }
+html.hacker-mode #section-summary:has(.glance.is-pass) { --aura: var(--success-color); }
+html.hacker-mode #section-summary:has(.glance.is-warn) { --aura: var(--pending-color); }
+html.hacker-mode #section-summary:has(.glance.is-fail) { --aura: var(--fail-color); }
+html.hacker-mode #section-summary:has(.glance.is-neutral) { --aura: #6f9d84; }
+
+html.hacker-mode #section-summary {
+    --hud: var(--aura);
+    border-color: color-mix(in srgb, var(--aura) 30%, transparent);
+}
+
+html.hacker-mode #section-summary::before,
+html.hacker-mode #section-summary::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+/* Two comets chasing each other round the border. */
+html.hacker-mode #section-summary::before {
+    padding: 1.5px;
+    background: repeating-conic-gradient(from var(--aura-angle), transparent 0 32%, var(--aura) 50%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    animation: hacker-aura-spin 3.6s linear infinite;
+}
+
+/* The halo outside it breathes. */
+html.hacker-mode #section-summary::after {
+    box-shadow: 0 0 42px -6px var(--aura), 0 0 90px -30px var(--aura);
+    animation: hacker-breathe-opacity 3.6s ease-in-out infinite;
+}
+
+html.hacker-mode .glance-icon {
+    filter: drop-shadow(0 0 6px currentColor);
+}
+
+html.hacker-mode .glance.is-fail .glance-icon,
+html.hacker-mode .jump-glance.is-fail .glance-icon {
+    animation: hacker-alarm-flicker 1.4s steps(1) infinite;
+}
+
+/* --- Status pills and dots --- */
+html.hacker-mode :is(.status-pass, .status-fail, .status-pending, .status-neutral) {
+    border-radius: 2px;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+html.hacker-mode .status-pass {
+    text-shadow: 0 0 6px rgb(0 255 136 / 0.6);
+    box-shadow: 0 0 10px -3px var(--success-color);
+}
+
+html.hacker-mode .status-fail {
+    text-shadow: 0 0 6px rgb(255 46 106 / 0.6);
+    animation: hacker-alarm 1.8s ease-in-out infinite;
+}
+
+html.hacker-mode .status-pending {
+    text-shadow: 0 0 6px rgb(255 210 63 / 0.5);
+    box-shadow: 0 0 10px -4px var(--pending-color);
+}
+
+html.hacker-mode :is(.jump-dot, .network-dot) {
+    box-shadow: 0 0 8px currentColor, 0 0 0 2px rgb(0 0 0 / 0.4);
+}
+
+html.hacker-mode .status-icon:is(.pass, .fail, .warn, .alert) {
+    filter: drop-shadow(0 0 3px currentColor);
+}
+
+/* --- Jump bar --- */
+html.hacker-mode .jump-bar {
+    background: rgb(2 8 5 / 0.82);
+}
+
+html.hacker-mode .jump-bar.is-stuck {
+    border-bottom-color: rgb(0 255 136 / 0.35);
+    box-shadow: 0 6px 18px -10px rgb(0 255 136 / 0.45);
+}
+
+html.hacker-mode .jump-link {
+    border-radius: 2px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.74rem;
+}
+
+html.hacker-mode .jump-link[aria-current] {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    background: rgb(0 255 136 / 0.08);
+    box-shadow: var(--glow-sm);
+    text-shadow: 0 0 6px rgb(0 255 136 / 0.6);
+}
+
+html.hacker-mode .jump-link[aria-current]::before { content: '['; }
+html.hacker-mode .jump-link[aria-current]::after { content: ']'; }
+
+/* --- Drop zone and paste box --- */
+html.hacker-mode #drop-zone {
+    border-color: rgb(0 255 136 / 0.35);
+}
+
+html.hacker-mode #drop-zone:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 24px -8px rgb(0 255 136 / 0.55);
+}
+
+html.hacker-mode #drop-zone.hover {
+    animation: hacker-drop-aura 0.9s ease-in-out infinite alternate;
+}
+
+html.hacker-mode .drop-icon {
+    border: 1px solid rgb(0 255 136 / 0.45);
+    animation: hacker-breathe 2.6s ease-in-out infinite;
+}
+
+html.hacker-mode .drop-title::before {
+    content: '$ ';
+    color: var(--accent-color);
+}
+
+html.hacker-mode .paste-area {
+    color: var(--code-text);
+    caret-color: var(--accent-color);
+    background: rgb(1 8 4 / 0.9);
+    border-color: rgb(0 255 136 / 0.25);
+    text-shadow: 0 0 5px rgb(0 255 136 / 0.25);
+}
+
+html.hacker-mode .paste-area::placeholder {
+    color: rgb(0 255 136 / 0.4);
+}
+
+html.hacker-mode .paste-area:focus {
+    border-color: var(--accent-color);
+    box-shadow: var(--ring);
+}
+
+/* --- Menus, toast --- */
+html.hacker-mode .theme-panel {
+    background: rgb(3 12 7 / 0.97);
+    border-color: rgb(0 255 136 / 0.35);
+}
+
+html.hacker-mode .copy-toast {
+    bottom: 44px;
+    border-color: rgb(0 255 136 / 0.4);
+    background: rgb(3 12 7 / 0.96);
+}
+
+/* --- Hacker mode switch in the theme menu (shown in every theme) --- */
+.hacker-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xs);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--heading);
+    background: var(--surface-2);
+    cursor: pointer;
+}
+
+.hacker-toggle:hover { border-color: color-mix(in srgb, var(--accent-color) 55%, var(--line)); }
+
+.hacker-toggle[aria-pressed="true"] {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    box-shadow: var(--glow-sm, none);
+}
+
+.hacker-toggle kbd,
+.hacker-status kbd,
+.copy-toast kbd {
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--container-bg);
+}
+
+/* --- Status line, like a terminal multiplexer's --- */
+.hacker-status {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 12px 4px 0;
+    overflow: hidden;
+    border-top: 1px solid rgb(0 255 136 / 0.3);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: nowrap;
+    color: var(--muted);
+    background: rgb(2 9 5 / 0.94);
+    box-shadow: 0 -8px 24px -16px rgb(0 255 136 / 0.6);
+}
+
+.hacker-status .hs-mode {
+    padding: 0 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--on-accent);
+    background: var(--accent-color);
+    box-shadow: 0 0 14px rgb(0 255 136 / 0.6);
+}
+
+/* Nothing shrinks: like a terminal's status line, what doesn't fit is cut off at the right. */
+.hacker-status > * { flex: none; }
+
+.hacker-status .hs-file {
+    max-width: 28ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--heading);
+}
+
+.hacker-status .hs-checks { display: flex; gap: 10px; }
+.hacker-status .hs-spacer { flex: 1 1 0; }
+.hacker-status .hs-key { color: var(--faint); }
+.hacker-status .is-pass { color: var(--success-color); text-shadow: 0 0 6px rgb(0 255 136 / 0.5); }
+.hacker-status .is-fail { color: var(--fail-color); text-shadow: 0 0 6px rgb(255 46 106 / 0.5); }
+.hacker-status .is-warn { color: var(--pending-color); }
+.hacker-status .is-pending,
+.hacker-status .is-checking { color: var(--link-color); animation: hacker-blink 0.9s steps(1) infinite; }
+.hacker-status .is-neutral { color: var(--faint); }
+
+/* --- Boot screen, shown when the mode is switched on --- */
+.hacker-boot {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgb(1 5 3 / 0.93);
+    cursor: pointer;
+    transition: opacity 0.3s ease;
+}
+
+.hacker-boot.is-leaving { opacity: 0; }
+
+.hacker-boot pre {
+    width: min(620px, 100%);
+    min-height: 13em;
+    padding: 18px 20px;
+    border: 1px solid rgb(0 255 136 / 0.35);
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: normal;
+    color: #a6e6bf;
+    background: rgb(2 10 6 / 0.9);
+    box-shadow: 0 0 60px -10px rgb(0 255 136 / 0.45), inset 0 0 30px rgb(0 255 136 / 0.06);
+    text-shadow: 0 0 6px rgb(0 255 136 / 0.35);
+}
+
+.hacker-boot .ok { color: #00ff88; }
+.hacker-boot .off { color: #ffd23f; }
+.hacker-boot .val { color: #3df5ff; }
+.hacker-boot .dim { color: #4f7f63; }
+.hacker-boot .cursor { animation: hacker-blink 1s steps(1) infinite; }
+
+/* Sections flicker on like an old monitor right after the boot screen. */
+html.hacker-mode.hacker-powerup :is(.section, #drop-zone, .page-header) {
+    animation: hacker-power-on 0.6s steps(6) both;
+}
+
+html.hacker-mode.hacker-powerup .section:nth-of-type(2) { animation-delay: 0.05s; }
+html.hacker-mode.hacker-powerup .section:nth-of-type(3) { animation-delay: 0.1s; }
+html.hacker-mode.hacker-powerup .section:nth-of-type(4) { animation-delay: 0.15s; }
+html.hacker-mode.hacker-powerup .section:nth-of-type(n+5) { animation-delay: 0.2s; }
+
+/* --- Keyframes --- */
+@keyframes hacker-blink {
+    50% { opacity: 0; }
+}
+
+@keyframes hacker-flicker {
+    0%, 100% { opacity: 0.45; }
+    42% { opacity: 0.38; }
+    43% { opacity: 0.5; }
+    77% { opacity: 0.42; }
+}
+
+@keyframes hacker-aura-spin {
+    to { --aura-angle: 360deg; }
+}
+
+@keyframes hacker-breathe-opacity {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.85; }
+}
+
+@keyframes hacker-breathe {
+    0%, 100% { box-shadow: 0 0 6px rgb(0 255 136 / 0.25); }
+    50% { box-shadow: 0 0 18px rgb(0 255 136 / 0.65), 0 0 2px rgb(0 255 136 / 0.9); }
+}
+
+@keyframes hacker-sweep {
+    0% { left: 0; opacity: 0; }
+    10% { opacity: 1; }
+    55% { left: calc(100% - 64px); opacity: 1; }
+    65%, 100% { left: calc(100% - 64px); opacity: 0; }
+}
+
+@keyframes hacker-alarm {
+    0%, 100% { box-shadow: 0 0 6px -2px var(--fail-color); }
+    50% { box-shadow: 0 0 16px 0 var(--fail-color); }
+}
+
+@keyframes hacker-alarm-flicker {
+    0%, 100% { opacity: 1; }
+    8% { opacity: 0.35; }
+    10% { opacity: 1; }
+    61% { opacity: 0.55; }
+    63% { opacity: 1; }
+}
+
+@keyframes hacker-drop-aura {
+    from { box-shadow: 0 0 0 1px var(--accent-color), 0 0 16px rgb(0 255 136 / 0.35); }
+    to { box-shadow: 0 0 0 1px var(--accent-color), 0 0 42px rgb(0 255 136 / 0.75); }
+}
+
+@keyframes hacker-glitch {
+    0% { text-shadow: -2px 0 #ff2e6a, 2px 0 #3df5ff; transform: translateX(1px) skewX(-6deg); }
+    50% { text-shadow: 2px 0 #ff2e6a, -2px 0 #3df5ff; transform: translateX(-2px) skewX(4deg); }
+    100% { text-shadow: 0 0 10px rgb(0 255 136 / 0.35); transform: none; }
+}
+
+@keyframes hacker-power-on {
+    0% { opacity: 0; filter: brightness(3); }
+    35% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; filter: none; }
+}
+
+/* --- Small screens: keep the status line to what fits --- */
+@media (max-width: 640px) {
+    .hacker-status { gap: 10px; }
+    .hacker-status :is(.hs-net, .hs-clock, .hs-where) { display: none; }
+    html.hacker-mode h1::before { content: '> '; }
+}
