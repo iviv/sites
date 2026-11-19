@@ -37,7 +37,7 @@ function formatUnixTime(seconds) {
 
 function verdictLabel(result) {
     return { pending: 'Checking…', none: 'None', unavailable: 'Not verified', offline: 'Offline',
-        temperror: 'Temporary error', permerror: 'Policy error' }[result] || result.toUpperCase();
+        temperror: 'Temporary error', permerror: 'Policy error' }[result] || (result ? result[0].toUpperCase() + result.slice(1).toLowerCase() : 'Unknown');
 }
 
 // --- Network: every request the page makes goes through fetch, so this one place logs them and offline mode blocks them ---
@@ -527,7 +527,7 @@ document.addEventListener('click', (event) => {
 // Every value field copies itself on click (or Enter/Space when focused) and confirms with a toast.
 const copyableSelector = [
     '.data-card', '.subject-text', '.facts dd.mono', '.relay-details dd', '.route-host', '.route-ip', '.route-embedded', '.route-from', '.dmarc-domain', '.dmarc-address', '.spf-token', '.spf-ptr-name', '.net-owner-name', '.link-url', '.link-domain', '.dkim-domain',
-    '.dkim-check-value', '.tech-value', '.spf-trace-record', '.spf-dns-cmd'
+    '.dkim-check-value', '.tech-value', '.spf-trace-record', '.spf-dns-cmd', '.summary-addr', '.summary-host[data-copy]'
 ].join(', ');
 
 function markCopyable(root) {
@@ -670,13 +670,14 @@ async function processRawEmail(input, run, source = null) {
         summaryState.reported = reportedAtDelivery(email);
         summaryState.spam = HeaderInsights.spamVerdicts(headerFieldList(email));
         Object.assign(summaryState, { bimi: null, dmarcDto: null, logoImg: null, logoFailed: false,
-            contentSignals: [], domainSignals: [], domainDone: false, glance: null });
+            contentSignals: [], domainSignals: [], domainDone: false, glance: null, links: null, attachments: [] });
         for (const id of Object.keys(jumpState)) delete jumpState[id];
         for (const id of ['dkim', 'spf', 'dmarc', 'arc']) jumpState['section-' + id] = { result: 'pending', note: 'checking' };
         jumpActive = null;
         headersSearch.value = '';
-        displaySummary();
+        // Content first, so the Summary's Links and Attachments rows are there from the start.
         displayContent(email);
+        displaySummary();
         // The overall status waits for the domain checks, so it doesn't turn from green to amber a moment later.
         displayDomain(email, run).catch(error => console.error(error)).finally(() => {
             if (run !== latestRun || summaryState.domainDone) return;
@@ -924,8 +925,9 @@ function spamSummary(spam) {
         </div>`;
 }
 
-function setSummaryCheck(check, result, note) {
-    summaryState.checks[check] = { result, note };
+// host: a domain inside the note, shown in monospace and shortened when it's a long generated name.
+function setSummaryCheck(check, result, note, host = null) {
+    summaryState.checks[check] = { result, note, host };
     setJumpStatus('section-' + check, result, note);
     displaySummary();
 }
@@ -947,7 +949,9 @@ function spfSummaryNote(spf) {
         case 'pass': return `${ip} allowed for ${spf.domain}`;
         case 'fail': case 'softfail': return `${ip} not allowed for ${spf.domain}`;
         case 'neutral': return `${spf.domain} takes no position on ${ip}`;
-        case 'none': return `${spf.domain} has no SPF record`;
+        case 'none': return `No SPF record for ${spf.domain}`;
+        case 'permerror': return spf.domain ? `Error in the SPF record for ${spf.domain}` : 'Error in the SPF record';
+        case 'temperror': return network.offline ? 'Record not looked up' : 'The DNS lookup failed';
         default: return network.offline ? 'Record not looked up' : 'Not checked';
     }
 }
@@ -957,7 +961,7 @@ function dmarcSummaryNote(dmarc) {
         case 'pass': return 'Passed via ' + dmarc.passedBy.join(' and ');
         case 'fail': return 'No passing check matches the From domain';
         case 'unavailable': return 'Can\'t be confirmed from this email';
-        case 'none': return 'No DMARC policy';
+        case 'none': return dmarc.domain ? `No policy at ${dmarc.domain}, so only DKIM and SPF apply` : 'No DMARC policy';
         case 'temperror': return network.offline ? 'Policy not looked up' : 'DNS error';
         default: return '';
     }
@@ -993,7 +997,7 @@ function signedButChanged(dmarc) {
     const check = (dmarc?.checks || []).find(item => item.kind === 'DKIM' && ['exact', 'relaxed'].includes(item.match) &&
         (item.auth.state === 'body-changed' || (item.auth.state === 'expired' && item.auth.signatureValid)));
     if (!check) return null;
-    return { domain: check.domain, text: check.auth.state === 'body-changed'
+    return { domain: check.domain, short: check.auth.state === 'body-changed' ? 'Signed, but changed after signing' : 'Signature expired', text: check.auth.state === 'body-changed'
         ? `${check.domain}'s signature on the headers still verifies; the body changed after signing, as often happens when Outlook or Exchange saves a message`
         : `${check.domain}'s signature still verifies but has expired` };
 }
@@ -1033,15 +1037,15 @@ function glanceChecks(email) {
         const genuine = signedButChanged(dmarc);
         if (dmarc.result === 'pass') {
             add('ok', `DMARC passed for ${dmarc.domain}`, 'section-dmarc');
-            if (deliveredFail) add('warn', `At delivery ${server} reported that DMARC failed`, 'section-summary', { inVerdict: true });
+            if (deliveredFail) add('warn', `At delivery ${server} reported that DMARC failed`, 'section-summary');
         } else if (dmarc.result === 'fail') {
-            if (genuine) add('warn', `DMARC fails, but ${genuine.text}`, 'section-dkim', { inVerdict: true });
-            else add('fail', `Nothing authenticates ${dmarc.domain}: no signature or envelope domain matches it`, 'section-dmarc', { label: 'Not authentic', inVerdict: true });
+            if (genuine) add('warn', `DMARC fails, but ${genuine.text}`, 'section-dkim', { row: 'from', short: genuine.short });
+            else add('fail', `Nothing authenticates ${dmarc.domain}: no signature or envelope domain matches it`, 'section-dmarc', { label: 'Not authentic', row: 'from', short: 'Not authenticated' });
         } else {
             add('info', network.offline ? 'DMARC wasn\'t looked up: offline mode is on'
                 : { none: `${dmarc.domain || 'The From domain'} publishes no DMARC policy`, temperror: 'DMARC: a DNS lookup failed' }[dmarc.result]
                     || 'DMARC couldn\'t be confirmed from this message alone', 'section-dmarc');
-            if (deliveredFail) add('fail', `At delivery ${server} reported that DMARC failed`, 'section-summary', { label: 'Failed DMARC', inVerdict: true });
+            if (deliveredFail) add('fail', `At delivery ${server} reported that DMARC failed`, 'section-summary', { label: 'Failed DMARC' });
         }
         if (delivered === 'pass') add('ok', `At delivery ${server} reported that DMARC passed`, 'section-summary');
         else if (!delivered) add('info', 'No server that received the message recorded a DMARC result', 'section-summary');
@@ -1050,16 +1054,17 @@ function glanceChecks(email) {
     }
     const fromDomain = fromDomainOf(email);
     if (fromDomain && !PublicSuffix.knownTld(fromDomain)) {
-        add('fail', `${fromDomain} can't be a real domain: .${fromDomain.split('.').pop()} isn't a top-level domain`, 'section-domain', { label: 'Fake sender domain' });
+        add('fail', `${fromDomain} can't be a real domain: .${fromDomain.split('.').pop()} isn't a top-level domain`, 'section-domain',
+            { label: 'Fake sender domain', row: 'from', mark: 'domain', short: `.${fromDomain.split('.').pop()} isn't a top-level domain` });
     } else if (fromDomain) {
         add('ok', `${fromDomain} ends in a real top-level domain (.${fromDomain.split('.').pop()})`, 'section-domain');
     } else {
         add('info', 'The From header doesn\'t name a single domain to check', 'section-summary');
     }
-    for (const signal of summaryState.domainSignals || []) add(signal.level, signal.text, 'section-domain', { label: signal.label });
+    for (const signal of summaryState.domainSignals || []) add(signal.level, signal.text, 'section-domain', { label: signal.label, short: signal.short, row: 'from', mark: 'domain' });
     if (fromDomain && PublicSuffix.knownTld(fromDomain) && !summaryState.domainDone) add('pending', `Checking ${fromDomain} in DNS and with its registry`, 'section-domain');
     const ownName = ownNameAsSender(email);
-    if (ownName) add('warn', `The sender's name, "${ownName}", is taken from your own address`, 'section-summary');
+    if (ownName) add('warn', `The sender's name, "${ownName}", is taken from your own address`, 'section-summary', { row: 'from', mark: 'name', short: 'Name taken from your address' });
     else if (firstHeader(email, 'Delivered-To') || firstHeader(email, 'X-Original-To')) add('ok', 'The sender\'s name isn\'t borrowed from your address', 'section-summary');
     const fields = headerFieldList(email);
     const issues = HeaderInsights.anomalies(fields, { delivery: DeliveryRecords.assess(email) });
@@ -1073,9 +1078,9 @@ function glanceChecks(email) {
     const date = firstHeader(email, 'Date');
     if (!date) {
         if (email.headersOnly) add('info', 'No Date header among the headers given', 'section-headers');
-        else add('warn', 'The message has no Date header', 'section-headers');
+        else add('warn', 'The message has no Date header', 'section-headers', { row: 'sent', short: 'No Date header' });
     } else if (Number.isNaN(parseMailDate(date)) && Number.isNaN(Date.parse(date))) {
-        add('warn', `The Date header isn't a date: "${date.length > 40 ? date.slice(0, 40) + '…' : date}"`, 'section-headers');
+        add('warn', `The Date header isn't a date: "${date.length > 40 ? date.slice(0, 40) + '…' : date}"`, 'section-headers', { row: 'sent', short: 'Not a date' });
     } else {
         add('ok', 'The Date header is a real date', 'section-headers');
     }
@@ -1089,8 +1094,14 @@ function glanceChecks(email) {
         add(spam ? 'ok' : 'info', spam ? `${spam.provider || 'The spam filter'} didn't mark it as spam`
             : 'No spam filter verdict in the headers (Gmail doesn\'t write one into the message)', 'section-summary');
     }
-    for (const signal of summaryState.contentSignals || []) add(signal.level, signal.text, 'section-content', { label: signal.label });
+    for (const signal of summaryState.contentSignals || []) add(signal.level, signal.text, 'section-content', { label: signal.label, short: signal.short, row: signal.row });
     return checks;
+}
+
+// The display name in an address header ("Alex Doe" in Alex Doe <alex@example.com>), decoded and unquoted.
+function mailboxName(value) {
+    if (!value?.includes('<')) return '';
+    return decodeMimeWords(value.slice(0, value.lastIndexOf('<'))).trim().replace(/^"(.*)"$/, '$1').replace(/\\(.)/g, '$1').trim();
 }
 
 // A sender that borrows the recipient's own name ("alex" for alex@example.com) while writing from another address.
@@ -1098,7 +1109,7 @@ function ownNameAsSender(email) {
     const from = firstHeader(email, 'From');
     const recipient = EmailAddress.parseMailboxes(firstHeader(email, 'Delivered-To') || firstHeader(email, 'X-Original-To') || '')[0];
     const sender = from ? EmailAddress.parseMailboxes(from)[0] : null;
-    const name = from?.includes('<') ? decodeMimeWords(from.slice(0, from.lastIndexOf('<'))).trim().replace(/^"(.*)"$/, '$1').trim() : '';
+    const name = mailboxName(from);
     if (!recipient || !sender || !name || sender.address.toLowerCase() === recipient.address.toLowerCase()) return null;
     const lower = name.toLowerCase();
     return lower === recipient.localPart.toLowerCase() || lower === recipient.address.toLowerCase() ? name : null;
@@ -1137,9 +1148,9 @@ function renderGlance(glance) {
     slot.hidden = false;
 }
 
-// The reasons the verdict box above doesn't already give.
-function glanceReasonList(glance) {
-    const listed = glance.reasons.filter(reason => !reason.inVerdict);
+// The reasons not already shown on a From, Sent, Links or Attachments row.
+function glanceReasonList(glance, rows) {
+    const listed = glance.reasons.filter(reason => !rows.has(reason.row));
     if (!['fail', 'spam', 'warn'].includes(glance.state) || !listed.length) return '';
     const icon = reason => statusIcon(reason.level === 'fail' || (reason.level === 'spam' && glance.tone === 'fail') ? 'fail' : 'alert', 15);
     const names = { 'section-summary': '', 'section-dmarc': 'DMARC', 'section-dkim': 'DKIM', 'section-headers': 'Headers',
@@ -1250,6 +1261,103 @@ function reportedDetails(reported) {
         <div class="data-card"><div class="data-value" data-copy="Authentication-Results: ${escapeHtml(header.raw)}">${escapeHtml(header.raw)}</div></div>`).join('');
 }
 
+// --- Summary rows: each fact with the warning signs about it, so a sign is shown once, where it applies ---
+const flagIcons = { fail: 'fail', spam: 'fail', warn: 'alert', ok: 'pass' };
+const markTone = level => (level === 'fail' || level === 'spam' ? 'fail' : 'warn');
+
+// A hostname longer than max characters is shortened in the middle, keeping the domain it belongs to whole; the full
+// name is in the tooltip and is what gets copied. block puts it on its own line.
+function hostHtml(host, { block = false, max = 40 } = {}) {
+    const cls = `mono summary-host${block ? ' is-block' : ''}`;
+    const org = registrableDomain(host) || '';
+    const prefix = org && host.length > org.length + 1 ? host.slice(0, -org.length - 1) : '';
+    const budget = max - org.length - 2;
+    if (host.length <= max || !prefix || budget < 1) return `<span class="${cls}">${escapeHtml(host)}</span>`;
+    const head = budget >= 8 ? Math.ceil(budget / 2) : 0;
+    return `<span class="${cls}" title="${escapeHtml(host)}" data-copy="${escapeHtml(host)}">${escapeHtml(prefix.slice(0, head))}…${
+        escapeHtml(prefix.slice(-(budget - head)))}.<b>${escapeHtml(org)}</b></span>`;
+}
+
+function checkNoteHtml(check) {
+    const note = check?.note || 'Checking…';
+    const at = check?.host ? note.indexOf(check.host) : -1;
+    if (at < 0) return escapeHtml(note);
+    return escapeHtml(note.slice(0, at)) + hostHtml(check.host, { block: check.host.length > 32 }) + escapeHtml(note.slice(at + check.host.length));
+}
+
+// Name and address on one line when they fit; otherwise the whole address moves under the name.
+function mailboxHtml(value, mark = {}) {
+    const mailboxes = value ? EmailAddress.parseMailboxes(value) : [];
+    if (!mailboxes.length) return value ? `<span class="mono summary-addr">${breakable(decodeMimeWords(value))}</span>` : '<span class="summary-fact-more">Unknown</span>';
+    const [first] = mailboxes;
+    const name = mailboxes.length === 1 ? mailboxName(value) : '';
+    const domain = mark.domain ? `<span class="summary-flagged is-${mark.domain}">${escapeHtml(first.domain)}</span>` : escapeHtml(first.domain);
+    return (name ? `<span class="summary-name${mark.name ? ` summary-flagged is-${mark.name}` : ''}">${escapeHtml(name)}</span>` : '')
+        + `<span class="mono summary-addr">${escapeHtml(first.localPart)}@${domain}</span>`
+        + (mailboxes.length > 1 ? `<span class="summary-fact-more" title="${escapeHtml(mailboxes.map(box => box.address).join(', '))}">+${mailboxes.length - 1} more</span>` : '');
+}
+
+function factFlags(flags) {
+    if (!flags.length) return '';
+    let previous = null;
+    return `<dd class="summary-fact-flags">${flags.map(flag => {
+        const link = flag.section && flag.section !== previous && flag.section !== 'section-summary' && sectionNames[flag.section]
+            ? `<a class="glance-link" href="#${flag.section}">${sectionNames[flag.section]}</a>` : '';
+        previous = flag.section;
+        const label = flag.short || flag.text;
+        return `<span class="summary-flag is-${flag.level}">${flagIcons[flag.level] ? statusIcon(flagIcons[flag.level], 15) : ''}<span${flag.text && flag.text !== label
+            ? ` title="${escapeHtml(flag.text)}"` : ''}>${escapeHtml(label)}</span>${link}</span>`;
+    }).join('')}</dd>`;
+}
+
+function factRow(label, valueHtml, flags = []) {
+    return `<div class="summary-fact"><dt>${label}</dt><dd class="summary-fact-value">${valueHtml}</dd>${factFlags(flags)}</div>`;
+}
+
+// The checks now beside the results recorded at delivery, one row each, with a note where the two disagree.
+function authTable(reported) {
+    const server = reported.top?.service || null;
+    const settled = result => !network.offline && result && !['pending', 'temperror', 'unavailable', 'offline'].includes(result);
+    const past = result => result === 'pass' ? 'passed' : ['fail', 'softfail'].includes(result) ? 'failed' : `gave ${verdictLabel(result)}`;
+    const present = result => result === 'pass' ? 'passes now' : ['fail', 'softfail'].includes(result) ? 'fails now' : `now gives ${verdictLabel(result)}`;
+    const notes = [];
+    const rows = [['dkim', 'DKIM'], ['spf', 'SPF'], ['dmarc', 'DMARC']].map(([id, label]) => {
+        const now = summaryState.checks[id];
+        const result = now?.result || 'pending';
+        const then = reported.byMethod[id];
+        const differs = Boolean(then) && settled(result) && settled(then.result) && verdictClass(result) !== verdictClass(then.result);
+        // A DMARC failure at delivery is already among the reasons for the overall status.
+        if (differs && !(id === 'dmarc' && then.result === 'fail')) {
+            notes.push(`${label} ${past(then.result)} when ${server ? `<code>${escapeHtml(server)}</code>` : 'the receiving server'} received the message, but ${present(result)}.
+                ${id === 'dkim' ? 'Keys in DNS can change after delivery, and saving a message can alter it.' : 'DNS records can change after delivery.'}`);
+        }
+        const thenNote = then?.note && !(now?.note || '').includes(then.note)
+            ? `<span class="summary-then-note">${/\s/.test(then.note) ? escapeHtml(then.note) : hostHtml(then.note, { max: 26 })}</span>` : '';
+        const thenHtml = then
+            ? `<span class="summary-then-result"><span class="${verdictClass(then.result)} summary-pill">${escapeHtml(verdictLabel(then.result))}</span>${differs
+                ? `<span class="summary-differs">${statusIcon('alert', 14)}Differs</span>` : ''}</span>${thenNote}`
+            : `<span class="summary-then-none">${reported.unconfirmed.length && !reported.top ? 'Not confirmed' : 'Not recorded'}</span>`;
+        return `
+            <tr>
+                <th scope="row"><a href="#section-${id}" title="Go to the ${label} section">${label}</a></th>
+                <td><span class="${verdictClass(result)} summary-pill">${escapeHtml(verdictLabel(result))}</span></td>
+                <td class="summary-auth-found">${checkNoteHtml(now)}</td>
+                <td class="summary-auth-then" data-label="At delivery">${thenHtml}</td>
+            </tr>`;
+    }).join('');
+    return `
+        <table class="summary-auth">
+            <thead><tr>
+                <th scope="col" class="summary-col-check">Check</th>
+                <th scope="col" class="summary-col-now">Now</th>
+                <th scope="col">What it found</th>
+                <th scope="col" class="summary-col-then">At delivery${server ? ` · <span class="mono">${escapeHtml(server)}</span>` : ''}</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        ${notes.map(note => `<p class="summary-auth-note">${statusIcon('alert', 15)}<span>${note}</span></p>`).join('')}`;
+}
+
 function displaySummary() {
     const email = currentEmail;
     if (!email) return;
@@ -1272,54 +1380,74 @@ function displaySummary() {
     setJumpStatus('section-summary', { pass: 'pass', fail: 'fail', warn: 'warn', checking: 'pending' }[glance.tone] || 'neutral', glance.label.toLowerCase());
     const wasOpen = document.getElementById('summary-reported') && !document.getElementById('summary-reported').classList.contains('hidden');
 
-    const tiles = [['dkim', 'DKIM'], ['spf', 'SPF'], ['dmarc', 'DMARC']].map(([id, label]) => {
-        const now = summaryState.checks[id];
-        const then = reported.byMethod[id];
-        return `
-            <a class="summary-check" href="#section-${id}" title="Go to the ${label} section">
-                <span class="summary-check-head">
-                    <span class="summary-check-name">${label}</span>
-                    <span class="${verdictClass(now?.result || 'pending')} summary-pill">${escapeHtml(verdictLabel(now?.result || 'pending'))}</span>
-                </span>
-                <span class="summary-check-note">${escapeHtml(now?.note || 'Checking…')}</span>
-                <span class="summary-check-then">At delivery ${then
-                    ? `<span class="${verdictClass(then.result)}">${escapeHtml(verdictLabel(then.result))}</span>${then.note ? ` <span class="summary-then-note">${escapeHtml(then.note)}</span>` : ''}`
-                    : `<span class="summary-then-note">${reported.unconfirmed.length && !reported.top ? 'not confirmed' : 'not recorded'}</span>`}</span>
-            </a>`;
-    }).join('');
+    // The rows shown, and the warning signs that belong on each.
+    const links = email.headersOnly ? null : summaryState.links;
+    const attachments = email.headersOnly ? [] : summaryState.attachments || [];
+    const rows = new Set(['from', 'sent', ...(links ? ['links'] : []), ...(attachments.length ? ['attachments'] : [])]);
+    const flagsFor = row => glance.reasons.filter(reason => reason.row === row);
+    const worst = flags => flags.length ? markTone(flags[0].level) : null;
+    const fromFlags = flagsFor('from');
+    if (!fromFlags.length && summaryState.dmarcDto?.result === 'pass' && !network.offline) {
+        fromFlags.push({ level: 'ok', short: 'Authenticated by DMARC', section: 'section-dmarc' });
+    }
+    const fromHtml = mailboxHtml(from, {
+        domain: worst(fromFlags.filter(flag => flag.mark === 'domain')), name: worst(fromFlags.filter(flag => flag.mark === 'name'))
+    });
+    const sentFlags = flagsFor('sent');
+    const sentHtml = !date ? '<span class="summary-fact-more">Unknown</span>'
+        : Number.isNaN(sentAt) ? `<span class="mono summary-addr${sentFlags.length ? ` summary-flagged is-${worst(sentFlags)}` : ''}">${escapeHtml(date)}</span>`
+        : escapeHtml(new Date(sentAt).toLocaleString());
+    const replyFlags = !showReplyTo ? [] : replyElsewhere
+        ? [{ level: 'warn', short: `Replies go to ${replyMailbox.domain}, not the From domain` }]
+        : [{ level: 'note', short: 'Same domain as From' }];
+    const linkFlags = flagsFor('links');
+    const linksHtml = !links ? '' : !links.count ? '<span class="summary-fact-more">None</span>'
+        : `<span class="mono summary-addr${linkFlags.length ? ` summary-flagged is-${worst(linkFlags)}` : ''}">${escapeHtml(links.host)}</span>`
+            + `<span class="summary-fact-more">${links.domains > 1 ? `+${links.domains - 1} ${links.domains === 2 ? 'domain' : 'domains'} · ` : ''}${links.count} ${links.count === 1 ? 'link' : 'links'}</span>`;
+    const attachmentFlags = flagsFor('attachments');
+    const attachmentsHtml = attachments.length
+        ? `<span class="summary-addr${attachmentFlags.length ? ` summary-flagged is-${worst(attachmentFlags)}` : ''}">${escapeHtml(attachments[0])}</span>`
+            + (attachments.length > 1 ? `<span class="summary-fact-more" title="${escapeHtml(attachments.join(', '))}">+${attachments.length - 1} more</span>` : '') : '';
 
     const logo = bimiStatus();
     const subjectHtml = `<div class="subject-text" title="${escapeHtml(subject ? decodeMimeWords(subject) : '')}">${escapeHtml(subject ? decodeMimeWords(subject) : '(No subject)')}</div>`;
     const logoNote = logo?.show ? `Brand logo (BIMI) for <code>${escapeHtml(logo.bimi.domain)}</code> · ${summaryState.logoFailed ? 'the image couldn\'t be loaded'
         : logo.bimi.authority ? 'mark certificate published, not verified here' : 'no mark certificate, so Gmail and Apple Mail won\'t show it'}` : '';
+    // The verdict sentence is shown only when it says something the table can't: offline mode, or a failed lookup.
+    const authStatus = network.offline || summaryState.checks.dmarc?.result === 'temperror' ? `<div class="summary-verdict ${tone}">${verdict}</div>` : '';
+    const resultCount = reported.top?.results.length;
     summaryOutput.innerHTML = explainHost('Summary view', `
         ${logo?.show ? `
         <div class="summary-head">
             ${summaryState.logoFailed ? '' : '<span class="summary-logo" data-logo-slot></span>'}
             <div class="summary-head-text">${subjectHtml}<p class="summary-logo-note">${logoNote}</p></div>
         </div>` : subjectHtml}
-        <dl class="facts summary-facts">
-            <div><dt>From</dt><dd class="mono summary-address">${from ? breakable(decodeMimeWords(from)) : 'Unknown'}</dd></div>
-            <div><dt>To</dt><dd class="mono summary-address">${to ? breakable(decodeMimeWords(to)) : 'Unknown'}</dd></div>
-            <div><dt>Sent</dt><dd>${Number.isNaN(sentAt) ? escapeHtml(date || 'Unknown') : escapeHtml(new Date(sentAt).toLocaleString())}</dd></div>
-            ${showReplyTo ? `<div><dt>Reply-To</dt><dd class="mono summary-address">${breakable(decodeMimeWords(replyTo))}</dd>
-                <dd class="fact-note${replyElsewhere ? ' summary-reply-elsewhere' : ''}">${replyElsewhere
-                    ? `Replies go to a different domain (<code>${escapeHtml(replyMailbox.domain)}</code>) than From`
-                    : 'A different address on the same domain as From'}</dd></div>` : ''}
+        ${glanceReasonList(glance, rows)}
+        <dl class="summary-facts">
+            ${factRow('From', fromHtml, fromFlags)}
+            ${factRow('To', mailboxHtml(to))}
+            ${showReplyTo ? factRow('Reply-To', mailboxHtml(replyTo, { domain: replyElsewhere ? 'warn' : null }), replyFlags) : ''}
+            ${factRow('Sent', sentHtml, sentFlags)}
+            ${links ? factRow('Links', linksHtml, linkFlags) : ''}
+            ${attachments.length ? factRow('Attachments', attachmentsHtml, attachmentFlags) : ''}
         </dl>
         ${email.headersOnly ? '<p class="note summary-headers-only">Only headers were provided, so checks that need the message body are skipped.</p>' : ''}
-        <div class="summary-verdict ${tone}">${verdict}</div>
-        ${glanceReasonList(glance)}
         ${logo?.failed ? `<p class="note summary-bimi-warning"><code>${escapeHtml(logo.bimi.domain)}</code> publishes a brand logo, but this message failed DMARC,
             so mail clients won't show it. Be wary of anything in it that looks branded.</p>` : ''}
-        <div class="summary-checks">${tiles}</div>
+        <div class="summary-auth-head">
+            <h3 class="summary-subhead">Authentication</h3>
+            <span class="summary-auth-meta">Checked now, beside what the receiving server recorded</span>
+        </div>
+        ${authStatus}
+        ${authTable(reported)}
         ${spamSummary(summaryState.spam)}
         ${reported.dto.headers.length ? `
         ${reported.top ? '' : unconfirmedNote(reported)}
-        <button type="button" class="dkim-advanced-toggle" aria-controls="summary-reported" aria-expanded="${wasOpen}">
+        <button type="button" class="dkim-advanced-toggle summary-reported-toggle" aria-controls="summary-reported" aria-expanded="${wasOpen}">
             ${detailDisclosureIcon}<span>Reported at delivery</span>
-            <span class="toggle-meta">${escapeHtml([reported.top ? reported.top.service : 'not confirmed', reported.top && `${reported.top.results.length} results`,
-                reported.dto.headers.length > 1 && `${reported.dto.headers.length} headers`, arcSealed(reported) && 'ARC-sealed'].filter(Boolean).join(' · '))}</span>
+            <span class="toggle-meta">${[reported.top ? `<span class="mono">${escapeHtml(reported.top.service || 'Server not named')}</span>` : 'not confirmed',
+                reported.top && `${resultCount} ${resultCount === 1 ? 'result' : 'results'}`,
+                reported.dto.headers.length > 1 && `${reported.dto.headers.length} headers`, arcSealed(reported) && 'ARC-sealed'].filter(Boolean).join(' · ')}</span>
         </button>
         <div id="summary-reported" class="${wasOpen ? '' : 'hidden'}">${reportedDetails(reported)}</div>`
             : '<p class="note summary-unreported">No Authentication-Results header, so there\'s no record of what the receiving server decided.</p>'}`,
@@ -1520,20 +1648,25 @@ function attachmentWarning(name) {
 // Warning signs in the content, for the overall status beside the Summary heading.
 function contentSignals(attachments, groups, mismatches) {
     const signals = [];
+    // row and short: the Summary row a sign is shown on, and its wording there.
+    const onLinks = { row: 'links' };
     if (mismatches.length) {
-        signals.push({ level: 'warn', text: mismatches.length === 1 ? 'A link shows one domain but goes to another' : `${mismatches.length} links show one domain but go to another` });
+        signals.push({ ...onLinks, level: 'warn', text: mismatches.length === 1 ? 'A link shows one domain but goes to another' : `${mismatches.length} links show one domain but go to another`,
+            short: mismatches.length === 1 ? 'A link shows one domain, goes to another' : `${mismatches.length} links show one domain, go to another` });
     }
-    if (groups.some(group => group.flags.has('ip'))) signals.push({ level: 'warn', text: 'A link goes to a raw IP address' });
-    if (groups.some(group => group.flags.has('punycode'))) signals.push({ level: 'warn', text: 'A link\'s domain uses look-alike characters' });
+    if (groups.some(group => group.flags.has('ip'))) signals.push({ ...onLinks, level: 'warn', text: 'A link goes to a raw IP address', short: 'A link goes to a raw IP address' });
+    if (groups.some(group => group.flags.has('punycode'))) signals.push({ ...onLinks, level: 'warn', text: 'A link\'s domain uses look-alike characters', short: 'Look-alike characters' });
     const hosted = groups.filter(group => group.flags.has('hosting') && !group.isFrom);
     if (hosted.length) {
-        signals.push({ level: 'warn', text: `Links go to a page on a free hosting service (${[...hosted[0].hosts][0]}${hosted.length > 1 ? ` and ${hosted.length - 1} more` : ''})` });
+        signals.push({ ...onLinks, level: 'warn', text: `Links go to a page on a free hosting service (${[...hosted[0].hosts][0]}${hosted.length > 1 ? ` and ${hosted.length - 1} more` : ''})`,
+            short: 'Page on a free hosting service' });
     }
     for (const part of attachments) {
         const warning = attachmentWarning(part.filename || '');
         if (!warning) continue;
         const text = `${part.filename}: ${warning[1].toLowerCase()}`;
-        signals.push(warning[0] === 'status-fail' ? { level: 'fail', label: 'Risky attachment', text } : { level: 'warn', text });
+        const short = attachments.length > 1 ? text : warning[1];
+        signals.push(warning[0] === 'status-fail' ? { level: 'fail', label: 'Risky attachment', text, short, row: 'attachments' } : { level: 'warn', text, short, row: 'attachments' });
     }
     if (!signals.length) {
         const links = groups.reduce((sum, group) => sum + group.links.length, 0);
@@ -1593,6 +1726,11 @@ function displayContent(email) {
 
     const attachmentFlags = attachments.map(part => attachmentWarning(part.filename || '')?.[0]).filter(Boolean);
     summaryState.contentSignals = contentSignals(attachments, groups, mismatches);
+    // The Summary's Links row names the domain a warning is about, else the one most links go to.
+    const shown = groups.find(group => ['mismatch', 'ip', 'punycode'].some(flag => group.flags.has(flag)) || (group.flags.has('hosting') && !group.isFrom)) || groups[0];
+    summaryState.links = { count: webLinks, domains: groups.length,
+        host: shown ? (shown.flags.has('hosting') || shown.hosts.size === 1 ? [...shown.hosts][0] : shown.domain) : null };
+    summaryState.attachments = attachments.map(part => part.filename || 'Unnamed attachment');
     if (mismatches.length || groups.some(group => group.flags.has('ip')) || attachmentFlags.includes('status-fail')) {
         setJumpStatus('section-content', 'fail', 'has warning signs');
     } else if (attachmentFlags.length || groups.some(group => group.flags.has('punycode') || (group.flags.has('hosting') && !group.isFrom))) {
@@ -1800,7 +1938,7 @@ async function displayDomain(email, run) {
     setJumpStatus('section-domain', null);
     if (exists === false) {
         setJumpStatus('section-domain', 'fail', 'doesn\'t exist');
-        summaryState.domainSignals.push({ level: 'fail', label: 'Fake sender domain', text: `${domain} doesn't exist: DNS has no record of it` });
+        summaryState.domainSignals.push({ level: 'fail', label: 'Fake sender domain', text: `${domain} doesn't exist: DNS has no record of it`, short: 'Domain doesn\'t exist in DNS' });
         rows.push(domainRow('Exists', 'status-fail', 'No', checkNote(`DNS has no record of <code>${escapeHtml(domain)}</code>, so nobody uses it and replies to the From address go nowhere`)));
     } else {
         summaryState.domainSignals.push(exists ? { level: 'ok', text: `${domain} exists in DNS` } : { level: 'info', text: `Couldn't tell whether ${domain} exists: the lookup failed` });
@@ -1812,7 +1950,7 @@ async function displayDomain(email, run) {
         const days = (Date.now() - date.getTime()) / 86400000;
         if (days < 180) {
             setJumpStatus('section-domain', days < 30 ? 'fail' : 'warn', `registered ${ageText(date)}`);
-            summaryState.domainSignals.push({ level: 'warn', text: `${registered} was registered ${ageText(date)}` });
+            summaryState.domainSignals.push({ level: 'warn', text: `${registered} was registered ${ageText(date)}`, short: `Registered ${ageText(date)}` });
         } else {
             summaryState.domainSignals.push({ level: 'ok', text: `${registered} was registered ${ageText(date)}` });
         }
@@ -1837,7 +1975,7 @@ async function displayDomain(email, run) {
         rows.push(domainRow('Receives mail', 'status-fail', 'No', ''));
     } else if (unreachable) {
         if (jumpState['section-domain']?.result !== 'fail') setJumpStatus('section-domain', 'warn', 'can\'t receive mail');
-        summaryState.domainSignals.push({ level: 'warn', text: `${domain} has no mail server or address in DNS, so replies can't reach it` });
+        summaryState.domainSignals.push({ level: 'warn', text: `${domain} has no mail server or address in DNS, so replies can't reach it`, short: 'Can\'t receive replies' });
         rows.push(domainRow('Receives mail', 'status-fail', 'No', checkNote(`<code>${escapeHtml(domain)}</code> has no mail server and no address in DNS. It may not exist, and replies to the From address won't arrive`)));
     } else {
         rows.push(domainRow('Receives mail', 'status-neutral', 'No', checkNote(`<code>${escapeHtml(domain)}</code> has no MX record, so replies to the From address won't arrive`)));
@@ -2037,14 +2175,14 @@ function displayArc(result) {
             <tr>
                 <th scope="row">${set.instance}</th>
                 <td data-label="Sealed by"><span class="dmarc-domain">${escapeHtml(set.sealer || 'unknown')}</span>
-                    ${checkNote(`selector <code>${escapeHtml(set.selector || '')}</code>${set.time ? ' · ' + escapeHtml(formatUnixTime(set.time)) : ''}`)}</td>
+                    ${checkNote(`selector <code>${escapeHtml(set.selector || '')}</code>`)}${set.time ? checkNote(`<span class="nowrap">${escapeHtml(formatUnixTime(set.time))}</span>`) : ''}</td>
                 <td data-label="Seal">${set.seal.valid === true ? pill('status-pass', 'Verifies') : set.seal.valid === false ? pill('status-fail', 'Doesn\'t verify') : pill('status-pending', 'Not checked')}
                     ${set.seal.error && !network.offline ? checkNote(escapeHtml(set.seal.error)) : ''}</td>
-                <td data-label="Message signature">${arcAmsCell(set.ams)}</td>
-                <td data-label="Chain before">${pill(set.cv === 'pass' || (set.instance === 1 && set.cv === 'none') ? 'status-pass' : set.cv === 'fail' ? 'status-fail' : 'status-neutral', set.cv || '?')}</td>
+                <td data-label="Signature">${arcAmsCell(set.ams)}</td>
+                <td data-label="Chain">${pill(set.cv === 'pass' || (set.instance === 1 && set.cv === 'none') ? 'status-pass' : set.cv === 'fail' ? 'status-fail' : 'status-neutral', set.cv ? verdictLabel(set.cv) : '?')}</td>
                 <td data-label="Recorded">${recorded.service ? `<span class="check-note">${escapeHtml(recorded.service)}</span>` : ''}
                     <span class="arc-recorded">${recorded.results.filter(entry => ['dkim', 'spf', 'dmarc', 'arc'].includes(entry.method))
-                        .map(entry => `<span class="${['none', 'neutral'].includes(entry.result) ? 'status-neutral' : verdictClass(entry.result)}" title="${escapeHtml(entry.raw)}">${escapeHtml(entry.method.toUpperCase())} ${escapeHtml(verdictLabel(entry.result))}</span>`).join('')}</span></td>
+                        .map(entry => `<span class="${['none', 'neutral'].includes(entry.result) ? 'status-neutral' : verdictClass(entry.result)}" title="${escapeHtml(entry.raw)}">${escapeHtml(entry.method.toUpperCase())} ${escapeHtml(verdictLabel(entry.result).toLowerCase())}</span>`).join('')}</span></td>
             </tr>`;
     }).join('');
     const resultView = `
@@ -2055,7 +2193,7 @@ function displayArc(result) {
         ${rows ? `
         <p class="note arc-explain">Each server that handles the message can add a numbered set: the results it recorded, a signature of the message, and a seal over every set so far. Oldest first.</p>
         <table class="dmarc-checks arc-sets">
-            <thead><tr><th scope="col">Set</th><th scope="col">Sealed by</th><th scope="col">Seal</th><th scope="col">Message signature</th><th scope="col">Chain before</th><th scope="col">Recorded</th></tr></thead>
+            <thead><tr><th scope="col">Set</th><th scope="col">Sealed by</th><th scope="col">Seal</th><th scope="col" title="ARC-Message-Signature: a DKIM-style signature of the message">Signature</th><th scope="col" title="What this set says about the sets before it (cv=)">Chain</th><th scope="col">Recorded</th></tr></thead>
             <tbody>${rows}</tbody>
         </table>
         <button type="button" class="dkim-advanced-toggle" aria-controls="arc-raw" aria-expanded="false">
@@ -3028,7 +3166,7 @@ function spfRules(spfDto) {
         const label = ranges && ranges.length > 1 ? `${ranges.length} IP ranges` : spfTermLabel(term, spfDto.domain);
         const tokenCell = tokens.length > 1
             ? `<span class="spf-token" title="${escapeHtml(tokens.join(' '))}" data-copy="${escapeHtml(tokens.join(' '))}">${escapeHtml(tokens[0])} … ${escapeHtml(tokens.at(-1))}</span>`
-            : `<span class="spf-token">${breakable(tokens[0])}</span>`;
+            : `<span class="spf-token">${escapeHtml(tokens[0])}</span>`;
         return `<tr class="${outcome === 'matched' ? 'counts' : ''}">
             <td class="spf-rule-mark">${outcome === 'matched' ? copiedIcon : outcome === 'no-match' ? '<span aria-label="No match">×</span>' : ''}</td>
             <th scope="row">${escapeHtml(label)}${qualifier}</th>
@@ -3797,8 +3935,8 @@ function displaySpf(spfDto) {
             ${warnings.map(text => `<div class="notice">${text}</div>`).join('')}
 
             <dl class="facts spf-facts">
-                <div><dt>${term('envelope sender', 'Envelope sender')}</dt>
-                    <dd class="mono spf-mailbox">${breakable(spfDto.mailbox || spfDto.domain || 'Unknown')}</dd>
+                <div${(spfDto.mailbox || spfDto.domain || '').length > 28 ? ' class="spf-wide"' : ''}><dt>${term('envelope sender', 'Envelope sender')}</dt>
+                    <dd class="mono spf-mailbox">${escapeHtml(spfDto.mailbox || spfDto.domain || 'Unknown').replace('@', '<wbr>@')}</dd>
                     <dd class="fact-note">Return-Path ${from.chip}</dd></div>
                 <div><dt>Sending server</dt>
                     <dd class="mono">${ip ? escapeHtml(ip) : 'Unknown'}${ip ? embeddedChip(ip) : ''}</dd>
@@ -4024,7 +4162,7 @@ async function runVerification(email, run) {
         .then(result => {
             if (run === latestRun) {
                 displaySpf(result);
-                setSummaryCheck('spf', offlineStatus(result.result), spfSummaryNote(result));
+                setSummaryCheck('spf', offlineStatus(result.result), spfSummaryNote(result), result.domain || null);
                 markRelaySpfIp(result.senderIp);
             }
             return result;
@@ -4055,7 +4193,7 @@ async function runVerification(email, run) {
     displayDmarc(dmarc);
 
     summaryState.dmarcDto = dmarc;
-    setSummaryCheck('dmarc', offlineStatus(dmarc.result), dmarcSummaryNote(dmarc));
+    setSummaryCheck('dmarc', offlineStatus(dmarc.result), dmarcSummaryNote(dmarc), dmarc.domain || null);
     updateBimiNote();
 }
 
@@ -4189,9 +4327,7 @@ function displayDkimResult(i, dkim, result) {
                 <dd class="fact-note">${fromRelation(dkim.tags.d)}</dd>
                 ${identity ? `<dd class="fact-note">Identity <code>${escapeHtml(identity)}</code></dd>` : ''}</div>
             <div><dt>Signed at</dt><dd>${dkim.tags.t ? escapeHtml(formatUnixTime(dkim.tags.t)) : 'Not stated'}</dd></div>
-            <div><dt>Expires</dt><dd${expired ? ' class="dkim-expired"' : ''}>${dkim.tags.x ? escapeHtml(formatUnixTime(dkim.tags.x)) : 'No expiry'}</dd>
-                ${expired ? '<dd class="fact-note">Already expired</dd>' : ''}</div>
-            <div><dt>Key</dt><dd>${escapeHtml(keyText)}</dd><dd class="fact-note">${escapeHtml(dkim.tags.a || '')}</dd></div>
+            <div><dt>Algorithm</dt><dd class="mono">${escapeHtml(dkim.tags.a || 'Not stated')}</dd></div>
         </dl>
         <ul class="dkim-checklist">${checks}</ul>
         ${dkimCoverage(dkim, result)}
