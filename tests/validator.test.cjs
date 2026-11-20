@@ -23,6 +23,12 @@ test('leaves plain subjects and unrecognized MIME words intact', () => {
   assert.equal(decodeMimeWords('=?ISO-8859-1?Q?caf=E9?='), 'café');
 });
 
+test('decodes an encoded word inside a quoted display name', () => {
+  const from = '"=?utf-8?Q?=D0=A2=D1=8B=20=D0=BD=D0=B5=20=D0=BE=D0=B4=D0=B8=D0=BD?=" <support@june12.io>';
+  assert.equal(decodeMimeWords(from), '"Ты не один" <support@june12.io>');
+  assert.equal(decodeMimeWords('"=?UTF-8?Q?a?= =?UTF-8?Q?b?="'), '"ab"');
+});
+
 test('relay parser reads SendGrid and Microsoft Received formats', () => {
   const [microsoft, goStyle, fractional] = new RelayParser().parse([
     'from o1320.shared.klaviyomail.com (167.89.66.183) by BN3PEPF00022BC0.mail.protection.outlook.com (10.167.248.123) with ' +

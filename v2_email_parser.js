@@ -145,7 +145,9 @@
   }
 
   function decodeMimeWords(value) {
-    const pattern = /(?<!\S)=\?([^\s?]+)\?([qb])\?([\x21-\x3e\x40-\x7e]+)\?=(?!\S)/gi;
+    // RFC 2047 keeps encoded words out of quoted strings, but senders put them there anyway
+    // ("=?utf-8?Q?...?=" <a@b>) and mail clients decode them, so a quote also ends a word.
+    const pattern = /(?<![^\s"])=\?([^\s?"]+)\?([qb])\?([\x21\x23-\x3e\x40-\x7e]+)\?=(?![^\s"])/gi;
     let text = '';
     let offset = 0;
     let previousDecoded = false;
