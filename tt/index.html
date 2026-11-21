@@ -67,6 +67,7 @@
       --switch-knob: #ffffff;
       --card-shadow: 0 1px 2px rgb(23 21 31 / 4%), 0 10px 30px rgb(23 21 31 / 5%);
       --dock-bg: #ffffff;
+      --success-soft: #e3f4ec;
 
       --kbd-tray: #e6e5ec;
       --kbd-tray-line: #dad8e4;
@@ -83,14 +84,15 @@
       --key-hint-bg: #3e3566;
       --key-hint-line: #cbbaff;
       --key-hint-ink: #ede8ff;
+      --key-led: #4b4c5e;
       --key-missed-bg: #ffb9cd;
       --key-missed-ink: #55142a;
       --key-missed-shadow: #d7839b;
       --f-pinky: #f07aa3;
       --f-ring: #f0b550;
       --f-middle: #45b8a8;
-      --f-index-left: #5b7cf0;
-      --f-index-right: #4fb6f2;
+      --f-index-left: #4c7ef3;
+      --f-index-right: #a3d63c;
       --f-thumb: #8c889f;
     }
 
@@ -139,6 +141,7 @@
       --switch-knob: #cfccdc;
       --card-shadow: 0 10px 30px rgb(0 0 0 / 25%);
       --dock-bg: #121118;
+      --success-soft: #173a2e;
 
       --kbd-tray: #0c0b10;
       --kbd-tray-line: #22202a;
@@ -155,6 +158,7 @@
       --key-hint-bg: #2e2752;
       --key-hint-line: #a08fff;
       --key-hint-ink: #e3dcff;
+      --key-led: #3d3c4a;
       --f-thumb: #7d7990;
     }
 
@@ -283,6 +287,8 @@
     .character.done { color: var(--typed); }
     .character.current { color: var(--accent-ink); background: var(--accent-soft); box-shadow: inset 0 -3px 0 var(--accent); }
     .character.current.wrong { color: var(--danger); background: var(--danger-soft); box-shadow: inset 0 -3px 0 var(--danger-strong); }
+    /* Typos waiting to be deleted, shown at the cursor */
+    .character.extra { color: var(--danger); background: var(--danger-soft); text-decoration: line-through; text-decoration-thickness: 2px; }
 
     .progress-row { display: flex; align-items: center; gap: 14px; }
     progress { flex: 1; min-width: 0; height: 6px; appearance: none; border: 0; border-radius: 6px; background: var(--track); color: var(--accent); overflow: hidden; }
@@ -363,16 +369,30 @@
     .key[data-zone]::before { content: ""; position: absolute; left: 32%; right: 32%; bottom: clamp(2px, .65cqw, 5px); height: clamp(2px, .38cqw, 3px); border-radius: 3px; background: var(--zone); }
     .key.space-key[data-zone]::before { left: 45%; right: 45%; }
     .key.home::after { content: ""; position: absolute; bottom: clamp(6px, 1.5cqw, 11px); left: calc(50% - 5px); width: 10px; height: 1.5px; border-radius: 2px; background: currentColor; opacity: .6; }
-    .key.modifier, .key.function { gap: clamp(2px, .6cqw, 5px); padding: 0 3px; font-size: clamp(.46rem, 1.3cqw, .66rem); color: var(--key-muted); }
-    .key .glyph { display: inline-flex; color: var(--key-ink); font: 400 clamp(.66rem, 1.95cqw, .98rem)/1 var(--sans); }
-    .key .glyph .icon, .key.function .icon { width: clamp(9px, 2.25cqw, 17px); height: clamp(9px, 2.25cqw, 17px); color: var(--key-ink); stroke-width: 1.7; }
+    .key.function { gap: clamp(2px, .6cqw, 5px); padding: 0 3px; font-size: clamp(.46rem, 1.3cqw, .66rem); color: var(--key-muted); }
+    .key.function .icon { width: clamp(9px, 2.25cqw, 17px); height: clamp(9px, 2.25cqw, 17px); color: var(--key-ink); stroke-width: 1.7; }
+    /* Modifier legends follow M2-and-later MacBooks: the name sits in the bottom corner on the key's own side,
+       and a symbol sits in the opposite top corner. */
+    .key.modifier {
+      display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr 1fr; justify-content: stretch; align-items: stretch;
+      padding: clamp(3px, .75cqw, 6px) clamp(4px, 1.05cqw, 8px);
+      overflow: hidden; color: var(--key-muted); font-size: clamp(.46rem, 1.3cqw, .66rem); white-space: nowrap;
+    }
+    .mod-top, .mod-bottom { display: flex; min-width: 0; }
+    .mod-top { align-items: flex-start; font-size: 1.15em; }
+    .mod-bottom { align-items: flex-end; }
+    .key.modifier.left .mod-top, .key.modifier.right .mod-bottom { justify-content: flex-end; }
+    .key.modifier.right .mod-top, .key.modifier.left .mod-bottom, .key.modifier.caps-lock .mod-top { justify-content: flex-start; }
+    .key.modifier .icon { width: 1.3em; height: 1.3em; stroke-width: 1.5; }
+    .led { width: clamp(3px, .55cqw, 5px); aspect-ratio: 1; margin-top: 1px; border-radius: 50%; background: var(--key-led); }
     .key.touch-id::after { content: ""; width: 40%; aspect-ratio: 1; border: 1px solid var(--key-muted); border-radius: 50%; opacity: .7; }
     .arrow-stack { display: flex; flex-direction: column; gap: 2px; height: var(--key-height); margin: 0 var(--key-gap); }
     .arrow-stack .key { flex: 1; height: auto; margin: 0; }
     .key.arrow { border-radius: clamp(3px, .7cqw, 5px); color: var(--key-muted); font-size: clamp(.4rem, 1.15cqw, .6rem); }
     .key.arrow-side { align-self: end; height: calc((var(--key-height) - 2px) / 2); }
     @container (max-width: 560px) {
-      .mod-label, .fn-label { display: none; }
+      .fn-label { display: none; }
+      .key.modifier { padding: 2px 3px; font-size: .4rem; }
     }
 
     .key.target { background: var(--key-target-bg); color: var(--key-target-ink); box-shadow: inset 0 -2px 0 var(--key-target-shadow), 0 0 0 3px var(--accent-ring); }
@@ -381,10 +401,12 @@
     .key.target.use-shift .upper { font-weight: 800; color: var(--key-target-ink); }
     .key.target.use-shift.shifted .base { opacity: .65; }
     .key.shift-hint { background: var(--key-hint-bg); color: var(--key-hint-ink); box-shadow: inset 0 0 0 1.5px var(--key-hint-line); }
-    .key.shift-hint .glyph { color: var(--key-hint-ink); }
     .key.missed { background: var(--key-missed-bg); color: var(--key-missed-ink); box-shadow: inset 0 -2px 0 var(--key-missed-shadow); }
     .key.missed .upper { color: inherit; }
 
+    /* Finger colors: keycaps keep their dark Mac look, mixed with a muted share of their finger's color. */
+    .keyboard.finger-colors .key[data-zone]:not(.target, .missed) { background: color-mix(in srgb, var(--zone) 30%, var(--key-bg)); }
+    #keyboard-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     [data-zone="pinky"] { --zone: var(--f-pinky); }
     [data-zone="ring"] { --zone: var(--f-ring); }
     [data-zone="middle"] { --zone: var(--f-middle); }
@@ -477,8 +499,24 @@
     .settings-button { display: none; }
     main.shell { padding-block: 20px 32px; }
     .main-column { gap: 14px; }
-    .stat { padding: 10px 18px; }
-    .stat dd { font-size: 19px; }
+    /* Live stats: one slim row of value-and-label pairs across the top of the drill card */
+    .stats-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; min-height: 40px; padding: 5px 20px; }
+    .stat { display: flex; flex: none; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 6px; padding: 0; border: 0 !important; }
+    .stat dd { margin: 0; font-size: 15px; }
+    .stat-wpm { padding: 3px 10px; border-radius: 8px; }
+    .stat-budget { margin-left: auto; padding: 3px 10px; border-radius: 8px; transition: background .15s; }
+    .stat-budget.warn { background: var(--danger-soft); }
+    .stat-budget.warn :is(dt, dd) { color: var(--danger); }
+    .select-wrap { position: relative; display: inline-flex; }
+    .select-wrap::after {
+      content: ""; position: absolute; top: calc(50% - 5px); right: 12px; width: 6px; height: 6px;
+      border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); pointer-events: none;
+    }
+    .select-wrap select {
+      appearance: none; height: 34px; padding: 0 30px 0 10px; border: 1px solid var(--control-line); border-radius: 9px;
+      background: var(--input-bg); color: var(--ink); font: 600 13.5px var(--sans); cursor: pointer;
+    }
+    .custom-limit { margin-top: 10px; }
     .typing-area { padding: 20px 28px 16px; }
     .prompt { min-height: 110px; margin-bottom: 16px; }
     .prompt.prose { max-height: calc(5 * 1.85em); }
@@ -490,26 +528,51 @@
     .keyboard-figure { margin-top: 12px; }
     .keyboard { --key-height: clamp(22px, 5.4cqw, 42px); gap: 5px; padding: 8px 5px; }
     .finger-legend { margin-top: 10px; }
-    .missed-inline, .tip-inline, .now-card, .stats-card { display: none; }
+    .missed-inline, .tip-inline, .now-card { display: none; }
     .missed-inline { align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
     .missed-inline kbd { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px; border: 1px solid var(--danger-line); border-radius: 7px; background: var(--danger-soft); color: var(--danger); font: 600 13px var(--mono); }
     .missed-inline kbd span { font-size: 11px; font-weight: 500; opacity: .8; }
     .tip-inline { font-size: 13px; color: var(--muted); }
     .tip-inline strong { margin-right: 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
 
+    /* Focus picker, practice types, and the success state of the results banner */
+    .topbar-center { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+    .focus-picker {
+      position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 30px 0 12px;
+      border: 1px solid var(--control-line); border-radius: 10px; background: var(--control-bg); font-size: 13.5px; cursor: pointer;
+    }
+    .focus-picker:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .focus-picker::after {
+      content: ""; position: absolute; top: calc(50% - 5px); right: 13px; width: 6px; height: 6px;
+      border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); pointer-events: none;
+    }
+    .focus-label { color: var(--muted); font-weight: 500; }
+    .focus-picker select { appearance: none; border: 0; padding: 0; background: transparent; color: var(--ink); font: 600 13.5px var(--sans); cursor: pointer; }
+    .focus-picker select:focus-visible { outline: none; }
+    .chip-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .chip {
+      min-width: 0; min-height: 36px; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      border: 1px solid var(--control-line); border-radius: 9px; background: var(--control-bg); color: var(--ink-2);
+      font-size: 13px; font-weight: 600; text-align: left;
+    }
+    .chip:hover { border-color: var(--control-line-hover); color: var(--ink); }
+    .chip[aria-pressed="true"] { border-color: var(--accent-soft-line); background: var(--accent-soft); color: var(--accent-ink); }
+    .source-switch .segment { min-height: 52px; }
+    .result-badge .icon-check { display: none; }
+    .result-banner.success .result-badge { background: var(--success-soft); color: var(--success); }
+    .result-banner.success .icon-alert { display: none; }
+    .result-banner.success .icon-check { display: block; }
+    .now-card .heading-actions { flex-wrap: wrap; }
+    .now-card #open-course-map { flex-basis: 100%; }
+
     /* Layout A: the heading and live stats move into the sidebar */
-    [data-layout="sidebar"] .now-card, [data-layout="sidebar"] .stats-card { display: block; }
+    [data-layout="sidebar"] .now-card { display: block; }
     .now-card { padding: 16px 18px; }
     .now-card .page-heading { display: block; }
     .now-card .page-title { font-size: 21px; letter-spacing: -.02em; }
     .now-card .page-description { font-size: 13.5px; }
     .now-card .heading-actions { margin-top: 14px; }
     .now-card .heading-actions .button { flex: 1; min-height: 36px; padding: 0 10px; }
-    .stats-card { padding: 14px; }
-    .stats-card .stats-strip { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border: 0; }
-    .stats-card .stat { padding: 8px 12px; border: 0 !important; border-radius: 10px; background: var(--surface-3); }
-    .stats-card .stat-wpm { grid-column: span 2; display: flex; align-items: baseline; justify-content: space-between; background: var(--wpm-bg); }
-    .stats-card .stat-wpm dd { font-size: 28px; }
 
     /* Layouts B and C: a one-line heading, and the finger legend inline with the keyboard controls */
     :is([data-layout="dock"], [data-layout="focus"]) .page-heading { align-items: center; }
@@ -537,7 +600,7 @@
       padding: 8px max(16px, calc((100% - 1000px) / 2)) 10px;
       border-width: 1px 0 0; border-radius: 0; background: var(--dock-bg); box-shadow: 0 -10px 30px rgb(0 0 0 / 8%);
     }
-    [data-layout="dock"] :is(.prompt.prose, .prompt.long) { max-height: max(5.5rem, calc(100vh - var(--dock-h, 380px) - 310px)); }
+    [data-layout="dock"] :is(.prompt.prose, .prompt.long) { max-height: max(5.5rem, calc(100vh - var(--dock-h, 380px) - 295px)); }
 
     /* Layout C: one centered column; settings open in a popover */
     [data-layout="focus"] main.shell { padding-top: 16px; }
@@ -552,10 +615,6 @@
       padding: 10px; border: 1px solid var(--line); border-radius: 18px; background: var(--bg); box-shadow: 0 18px 50px rgb(0 0 0 / 18%);
     }
     [data-layout="focus"] .sidebar .tip-card { display: none; }
-    [data-layout="focus"] .stats-strip { display: flex; align-items: center; gap: 22px; height: 40px; padding: 0 20px; }
-    [data-layout="focus"] .stat { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 6px; padding: 0; border: 0 !important; }
-    [data-layout="focus"] .stat dd { margin: 0; font-size: 15px; }
-    [data-layout="focus"] .stat-wpm { padding: 3px 10px; border-radius: 8px; }
     [data-layout="focus"] .keyboard-card { padding: 0; border: 0; background: transparent; }
     [data-layout="focus"] .missed-inline { display: flex; }
     [data-layout="focus"] .tip-inline { display: block; }
@@ -563,10 +622,9 @@
     @media (max-width: 720px) {
       .shell { width: calc(100% - 32px); }
       main.shell { padding-block: 24px 40px; }
-      .view-switch { order: 3; width: 100%; }
+      .topbar-center { order: 3; width: 100%; }
+      .view-switch { flex: 1; }
       .view-switch .segment { flex: 1; padding: 0 8px; }
-      .stat { padding: 12px; }
-      .stat dd { font-size: 18px; }
       .keyboard-card { padding: 16px; }
       .card-footer { padding-left: 16px; }
       .legend-note { margin-left: 0; }
@@ -608,10 +666,16 @@
   <header class="topbar">
     <div class="shell topbar-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true">fj</span>Touch Typing</div>
-      <div class="segmented view-switch" role="group" aria-label="Practice type">
-        <button class="segment" type="button" data-view="lessons" aria-pressed="true">Lessons</button>
-        <button class="segment" type="button" data-view="free" aria-pressed="false">Free practice</button>
-        <button class="segment" type="button" data-view="text" aria-pressed="false">Text practice</button>
+      <div class="topbar-center">
+        <label class="focus-picker">
+          <span class="focus-label">Focus</span>
+          <select id="focus-area"></select>
+        </label>
+        <div class="segmented view-switch" role="group" aria-label="Practice type">
+          <button class="segment" type="button" data-view="course" aria-pressed="true">Course</button>
+          <button class="segment" type="button" data-view="practice" aria-pressed="false">Practice</button>
+          <button class="segment" type="button" data-view="text" aria-pressed="false">Text</button>
+        </div>
       </div>
       <div class="topbar-actions">
         <div class="segmented layout-switch" role="group" aria-label="Layout">
@@ -620,7 +684,6 @@
           <button class="segment" type="button" data-layout-option="focus" aria-pressed="false" title="Layout C · focus column" aria-label="Layout C, focus column"><svg class="icon" aria-hidden="true"><use href="#i-layout-focus"></use></svg>C</button>
         </div>
         <button class="button settings-button" id="toggle-settings" type="button" aria-expanded="false" aria-controls="sidebar"><svg class="icon" aria-hidden="true"><use href="#i-sliders"></use></svg>Settings</button>
-        <button class="button" id="open-library" type="button" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>Drill library</button>
         <button class="button icon-button" id="toggle-theme" type="button" aria-label="Switch to dark theme">
           <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"></use></svg>
           <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"></use></svg>
@@ -642,6 +705,7 @@
             <p class="page-description" id="mode-description"></p>
           </div>
           <div class="heading-actions">
+            <button class="button ghost" id="open-course-map" type="button"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>Course map</button>
             <button class="button ghost" id="previous-drill" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg>Previous</button>
             <button class="button" id="next-drill" type="button">
               <svg class="icon icon-shuffle" aria-hidden="true"><use href="#i-shuffle"></use></svg>
@@ -658,6 +722,7 @@
             <div class="stat"><dt>Keys/min</dt><dd id="speed">—</dd></div>
             <div class="stat"><dt>Mistakes</dt><dd id="mistakes">0</dd></div>
             <div class="stat"><dt>Time</dt><dd id="elapsed">0:00</dd></div>
+            <div class="stat stat-budget" id="budget-stat" hidden><dt id="budget-label">typos left</dt><dd id="budget-value">—</dd></div>
           </dl>
           <div class="typing-area" id="typing-area" tabindex="0" role="group" aria-label="Practice prompt" aria-describedby="typing-instructions">
             <p class="sr-only" id="typing-instructions"></p>
@@ -670,7 +735,7 @@
           </div>
           <div class="result-banner" id="result-banner" role="group" aria-labelledby="result-title" hidden>
             <div class="result-head">
-              <span class="result-badge" aria-hidden="true"><svg class="icon"><use href="#i-alert"></use></svg></span>
+              <span class="result-badge" aria-hidden="true"><svg class="icon icon-alert"><use href="#i-alert"></use></svg><svg class="icon icon-check"><use href="#i-check"></use></svg></span>
               <div>
                 <h2 class="result-title" id="result-title"></h2>
                 <p class="result-subtitle" id="result-subtitle"></p>
@@ -683,8 +748,8 @@
               <ul class="result-advice" id="result-advice"></ul>
             </div>
             <div class="result-actions">
-              <button class="button primary" id="retry-round" type="button"><svg class="icon" aria-hidden="true"><use href="#i-reset"></use></svg>Try again<kbd>return</kbd></button>
-              <button class="button" id="result-alternative" type="button"></button>
+              <button class="button primary" id="result-primary" type="button"><span id="result-primary-label">Try again</span><kbd>return</kbd></button>
+              <button class="button" id="result-secondary" type="button"></button>
             </div>
           </div>
           <div class="card-footer">
@@ -705,6 +770,7 @@
             </div>
             <div class="keyboard-controls">
               <button class="switch-button" id="toggle-hints" type="button" role="switch" aria-checked="true" aria-controls="keyboard-figure"><span class="switch" aria-hidden="true"></span>Key hints</button>
+              <button class="switch-button" id="toggle-finger-colors" type="button" role="switch" aria-checked="false" aria-controls="keyboard-figure"><span class="switch" aria-hidden="true"></span>Finger colors</button>
               <button class="text-button" id="toggle-keyboard" type="button" aria-expanded="true" aria-controls="keyboard-figure">Hide keyboard</button>
             </div>
           </div>
@@ -726,41 +792,53 @@
 
       <aside class="sidebar" id="sidebar" aria-label="Practice details">
         <section class="card side-card now-card" id="now-card" aria-label="Current practice"></section>
-        <section class="card side-card stats-card" id="stats-card" aria-label="Live stats"></section>
+
         <section class="card side-card" aria-labelledby="settings-title">
           <h2 class="card-title settings-title" id="settings-title">Drill settings</h2>
-          <div id="lesson-length-settings">
-            <div class="field-row">
-              <label for="lesson-length">Drill length</label>
-              <output class="length-value" id="lesson-length-value" for="lesson-length" aria-hidden="true"></output>
-            </div>
-            <input type="range" id="lesson-length" min="120" max="240" step="10">
-            <div class="range-scale" aria-hidden="true"><span>120</span><span>180</span><span>240</span></div>
-          </div>
-          <div id="free-settings" hidden>
+          <div id="practice-settings" hidden>
             <p class="field-label" id="drill-type-label">Drill type</p>
-            <div class="segmented" role="group" aria-labelledby="drill-type-label">
-              <button class="segment" type="button" data-mode="digits" aria-pressed="true">Digits</button>
-              <button class="segment" type="button" data-mode="symbols" aria-pressed="false">Symbols</button>
-              <button class="segment" type="button" data-mode="mixed" aria-pressed="false">Mixed</button>
+            <div class="chip-grid" id="practice-types" role="group" aria-labelledby="drill-type-label"></div>
+            <div class="divider"></div>
+          </div>
+          <div id="text-settings" hidden>
+            <p class="field-label" id="text-source-label">Source</p>
+            <div class="segmented source-switch" role="group" aria-labelledby="text-source-label">
+              <button class="segment" type="button" data-text-source="focus" aria-pressed="true"><span id="focus-source-name">Focus text</span><small>for this focus</small></button>
+              <button class="segment" type="button" data-text-source="books" aria-pressed="false">Books<small>classic passages</small></button>
             </div>
-            <p class="field-label" id="round-length-label">Round length</p>
-            <div class="segmented" role="group" aria-labelledby="round-length-label">
-              <button class="segment" type="button" data-length="24" aria-pressed="false">24 keys</button>
-              <button class="segment" type="button" data-length="40" aria-pressed="true">40 keys</button>
-              <button class="segment" type="button" data-length="64" aria-pressed="false">64 keys</button>
+            <p class="field-label" id="passage-length-label">Passage length</p>
+            <div class="segmented passage-lengths" role="group" aria-labelledby="passage-length-label">
+              <button class="segment" type="button" data-passage-length="short" aria-pressed="false" aria-label="Short, up to 100 words">Short<small>≤100</small></button>
+              <button class="segment" type="button" data-passage-length="medium" aria-pressed="true" aria-label="Medium, 101 to 200 words">Medium<small>101–200</small></button>
+              <button class="segment" type="button" data-passage-length="long" aria-pressed="false" aria-label="Long, 201 to 300 words">Long<small>201–300</small></button>
             </div>
           </div>
-          <div class="segmented passage-lengths" id="passage-length-settings" role="group" aria-label="Passage length" hidden>
-            <button class="segment" type="button" data-passage-length="short" aria-pressed="false" aria-label="Short, up to 100 words">Short<small>≤100</small></button>
-            <button class="segment" type="button" data-passage-length="medium" aria-pressed="true" aria-label="Medium, 101 to 200 words">Medium<small>101–200</small></button>
-            <button class="segment" type="button" data-passage-length="long" aria-pressed="false" aria-label="Long, 201 to 300 words">Long<small>201–300</small></button>
+          <div id="length-settings">
+            <div class="field-row">
+              <label for="drill-length">Length</label>
+              <output class="length-value" id="drill-length-value" for="drill-length" aria-hidden="true"></output>
+            </div>
+            <input type="range" id="drill-length" min="120" max="240" step="10">
+            <div class="range-scale" aria-hidden="true"><span>120</span><span>180</span><span>240</span></div>
           </div>
           <div id="typo-settings">
             <div class="divider"></div>
             <div class="field-row">
-              <label for="typo-limit">Auto-reset past</label>
-              <span class="typo-input"><input type="number" id="typo-limit" min="0" step="1" inputmode="numeric" placeholder="Off" aria-describedby="typo-limit-help">typos</span>
+              <label for="typo-handling">On a typo</label>
+              <span class="select-wrap"><select id="typo-handling" aria-describedby="correction-help">
+                <option value="stop">Stop at the key</option>
+                <option value="delete">Delete to continue</option>
+              </select></span>
+            </div>
+            <p class="field-help" id="correction-help"></p>
+            <div class="divider"></div>
+            <div class="field-row">
+              <label for="reset-mode">Auto-reset</label>
+              <span class="select-wrap"><select id="reset-mode" aria-describedby="typo-limit-help"></select></span>
+            </div>
+            <div class="field-row custom-limit" id="custom-limit-row" hidden>
+              <label for="typo-limit">Reset past</label>
+              <span class="typo-input"><input type="number" id="typo-limit" min="0" step="1" inputmode="numeric" placeholder="5" aria-describedby="typo-limit-help">typos</span>
             </div>
             <p class="field-help" id="typo-limit-help"></p>
           </div>
@@ -777,11 +855,11 @@
 
         <section class="card side-card" id="progress-card" aria-labelledby="progress-title">
           <div class="card-heading">
-            <h2 class="card-title" id="progress-title">Your progress</h2>
+            <h2 class="card-title" id="progress-title">Course progress</h2>
             <span class="card-meta mono" id="progress-total"></span>
           </div>
           <ul class="section-progress" id="section-progress"></ul>
-          <button class="button full" id="open-library-side" type="button"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>Open drill library</button>
+          <button class="button full" id="open-library-side" type="button"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>Open course map</button>
         </section>
 
         <section class="card side-card tip-card" aria-labelledby="tip-title">
@@ -795,8 +873,8 @@
       <div class="page-heading">
         <div class="page-heading-text">
           <button class="back-link" id="close-library" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg><span id="close-library-label">Back</span></button>
-          <h1 class="page-title">Drill library</h1>
-          <p class="page-description">100 number-row drills in five sections. Pick any drill to start it.</p>
+          <h1 class="page-title" id="course-title">Course map</h1>
+          <p class="page-description" id="course-summary"></p>
         </div>
         <div class="library-summary">
           <div class="overall-progress">
@@ -941,12 +1019,14 @@
     const typingArea = get("typing-area");
     const workspace = get("workspace");
     const library = get("library");
+    const focusSelect = get("focus-area");
     const viewButtons = [...document.querySelectorAll("[data-view]")];
-    const modeButtons = [...document.querySelectorAll("[data-mode]")];
-    const lengthButtons = [...document.querySelectorAll("[data-length]")];
+    const textSourceButtons = [...document.querySelectorAll("[data-text-source]")];
     const passageLengthButtons = [...document.querySelectorAll("[data-passage-length]")];
-    const lessonLengthControl = get("lesson-length");
-    const lessonLengthValue = get("lesson-length-value");
+    const layoutButtons = [...document.querySelectorAll("[data-layout-option]")];
+    const practiceTypeGrid = get("practice-types");
+    const drillLengthControl = get("drill-length");
+    const drillLengthValue = get("drill-length-value");
     const typoLimitControl = get("typo-limit");
     const typoLimitHelp = get("typo-limit-help");
     const progress = get("progress");
@@ -958,11 +1038,13 @@
     const previousDrill = get("previous-drill");
     const nextDrill = get("next-drill");
     const nextDrillLabel = get("next-drill-label");
-    const libraryButton = get("open-library");
+    const courseMapButton = get("open-course-map");
     const passageSource = get("passage-source");
     const keyboard = get("keyboard");
     const keyboardFigure = get("keyboard-figure");
     const hintButton = get("toggle-hints");
+    const fingerColorButton = get("toggle-finger-colors");
+    const typoHandling = get("typo-handling");
     const keyboardButton = get("toggle-keyboard");
     const themeButton = get("toggle-theme");
     const themeColor = document.querySelector('meta[name="theme-color"]');
@@ -972,11 +1054,8 @@
     const statFields = { accuracy: get("accuracy"), speed: get("speed"), elapsed: get("elapsed"), mistakes: get("mistakes") };
     const practiceTipText = get("practice-tip-text");
     const resultBanner = get("result-banner");
-    const layoutButtons = [...document.querySelectorAll("[data-layout-option]")];
     const practiceHeading = get("practice-heading");
-    const statsStrip = get("stats-strip");
     const mainColumn = document.querySelector(".main-column");
-    const practiceCard = document.querySelector(".practice");
     const keyboardCard = document.querySelector(".keyboard-card");
     const sidebar = get("sidebar");
     const settingsButton = get("toggle-settings");
@@ -998,6 +1077,51 @@
       return svg;
     }
 
+    // ---- Randomness ----------------------------------------------------------
+
+    // Course drills use a seeded generator so every drill stays the same between visits.
+    function seededRandom(seed) {
+      let state = seed >>> 0;
+      return () => {
+        state = (state + 0x6d2b79f5) >>> 0;
+        let value = state;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function shuffle(values, random = Math.random) {
+      const copy = [...values];
+      for (let index = copy.length - 1; index > 0; index--) {
+        const other = Math.floor(random() * (index + 1));
+        [copy[index], copy[other]] = [copy[other], copy[index]];
+      }
+      return copy;
+    }
+
+    const pick = (values, random = Math.random) => values[Math.floor(random() * values.length)];
+    const repeatItems = (items, times) => Array.from({ length: times }, () => items).flat().join(" ");
+
+    // `count` drills, each a seeded sample of `size` items from `pool`, optionally shaped by `format`.
+    function sampledDrills(pool, count, size, seed, title, format = (items) => items.join(" ")) {
+      const random = seededRandom(seed);
+      return Array.from({ length: count }, (_, index) => ({
+        title: title(index + 1),
+        prompt: format(shuffle(pool, random).slice(0, size))
+      }));
+    }
+
+    function shuffledBag(values) {
+      let bag = [];
+      return () => {
+        if (bag.length === 0) bag = shuffle(values);
+        return bag.pop();
+      };
+    }
+
+    // ---- Tips ----------------------------------------------------------------
+
     const practiceTips = [
       "Find the bumps on F and J with your index fingers.",
       "Rest your left fingers on A, S, D, and F.",
@@ -1009,7 +1133,6 @@
       "Press Shift with the hand opposite the key you're typing.",
       "Tap each key lightly and release it before the next tap.",
       "If you lose your place, feel for F and J again.",
-
       "Reach for 1 with your left pinky.",
       "Reach for 2 with your left ring finger.",
       "Reach for 3 with your left middle finger.",
@@ -1018,40 +1141,25 @@
       "Reach for 8 with your right middle finger.",
       "Reach for 9 with your right ring finger.",
       "Use your right pinky for 0, hyphen, and equals.",
-      "Reach for backtick with your left pinky.",
       "Try a few slow taps when a key feels hard to reach.",
-
       "Start at a pace you can sustain for the whole round.",
       "Aim for a clean round before you try to go faster.",
-      "Practice a troublesome key on its own, then in a mixed drill.",
-      "Use Most missed to pick a key to practice next.",
+      "Try Weak keys practice to drill the keys you miss most.",
       "Pick one goal for this round, such as fewer typos.",
       "Keep an even rhythm through familiar and unfamiliar keys.",
       "Slow down at a tricky transition until it feels familiar.",
-      "Learn the pattern in a short round, then extend the length.",
       "Try a round with key hints off once you know the pattern.",
-      "Type the same passage twice and compare your accuracy.",
-
       "Glance ahead a few characters while you type.",
       "Spot capitals and punctuation as you read ahead.",
-      "Pause at the end of a sentence if you need to find your rhythm.",
-      "Practice digits, shifted symbols, and prose in separate rounds.",
       "A few focused minutes make a good practice session.",
       "Take a short break if you catch yourself tensing up.",
       "Drop your shoulders and let your hands rest lightly.",
       "After a typo, give yourself a moment before trying the key again.",
       "When two keys feel awkward together, practice alternating them.",
       "End a session with a familiar drill you can type comfortably.",
-
       "A reach that feels awkward today can become familiar.",
-      "Give a new pattern a few tries before judging how it feels.",
-      "A fresh round is another chance to find your rhythm.",
-      "Give yourself credit for fewer glances at the keyboard.",
-      "Matching your last accuracy score is progress too.",
-      "Enjoy the first clean pass through a tricky pattern.",
       "A slower, steadier round is worth finishing.",
       "Take it one keystroke at a time.",
-      "Nice work showing up for practice today.",
       "Come back tomorrow and notice which keys feel easier."
     ];
     const takePracticeTip = shuffledBag(practiceTips);
@@ -1063,104 +1171,580 @@
       get("tip-inline-text").parentElement.title = practiceTipText.textContent;
     }
 
+    // ---- Keyboard facts --------------------------------------------------------
+
     const fingers = {
       LP: "Left pinky", LR: "Left ring finger", LM: "Left middle finger", LI: "Left index finger",
       RI: "Right index finger", RM: "Right middle finger", RR: "Right ring finger", RP: "Right pinky",
       T: "Thumb"
     };
     const zones = { P: "pinky", R: "ring", M: "middle", I: "index", T: "thumb" };
-
     const numberRow = [
       ["`", "~", "LP"], ["1", "!", "LP"], ["2", "@", "LR"], ["3", "#", "LM"],
       ["4", "$", "LI"], ["5", "%", "LI"], ["6", "^", "RI"], ["7", "&", "RI"],
       ["8", "*", "RM"], ["9", "(", "RR"], ["0", ")", "RP"], ["-", "_", "RP"], ["=", "+", "RP"]
     ];
-    const digits = "1234567890";
-    const letters = "asdfjklghqwertyuiopzxcvbnm";
-    const modes = {
-      digits: "Practice all ten digits across the number row.",
-      symbols: "Practice number-row punctuation and reach for Shift with the opposite hand.",
-      mixed: "Practice mostly digits, with letters to bring your fingers back down."
-    };
-    const modeNames = { digits: "Digits", symbols: "Symbols", mixed: "Mixed" };
-    const homePairs = ["1a", "2s", "3d", "4f", "5g", "6h", "7j", "8k", "9l", "0;", "-'", "=;", "`a"];
-    const keyName = (key) => (key === "`" ? "backtick" : key);
-    const lessonSections = [
-      {
-        name: "Single keys",
-        title: (prompt) => `Repeat ${keyName(prompt[0])}`,
-        instruction: "Tap the same key repeatedly. Return your finger to home row afterward.",
-        prompts: numberRow.map(([key]) => key.repeat(4))
-      },
-      {
-        name: "Number-row runs",
-        title: (prompt) => `${prompt.length}-key sequence`,
-        instruction: "Repeat the sequence using only the row from backtick through equals.",
-        prompts: [
-          "27", "80", "4=", "`9", "-3",
-          "518", "0-=", "`46", "907", "2=5",
-          "1638", "29-4", "5`07", "=372", "9086",
-          "47390", "`1=52", "80624", "7-359", "2-6=8",
-          "264907", "`58-31", "=70842", "952-67", "7`3=60",
-          "3840915", "=27`609", "65-0482", "1`4-793", "8905=32",
-          "3-781=25", "0682`945", "5=921-73", "`482-710", "2674059=",
-          "73826-401", "=1495`820", "827=3-051", "`296-5817", "4=70`2639"
-        ]
-      },
-      {
-        name: "Home-row returns",
-        title: (prompt) => prompt.slice(0, 2).repeat(3) === prompt ? `Alternate ${keyName(prompt[0])} and ${prompt[1]}` : "Link home-row returns",
-        instruction: "Use the same finger for each number-row key and the home-row key that follows.",
-        prompts: [
-          ...homePairs.map((pair) => pair.repeat(3)),
-          "1a2s3d", "4f5g6h", "7j8k9l", "0;-'=;", "`a1a2s",
-          "3d8k4f9l", "5g7j6h4f", "1a0;2s9l", "`a8k3d=;", "7j2s8k4f",
-          "-'5g=;6h", "9l3d2s0;", "1a2s3d4f5g 6h7j8k9l0;"
-        ]
-      },
-      {
-        name: "Shifted symbols",
-        title: (prompt) => `Repeat ${prompt[0]}`,
-        instruction: "Use the other hand to hold Shift while you tap the symbol.",
-        prompts: numberRow.map(([, symbol]) => symbol.repeat(4))
-      },
-      {
-        name: "Review",
-        title: () => "Combine number-row reaches",
-        instruction: "Move between rows and use Space between groups.",
-        prompts: [
-          "8k2s 9l3d 0;1a",
-          "4f7j 5g6h 3d8k",
-          "`a-' =;0; 1a9l",
-          "1a!a 2s@s 3d#d",
-          "4f$f 5g%g 6h^h",
-          "7j&j 8k*k 9l(l",
-          "0;); -'_' =;+;",
-          "1q2w3e 4f5g6h7j 8i9o0p 1z2x3c !@# $%^&*()"
-        ]
-      }
+    const keyNames = { "`": "backtick", "-": "hyphen", "=": "equals", ";": "semicolon", ",": "comma", ".": "period", "/": "slash" };
+    const keyName = (key) => keyNames[key] ?? key;
+    // The home key each number-row key is reached from, and the column (bottom, home, top) under each digit.
+    const homeOf = { "`": "a", 1: "a", 2: "s", 3: "d", 4: "f", 5: "f", 6: "j", 7: "j", 8: "k", 9: "l", 0: ";", "-": ";", "=": ";" };
+    const columnOf = { 1: "zaq", 2: "xsw", 3: "cde", 4: "vfr", 5: "bgt", 6: "nhy", 7: "mju", 8: ",ki", 9: ".lo", 0: "/;p" };
+    const digitKeys = [..."1234567890"];
+
+    // ---- Word lists and sentences ------------------------------------------------
+
+    const homeWords = ["add", "adds", "ads", "alas", "all", "alfalfa", "ash", "ask", "asks", "dad", "dads", "dash", "fad", "fads", "fall", "falls", "flag", "flags", "flak", "flash", "flask", "flasks", "gaff", "gal", "gala", "galas", "gall", "gas", "gash", "glad", "glass", "had", "half", "hall", "halls", "has", "hash", "jag", "jags", "lad", "lads", "lag", "lags", "lash", "lass", "sad", "saga", "sagas", "salad", "salads", "sash", "shall", "slash", "skald", "gaffs", "jakfa"].filter((word) => word !== "jakfa");
+    const topWords = ["the", "to", "it", "is", "of", "he", "we", "you", "they", "that", "this", "with", "what", "were", "where", "their", "there", "here", "she", "her", "for", "are", "or", "our", "out", "up", "so", "if", "at", "do", "go", "get", "got", "how", "who", "why", "way", "day", "say", "said", "saw", "see", "sea", "tea", "tree", "eat", "ate", "red", "yes", "yet", "try", "tip", "top", "toy", "two", "too", "look", "like", "life", "wife", "write", "wrote", "quite", "quiet", "quest", "quote", "query", "equal", "sugar", "house", "horse", "water", "after", "other", "great", "pretty", "purpose", "power", "people", "would", "should", "story", "light", "right", "sight", "high", "girl", "works", "world", "worth", "earth", "first", "forest", "fruit", "pie", "pipe", "ripe", "type", "typist", "poetry", "prayer", "upper", "outer", "tower", "report", "support", "thought", "though", "through", "kettle", "purple", "great", "street", "sister", "letter", "happy", "really"];
+    const bottomWords = ["zebra", "zero", "zone", "zoom", "zip", "zinc", "buzz", "jazz", "fizz", "quiz", "maze", "size", "prize", "doze", "lazy", "crazy", "box", "fox", "mix", "six", "wax", "tax", "next", "text", "exam", "exit", "extra", "cave", "five", "give", "have", "live", "love", "move", "over", "very", "vote", "view", "value", "brave", "every", "back", "bank", "black", "book", "bike", "best", "bring", "brown", "cabin", "cable", "came", "camp", "can", "car", "cat", "clean", "clear", "climb", "club", "come", "cream", "cube", "dance", "men", "man", "many", "mind", "mine", "moon", "more", "much", "name", "near", "new", "nice", "night", "none", "not", "now", "number", "minimum", "maximum", "vacuum", "convex", "combine", "member", "banana", "cinnamon", "common", "become", "behind", "beyond"];
+    const commonWords = ["time", "year", "people", "way", "day", "man", "thing", "woman", "life", "child", "world", "school", "state", "family", "group", "country", "problem", "hand", "part", "place", "case", "week", "system", "program", "question", "work", "night", "point", "home", "water", "room", "mother", "area", "money", "story", "fact", "month", "right", "study", "book", "eye", "job", "word", "issue", "side", "kind", "head", "house", "friend", "father", "power", "hour", "game", "line"];
+    const pangrams = [
+      "the quick brown fox jumps over the lazy dog", "pack my box with five dozen liquor jugs", "how vexingly quick daft zebras jump",
+      "sphinx of black quartz judge my vow", "the five boxing wizards jump quickly", "jackdaws love my big sphinx of quartz",
+      "quick zephyrs blow vexing daft jim", "waltz bad nymph for quick jigs vex", "bright vixens jump dozy fowl quack",
+      "jinxed wizards pluck ivy from the big quilt", "we promptly judged antique ivory buckles for the next prize",
+      "a quick movement of the enemy will jeopardize six gunboats", "few quips galvanized the mock jury box",
+      "sixty zippers were quickly picked from the woven jute bag", "back in june we delivered oxygen equipment of the same size",
+      "five or six big jet planes zoomed quickly by the tower", "grumpy wizards make toxic brew for the evil queen and jack",
+      "the wizard quickly jinxed the gnomes before they vaporized", "my girl wove six dozen plaid jackets before she quit",
+      "the job requires extra pluck and zeal from every young wage earner", "puzzled women bequeath jerks very exotic gifts",
+      "crazy fredrick bought many very exquisite opal jewels", "two driven jocks help fax my big quiz", "public junk dwarves hug my quartz fox"
     ];
-    const lessons = lessonSections.flatMap((section) => section.prompts.map((prompt) => ({ section, prompt })))
-      .map((lesson, index) => ({ ...lesson, id: index + 1 }));
-    const lessonsBySection = new Map(lessonSections.map((section) => [section, lessons.filter((lesson) => lesson.section === section)]));
-    const validDrillId = (id) => Number.isInteger(id) && id >= 1 && id <= lessons.length;
+    const names = ["Anna", "Ben", "Clara", "David", "Emma", "Felix", "Grace", "Hugo", "Iris", "Jack", "Kate", "Leo", "Mia", "Noah", "Olga", "Paul", "Quinn", "Rosa", "Sam", "Tara", "Uma", "Victor", "Wendy", "Xavier", "Yara", "Zoe"];
+    const places = ["London", "Paris", "Tokyo", "Oslo", "Lima", "Cairo", "Rome", "Berlin", "Madrid", "Dublin", "Vienna", "Prague", "Seoul", "Delhi", "Sydney", "Toronto", "Boston", "Chicago", "Denver", "Austin", "Quebec", "Zurich", "Lisbon", "Athens", "Nairobi", "Bangkok"];
+    const calendarWords = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const acronyms = ["NASA", "USB", "HTML", "CSS", "GPS", "FAQ", "ASAP", "DIY", "RSVP", "PDF", "CSV", "URL", "API", "CPU", "RAM", "SSD", "LED", "UFO", "ATM", "PIN", "VIP", "CEO", "UK", "USA", "EU", "UN", "TV", "DVD", "BBQ", "AKA", "ETA", "FYI", "IOU", "JPEG", "PNG", "GIF", "SQL", "JSON", "XML", "HTTP"];
+    const capitalSentences = [
+      "The bus to Oslo leaves on Monday.", "Anna and Ben met Clara in Rome.", "We fly to Tokyo in April.", "Leo reads a book every Sunday.",
+      "Is Paris colder than Berlin in May?", "Mia said the CEO would call at noon.", "Grace moved from Dublin to Lisbon.",
+      "Our team in Austin uses HTML and CSS.", "Hugo bought a TV and a DVD player.", "Send the PDF to Kate before Friday.",
+      "The UN met in Geneva last June.", "Zoe and Sam drove from Boston to Denver.", "Victor saw the Northern Lights in Norway.",
+      "Iris paints in Vienna every December.", "Please RSVP by Tuesday, Felix.", "Rosa found a cafe near the old harbor in Porto.",
+      "The ETA for the parcel is Thursday.", "Noah learned Python and SQL in March.", "Quinn will visit Prague and Zurich.",
+      "Tara wrote to the BBC in July.", "Wendy runs a DIY club in Toronto.", "David keeps his notes in a JSON file.",
+      "Olga teaches at a school in Athens.", "The GPS lost its signal near Lake Como.", "Paul and Emma met in New York in October.",
+      "Yara flew from Seoul to Sydney on a Saturday."
+    ];
+    const contractions = ["it's", "don't", "can't", "won't", "I'm", "you're", "we're", "they're", "isn't", "aren't", "wasn't", "weren't", "I've", "you've", "we'll", "they'll", "she's", "he's", "that's", "there's", "let's", "couldn't", "wouldn't", "shouldn't", "doesn't", "didn't", "hasn't", "haven't", "I'd", "you'd"];
+    const hyphenated = ["well-known", "up-to-date", "long-term", "self-made", "part-time", "co-op", "x-ray", "e-mail", "follow-up", "check-in", "log-in", "one-way", "two-thirds", "mother-in-law", "high-end", "low-key", "re-enter", "full-time", "old-fashioned", "so-called", "t-shirt", "pre-order", "real-time", "eye-catching", "short-lived", "open-source", "in-depth", "well-being"];
+    const punctuationSentences = [
+      "Wait, is that your bag? No, it's mine.", "She said, \"Let's meet at noon.\"", "Bring three things: a map, a torch, and water.",
+      "The plan was simple; the weather was not.", "Well, that's odd! Who left the door open?", "It's a well-known fact: cats don't like baths.",
+      "He asked, \"Are you sure?\" I said, \"Yes.\"", "Pack light (one bag, two shoes) and go.", "Our long-term goal is clear; our next step isn't.",
+      "Stop! Look both ways, then cross.", "The menu lists soup, salad, and bread [vegan].", "I'd say yes; she'd say no; they'd ask why.",
+      "Choose red, blue, or green, but choose now.", "The note read: \"Back in five minutes.\"", "Is it lunch time yet? It's only ten.",
+      "We're up-to-date, aren't we? Not quite.", "Read the guide (page two) before you start.", "Hey, you! Yes, you: come here, please.",
+      "The answer, as always, was 'it depends.'", "First, wash; then, dry; finally, fold."
+    ];
+    const codeSnippets = [
+      "if (x > 0) { y += 1; }", "for (let i = 0; i < n; i++) {}", "const sum = (a, b) => a + b;", "while (i < 10) { i++; }",
+      "return { ok: true, id: 7 };", "items.map((x) => x * 2);", "let name = user?.name ?? 'guest';", "def add(a, b): return a + b",
+      "print(f\"{name}: {score}\")", "x = [i * i for i in range(5)]", "if a and not b: pass", "SELECT * FROM users WHERE id = 1;",
+      "<a href=\"/home\">Home</a>", "<input type=\"text\" />", "{ \"id\": 1, \"tags\": [\"a\", \"b\"] }", "git commit -m \"fix typo\"",
+      "npm run build && npm test", "ls -la | grep \".txt\"", "echo $HOME > ~/path.txt", "#include <stdio.h>",
+      "int main() { return 0; }", "fn main() { println!(\"hi\"); }", "match x { Some(v) => v, None => 0 }", "arr[i] = arr[i - 1] + 1;",
+      "a = b if c else d", "obj['key'] = [1, 2, 3];"
+    ];
+    const numberSentences = [
+      "The 7:45 train to Leeds leaves from platform 3 and gets in at 10:20.", "Our flat is at 18 Elm Road, apartment 4B, on the 2nd floor.",
+      "She paid $12.50 for 3 notebooks and $4 for a pen.", "The meeting moved from 2:30 to 3:15 on Thursday, May 9.",
+      "Version 2.4.1 fixes 17 bugs and adds 3 new settings.", "Mix 250 g of flour with 2 eggs and 150 ml of milk.",
+      "The bus takes 45 minutes, so we left at 8:10 sharp.", "Call 555-0142 between 9 and 5 to book a table for 6.",
+      "Sales rose 12% in Q3, from 1,850 units to 2,072.", "Room 214 has 30 seats; room 108 has only 12.",
+      "The marathon is 42.2 km, and he finished in 3:58:41.", "Order #40917 shipped on 2025-03-14 in 2 boxes.",
+      "Set the oven to 180 degrees and bake for 25 to 30 minutes.", "The score was 3-2 after 90 minutes and 4-2 after extra time.",
+      "Chapter 11 starts on page 236 and ends on page 259.", "Gate 22 opens at 6:40 for flight 818 to Oslo.",
+      "Our team of 8 wrote 1,204 tests in 5 weeks.", "The 4 bedrooms total 96 square meters across 2 floors.",
+      "We need 3 cables, 2 adapters and 1 spare battery.", "Turn left after 400 m, then right at the 2nd light.",
+      "Tickets cost $35 each, or $90 for a pack of 3.", "The 1969 landing used a computer with 4 KB of memory.",
+      "Save 20% on orders over $50 until 31 December.", "Bring 2 photos, 1 form and a fee of $15 to window 7."
+    ];
+
+    // ---- Courses -------------------------------------------------------------
+
+    function itemsOf(unit) {
+      const items = unit.phrases ? unit.drills.map((drill) => drill.prompt) : unit.drills.flatMap((drill) => drill.prompt.split(" "));
+      return [...new Set(items.filter(Boolean))];
+    }
+
+    // Kept so progress from the earlier 100-drill course carries over where the same run still exists.
+    const legacyRuns = [
+      "27", "80", "4=", "`9", "-3", "518", "0-=", "`46", "907", "2=5", "1638", "29-4", "5`07", "=372", "9086",
+      "47390", "`1=52", "80624", "7-359", "2-6=8", "264907", "`58-31", "=70842", "952-67", "7`3=60",
+      "3840915", "=27`609", "65-0482", "1`4-793", "8905=32", "3-781=25", "0682`945", "5=921-73", "`482-710", "2674059=",
+      "73826-401", "=1495`820", "827=3-051", "`296-5817", "4=70`2639"
+    ];
+
+    function numberRowCourse() {
+      const reachKeys = [..."`1234567890-="];
+      const reach = (key) => `${homeOf[key]}${key}${homeOf[key]}`;
+      const climb = (digit) => `${columnOf[digit].slice(1)}${digit}`;
+      const reverse = (text) => [...text].reverse().join("");
+      const weave = (numbers, letters, letterFirst = false) => [...numbers].map((digit, index) => (letterFirst ? letters[index] + digit : digit + letters[index])).join("");
+      const handDrills = (hand, keys) => {
+        const k = [...keys];
+        const trill = (a, b) => `${a}${b}${a}${b} ${b}${a}${b}${a}`;
+        return [
+          { title: `${hand} hand: ${k[0]} to ${k[4]} and back`, prompt: `${keys} ${reverse(keys)}` },
+          { title: `${hand} hand: three-key runs`, prompt: `${keys.slice(0, 3)} ${keys.slice(1, 4)} ${keys.slice(2, 5)}` },
+          { title: `${hand} hand: three-key runs back`, prompt: `${reverse(keys.slice(2, 5))} ${reverse(keys.slice(1, 4))} ${reverse(keys.slice(0, 3))}` },
+          ...[[0, 1], [1, 2], [2, 3], [3, 4], [0, 2], [1, 3], [2, 4], [0, 3], [1, 4], [0, 4]]
+            .map(([a, b]) => ({ title: `${hand} hand: ${k[a]} and ${k[b]}`, prompt: trill(k[a], k[b]) })),
+          { title: `${hand} hand: zigzag`, prompt: `${k[0]}${k[2]}${k[1]}${k[3]}${k[2]}${k[4]} ${k[4]}${k[2]}${k[3]}${k[1]}${k[2]}${k[0]}` },
+          { title: `${hand} hand: outside in`, prompt: `${k[0]}${k[4]}${k[1]}${k[3]}${k[2]} ${k[2]}${k[3]}${k[1]}${k[4]}${k[0]}` }
+        ];
+      };
+
+      const units = [
+        {
+          id: "reach", name: "Reach and return", short: "Reaches",
+          instruction: "Reach from the home key to the number and come straight back. Keep the other fingers resting on the home row.",
+          drills: [
+            ...reachKeys.map((key) => ({ title: `Reach for ${keyName(key)}`, prompt: repeatItems([reach(key)], 3) })),
+            ...reachKeys.slice(0, -1).map((key, index) => ({
+              title: `Reach for ${keyName(key)} and ${keyName(reachKeys[index + 1])}`,
+              prompt: repeatItems([reach(key), reach(reachKeys[index + 1])], 2)
+            })),
+            { title: "Left-hand reaches", prompt: [..."`12345"].map(reach).join(" ") },
+            { title: "Right-hand reaches", prompt: [..."67890-="].map(reach).join(" ") },
+            { title: "Both hands, alternating", prompt: [..."17283940"].map(reach).join(" ") }
+          ]
+        },
+        {
+          id: "paths", name: "Finger paths", short: "Paths",
+          instruction: "Climb the finger's column one row at a time, then come back down the same way.",
+          drills: [
+            ...digitKeys.map((digit) => ({ title: `Climb to ${digit}`, prompt: repeatItems([climb(digit), reverse(climb(digit))], 2) })),
+            ...digitKeys.map((digit) => ({ title: `Whole column to ${digit}`, prompt: repeatItems([columnOf[digit] + digit, reverse(columnOf[digit] + digit)], 2) })),
+            { title: "Left index columns", prompt: repeatItems([climb("4"), climb("5")], 2) },
+            { title: "Right index columns", prompt: repeatItems([climb("7"), climb("6")], 2) },
+            { title: "Left-hand climbs", prompt: [..."12345"].map(climb).join(" ") },
+            { title: "Right-hand climbs", prompt: [..."67890"].map(climb).join(" ") },
+            { title: "Alternating climbs 1", prompt: [..."4738"].map(climb).join(" ") },
+            { title: "Alternating climbs 2", prompt: [..."2910"].map(climb).join(" ") },
+            { title: "Alternating climbs 3", prompt: [..."5647"].map(climb).join(" ") },
+            { title: "Alternating climbs 4", prompt: [..."3829"].map(climb).join(" ") }
+          ]
+        },
+        {
+          id: "hands", name: "One hand at a time", short: "One hand",
+          instruction: "Type each number with one hand only. Keep the other hand resting on its home keys.",
+          drills: [...handDrills("Left", "12345"), ...handDrills("Right", "67890")]
+        },
+        {
+          id: "alternation", name: "Number–letter alternation", short: "Number–letter",
+          instruction: "Alternate numbers and letters. Each reach up should end with the finger back near home.",
+          generate: () => Array.from({ length: 2 + Math.floor(Math.random() * 3) }, () => {
+            const digit = pick(digitKeys);
+            return digit + pick([...columnOf[digit]]);
+          }).join(""),
+          drills: [
+            { title: "Left digits with home keys", prompt: weave("12345", "asdfg") },
+            { title: "Right digits with home keys", prompt: weave("67890", "hjkl;") },
+            { title: "Home keys, then left digits", prompt: weave("12345", "asdfg", true) },
+            { title: "Home keys, then right digits", prompt: weave("67890", "hjkl;", true) },
+            { title: "Left digits with the top row", prompt: weave("12345", "qwert") },
+            { title: "Right digits with the top row", prompt: weave("67890", "yuiop") },
+            { title: "Top row, then left digits", prompt: weave("12345", "qwert", true) },
+            { title: "Top row, then right digits", prompt: weave("67890", "yuiop", true) },
+            { title: "Left digits with the bottom row", prompt: weave("12345", "zxcvb") },
+            { title: "Right digits with the bottom row", prompt: weave("67890", "nm,./") },
+            { title: "Left digits, right letters", prompt: weave("1234", "jkl;") },
+            { title: "Right digits, left letters", prompt: weave("6789", "asdf") },
+            { title: "Right letters, left digits", prompt: weave("1234", "jkl;", true) },
+            { title: "Left letters, right digits", prompt: weave("6789", "asdf", true) },
+            { title: "Grid squares", prompt: "a1 b2 c3 d4 e5 f6 g7 h8" },
+            { title: "Grid squares backwards", prompt: "h1 g2 f3 e4 d5 c6 b7 a8" },
+            { title: "Chess openings", prompt: "e4 e5 d4 d5 c4 c5 f4 f5" },
+            { title: "Grid diagonal", prompt: "a8 b7 c6 d5 e4 f3 g2 h1" },
+            { title: "Left index pair", prompt: "4f5g4f5g" },
+            { title: "Right index pair", prompt: "7j6h7j6h" },
+            { title: "Middle fingers", prompt: "3d8k3d8k" },
+            { title: "Ring fingers", prompt: "2s9l2s9l" },
+            { title: "Little fingers", prompt: "1a0;1a0;" },
+            { title: "Odd digits", prompt: "1a3d5g7j9l" },
+            { title: "Even digits", prompt: "2s4f6h8k0;" }
+          ]
+        },
+        {
+          id: "runs", name: "Pairs and runs", short: "Pairs & runs",
+          instruction: "Pairs across both hands come first, then same-hand pairs and longer runs.",
+          generate: () => Array.from({ length: 2 + Math.floor(Math.random() * 4) }, () => pick(digitKeys)).join(""),
+          drills: [
+            ...[..."12345"].map((left) => ({ title: `Cross-hand pairs from ${left}`, prompt: [..."67890"].map((right) => left + right).join(" ") })),
+            ...[..."67890"].map((right) => ({ title: `Cross-hand pairs to ${right}`, prompt: [..."12345"].map((left) => left + right).join(" ") })),
+            { title: "Left-hand pairs up", prompt: "12 23 34 45" },
+            { title: "Left-hand pairs down", prompt: "21 32 43 54" },
+            { title: "Right-hand pairs up", prompt: "67 78 89 90" },
+            { title: "Right-hand pairs down", prompt: "76 87 98 09" },
+            ...["518", "907", "1638", "9086", "47390", "80624", "264907", "=70842", "3840915", "65-0482", "3-781=25", "0682`945", "73826-401", "827=3-051", "`296-5817", "4=70`2639"]
+              .map((run) => ({ title: `${run.length}-key run`, prompt: run }))
+          ]
+        },
+        {
+          id: "words", name: "Numbers in words", short: "In words", phrases: true,
+          instruction: "Type numbers the way they appear in everyday words and phrases.",
+          drills: [
+            "3 cats 4 dogs 5 hens", "room 404 room 12 room 7", "page 17 page 42 page 300", "v2 v3 v10 v1", "b12 a4 c7 d9",
+            "1st 2nd 3rd 4th 5th", "6th 7th 8th 9th 10th", "11 eggs 12 rolls 13 pies", "bus 42 to gate 8", "row 3 seat 14",
+            "top 10 and top 20", "mp3 mp4 h264 4k", "2 or 3 more times", "for 5 to 10 minutes", "level 9 of 12", "year 1 and year 2",
+            "track 6 side b", "flight 207 at 6", "apt 5b floor 3", "add 4 cups and 2 eggs", "test 1 test 2 test 3", "only 1 in 10 left",
+            "zone 7 area 51", "win 3 lose 1 tie 2", "x2 x3 x4 x10", "route 66 exit 12", "p2p b2b 24h 365", "step 1 then step 2"
+          ].map((prompt, index) => ({ title: `Everyday numbers ${index + 1}`, prompt }))
+        },
+        {
+          id: "shifted", name: "Shifted row", short: "Shifted",
+          instruction: "Hold Shift with the opposite hand, then tap the number key for its symbol.",
+          drills: [
+            ...numberRow.map(([base, upper]) => ({ title: `${keyName(base)} and ${upper}`, prompt: `${base}${upper}${base}${upper} ${upper}${base}${upper}${base}` })),
+            { title: "Left shifted neighbours", prompt: "!@ @# #$ $% %!" },
+            { title: "Right shifted neighbours", prompt: "^& &* *( () )^" },
+            ...["$5 $10 $25 $99", "50% 75% 100% 5%", "#3 #12 #40 #7", "(1) (2) (3) (4)", "a*b c*d 2*3", "x+y z+1 a+b", "5! 3! 10! 2!",
+              "@home @work @team", "a_b c_d snake_case", "~/docs ~/src ~/app", "1+1=2 2+2=4 3+3=6"]
+              .map((prompt, index) => ({ title: `Symbols in use ${index + 1}`, prompt }))
+          ]
+        },
+        {
+          id: "formats", name: "Real formats", short: "Formats", phrases: true,
+          instruction: "Practice the formats you meet every day: dates, times, prices, versions, and more.",
+          drills: [
+            ["ISO dates", "2024-06-18 2025-01-02 1999-12-31"], ["Day and month", "18/06 25/12 01/01 30/04"], ["24-hour times", "09:45 12:30 18:05 23:59"],
+            ["12-hour times", "7:15 am 8:40 pm 11:05 am"], ["Prices", "$19.99 $4.50 $120 $0.99"], ["Percentages", "15% 40% 99.9% 7.5%"],
+            ["Phone numbers", "555-0132 555-0199 555-0147"], ["International numbers", "+1 555 0100 +44 20 7946 0018"], ["Version numbers", "v1.2.3 v2.0.1 v10.4.0"],
+            ["IP addresses", "192.168.0.1 10.0.0.8 127.0.0.1"], ["Sums", "3+4=7 9-5=4 12+8=20"], ["Products", "2*3=6 8*7=56 9*9=81"],
+            ["Fractions", "1/2 3/4 7/8 5/16"], ["Scores", "3-1 2-2 0-4 5-3"], ["Ranges", "10-20 30-40 1-100"],
+            ["Measurements", "12kg 3.5m 250ml 40cm"], ["Temperatures", "21c 72f -5c 98.6f"], ["Numbered lists", "1. 2. 3. 4. 5."],
+            ["Postal codes", "90210 10001 60614 94103"], ["Order numbers", "order 58213-07 ref 4471-2"], ["Hex colours", "#ff8800 #00aa33 #1e1e2e"],
+            ["Coordinates", "51.50, -0.12 40.71, -74.00"], ["Years", "1999 2000 2024 2025"], ["Durations", "1h 30m 45s 2h 05m"],
+            ["Screen ratios", "16:9 4:3 21:9 1:1"], ["Array indexes", "arr[0] arr[12] list[3]"], ["Price ranges", "$5-$10 $20-$30 $99-$149"],
+            ["Thousands", "1,000 25,000 1,250,000"]
+          ].map(([title, prompt]) => ({ title, prompt }))
+        }
+      ];
+
+      // Checkpoints mix two earlier units at a time.
+      const random = seededRandom(2024);
+      const byId = (id) => units.find((unit) => unit.id === id);
+      const checkpointDrills = [["reach", "paths"], ["hands", "alternation"], ["runs", "words"], ["shifted", "formats"]].flatMap(([a, b], group) => {
+        const pool = [...itemsOf(byId(a)), ...itemsOf(byId(b))];
+        return Array.from({ length: 6 }, (_, index) => {
+          const items = [];
+          for (const item of shuffle(pool, random)) {
+            items.push(item);
+            if (items.join(" ").length >= 32) break;
+          }
+          return { title: `Checkpoint ${group + 1}.${index + 1}: ${byId(a).short} and ${byId(b).short}`, prompt: items.join(" ") };
+        });
+      });
+      units.push({
+        id: "checkpoints", name: "Checkpoints", short: "Checkpoints", checkpoint: true,
+        instruction: "Mixed tests from earlier units.", drills: checkpointDrills
+      });
+
+      return {
+        id: "number", name: "Number row", units,
+        text: { name: "Numbers in context", short: "Numbers", kind: "sentences", list: numberSentences }
+      };
+    }
+
+    function homeRowCourse() {
+      return {
+        id: "home", name: "Home row",
+        text: { name: "Home-row words", short: "Words", kind: "words", list: homeWords },
+        units: [
+          {
+            id: "keys", name: "Home keys", short: "Keys",
+            instruction: "Rest all eight fingers on the home row and tap without looking. Feel for the bumps on F and J.",
+            drills: [
+              ["Index fingers", "fff jjj fj jf fj jf"], ["Middle fingers", "ddd kkk dk kd dk kd"], ["Ring fingers", "sss lll sl ls sl ls"],
+              ["Little fingers", "aaa ;;; a; ;a a; ;a"], ["Reach for g", "fgf fgf gfg gfg"], ["Reach for h", "jhj jhj hjh hjh"],
+              ["g and h", "fg jh gh hg fg jh"], ["Left-hand run", "asdf fdsa asdf fdsa"], ["Right-hand run", "jkl; ;lkj jkl; ;lkj"],
+              ["Whole row", "asdfg hjkl; asdfg hjkl;"], ["Whole row back", ";lkjh gfdsa ;lkjh gfdsa"], ["Left pairs", "as sd df fg"],
+              ["Right pairs", "hj jk kl l;"], ["Left pairs back", "gf fd ds sa"], ["Right pairs back", ";l lk kj jh"],
+              ["Mirror pairs", "fj dk sl a; fj dk sl a;"], ["Mirror pairs back", "jf kd ls ;a jf kd ls ;a"], ["Cross pairs", "fk dj sl ;a fk dj"],
+              ["Wide pairs", "ak sj dl f; ak sj"], ["Doubles left", "ff dd ss aa gg"], ["Doubles right", "jj kk ll ;; hh"],
+              ["Bounce left", "fdf sas dsd fgf"], ["Bounce right", "jkj l;l klk jhj"], ["Apostrophe reach", ";'; l'l ;'; a's"]
+            ].map(([title, prompt]) => ({ title, prompt }))
+          },
+          {
+            id: "words", name: "Home-row words", short: "Words",
+            instruction: "Every word here uses only the home row. Keep your hands still and let the fingers do the work.",
+            drills: sampledDrills(homeWords, 26, 5, 101, (n) => `Home-row words ${n}`)
+          },
+          {
+            id: "phrases", name: "Home-row phrases", short: "Phrases",
+            instruction: "Short phrases with a semicolon in the middle. Tap the semicolon with your right pinky.",
+            drills: sampledDrills([...homeWords, "a", "as", "a"], 24, 6, 202, (n) => `Home-row phrases ${n}`, (items) => `${items.slice(0, 3).join(" ")}; ${items.slice(3).join(" ")}`)
+          },
+          {
+            id: "rhythm", name: "Rhythm", short: "Rhythm",
+            instruction: "Each word appears twice. Type the second one a little faster than the first.",
+            drills: sampledDrills(homeWords, 24, 4, 303, (n) => `Rhythm ${n}`, (items) => items.flatMap((word) => [word, word]).join(" "))
+          }
+        ]
+      };
+    }
+
+    function topRowCourse() {
+      const shortWords = topWords.filter((word) => word.length <= 4);
+      const longWords = topWords.filter((word) => word.length >= 5);
+      return {
+        id: "top", name: "Top row", text: { name: "Top-row words", short: "Words", kind: "words", list: topWords },
+        units: [
+          {
+            id: "keys", name: "Top keys", short: "Keys",
+            instruction: "Reach up from the home row and come back down. Keep the reaching finger light.",
+            drills: [
+              ["Reach for r and u", "frf juj frf juj"], ["Reach for e and i", "ded kik ded kik"], ["Reach for w and o", "sws lol sws lol"],
+              ["Reach for q and p", "aqa ;p; aqa ;p;"], ["Reach for t and y", "ftf jyj ftf jyj"], ["Left top run", "qwert trewq qwert trewq"],
+              ["Right top run", "yuiop poiuy yuiop poiuy"], ["Whole top row", "qwertyuiop poiuytrewq"], ["Index climbs", "fr ft ju jy fr ft ju jy"],
+              ["Middle climbs", "de ki ed ik de ki"], ["Ring climbs", "sw lo ws ol sw lo"], ["Little climbs", "aq ;p qa p; aq ;p"],
+              ["Top pairs left", "qw we er rt"], ["Top pairs right", "yu ui io op"], ["Mirror reaches", "ru ei wo qp ty"],
+              ["Mirror reaches back", "ur ie ow pq yt"], ["e and r", "er re ere rer"], ["t and h", "th ht the het"], ["o and u", "ou uo out our"],
+              ["i and o", "io oi oil toil"], ["Home and top, left", "as qw df er gh ty"], ["Home and top, right", "jk ui l; op hj yu"],
+              ["Common pairs", "th he er re es ed"], ["More common pairs", "to it is at or ou"]
+            ].map(([title, prompt]) => ({ title, prompt }))
+          },
+          {
+            id: "short", name: "Short words", short: "Short words",
+            instruction: "Short words from the home and top rows. Return to home row between words.",
+            drills: sampledDrills(shortWords, 26, 6, 404, (n) => `Short words ${n}`)
+          },
+          {
+            id: "long", name: "Longer words", short: "Longer words",
+            instruction: "Longer words that move between the home and top rows.",
+            drills: sampledDrills(longWords, 26, 4, 505, (n) => `Longer words ${n}`)
+          },
+          {
+            id: "phrases", name: "Top-row phrases", short: "Phrases",
+            instruction: "Word sequences that mix short and long words at an even pace.",
+            drills: sampledDrills(topWords, 24, 5, 606, (n) => `Top-row phrases ${n}`)
+          }
+        ]
+      };
+    }
+
+    function bottomRowCourse() {
+      return {
+        id: "bottom", name: "Bottom row", text: { name: "All-letter sentences", short: "Pangrams", kind: "sentences", list: pangrams },
+        units: [
+          {
+            id: "keys", name: "Bottom keys", short: "Keys",
+            instruction: "Drop down from the home row and come back up. Keep your wrists still.",
+            drills: [
+              ["Reach for v and m", "fvf jmj fvf jmj"], ["Reach for c and comma", "dcd k,k dcd k,k"], ["Reach for x and period", "sxs l.l sxs l.l"],
+              ["Reach for z and slash", "aza ;/; aza ;/;"], ["Reach for b and n", "fbf jnj fbf jnj"], ["Left bottom run", "zxcvb bvcxz zxcvb bvcxz"],
+              ["Right bottom run", "nm,./ /.,mn nm,./ /.,mn"], ["Whole bottom row", "zxcvbnm,./ /.,mnbvcxz"], ["Index drops", "fv fb jm jn fv fb jm jn"],
+              ["Middle drops", "dc k, cd ,k dc k,"], ["Ring drops", "sx l. xs .l sx l."], ["Little drops", "az ;/ za /; az ;/"],
+              ["Bottom pairs left", "zx xc cv vb"], ["Bottom pairs right", "nm m, ,. ./"], ["Mirror drops", "vm c, x. z/ bn"],
+              ["Mirror drops back", "mv ,c .x /z nb"], ["Column climbs left", "vfr cde xsw zaq"], ["Column climbs right", "mju ,ki .lo /;p"],
+              ["c and v", "cv vc cove cave"], ["b and n", "bn nb bin nab"], ["m and n", "mn nm man men"], ["x and z", "xz zx zax xyz"],
+              ["Common pairs", "an in on en un nd"], ["More common pairs", "ma me mi mo be by"]
+            ].map(([title, prompt]) => ({ title, prompt }))
+          },
+          {
+            id: "words", name: "Bottom-row words", short: "Words",
+            instruction: "Every word uses at least one bottom-row letter.",
+            drills: sampledDrills(bottomWords, 26, 5, 707, (n) => `Bottom-row words ${n}`)
+          },
+          {
+            id: "pangrams", name: "All the letters", short: "Pangrams", phrases: true,
+            instruction: "Each line uses every letter of the alphabet at least once, or very nearly.",
+            drills: pangrams.map((prompt, index) => ({ title: `Pangram ${index + 1}`, prompt }))
+          },
+          {
+            id: "punctuation", name: "Comma, period and slash", short: "Comma & period",
+            instruction: "Bottom-row words with the comma, period and slash on the right side of the row.",
+            drills: sampledDrills(bottomWords, 24, 5, 808, (n) => `Comma, period and slash ${n}`, ([a, b, c, d, e]) => `${a}, ${b}, ${c}. ${d}/${e}.`)
+          }
+        ]
+      };
+    }
+
+    function capitalsCourse() {
+      const letterDrill = (letter) => {
+        const upper = letter.toUpperCase();
+        return { title: `Capital ${upper}`, prompt: `${upper}${letter} ${letter}${upper} ${upper}${letter}${upper} ${upper}${letter}` };
+      };
+      return {
+        id: "capitals", name: "Capitals and Shift", text: { name: "Capitals in context", short: "Sentences", kind: "sentences", list: capitalSentences },
+        units: [
+          {
+            id: "shift", name: "Shift with the opposite hand", short: "Opposite Shift",
+            instruction: "Hold Shift with the hand that is not typing the letter, then release it before the next key.",
+            drills: [
+              { title: "Left home capitals", prompt: "Aa Ss Dd Ff Gg" }, { title: "Left top capitals", prompt: "Qq Ww Ee Rr Tt" },
+              { title: "Left bottom capitals", prompt: "Zz Xx Cc Vv Bb" }, { title: "Right home capitals", prompt: "Hh Jj Kk Ll Hh" },
+              { title: "Right top capitals", prompt: "Yy Uu Ii Oo Pp" }, { title: "Right bottom capitals", prompt: "Nn Mm Nn Mm" },
+              ...[..."etaoinshrdlucmwfgy"].map(letterDrill)
+            ]
+          },
+          {
+            id: "names", name: "Names and places", short: "Names",
+            instruction: "Each word starts with a capital letter. Shift, letter, release, then the rest of the word.",
+            drills: sampledDrills([...names, ...places], 26, 4, 909, (n) => `Names and places ${n}`)
+          },
+          {
+            id: "calendar", name: "Days and months", short: "Calendar",
+            instruction: "Days of the week and months of the year, each with a capital letter.",
+            drills: sampledDrills(calendarWords, 24, 4, 1001, (n) => `Days and months ${n}`)
+          },
+          {
+            id: "sentences", name: "Sentence capitals", short: "Sentences", phrases: true,
+            instruction: "Full sentences with capitals at the start and on names, places and acronyms.",
+            drills: capitalSentences.map((prompt, index) => ({ title: `Sentence ${index + 1}`, prompt }))
+          },
+          {
+            id: "acronyms", name: "All caps", short: "All caps",
+            instruction: "Hold Shift for a whole acronym, or use Caps Lock if that is easier for you.",
+            drills: sampledDrills(acronyms, 24, 5, 1102, (n) => `All caps ${n}`)
+          }
+        ]
+      };
+    }
+
+    function punctuationCourse() {
+      return {
+        id: "punctuation", name: "Punctuation", text: { name: "Punctuation in context", short: "Sentences", kind: "sentences", list: punctuationSentences },
+        units: [
+          {
+            id: "comma", name: "Comma and period", short: "Comma & period",
+            instruction: "Use your right middle finger for the comma and your right ring finger for the period.",
+            drills: sampledDrills(commonWords, 26, 5, 1203, (n) => `Comma and period ${n}`, ([a, b, c, d, e]) => `${a}, ${b}, ${c}. ${d}, ${e}.`)
+          },
+          {
+            id: "colon", name: "Semicolon and colon", short: "Colon",
+            instruction: "The semicolon sits under your right pinky; add Shift with your left hand for the colon.",
+            drills: sampledDrills(commonWords, 24, 4, 1304, (n) => `Semicolon and colon ${n}`, ([a, b, c, d]) => `${a}: ${b}; ${c}: ${d};`)
+          },
+          {
+            id: "quotes", name: "Apostrophes and quotes", short: "Quotes",
+            instruction: "The apostrophe is next to the semicolon. Add Shift with your left hand for double quotes.",
+            drills: [
+              ...sampledDrills(contractions, 12, 5, 1405, (n) => `Contractions ${n}`),
+              ...sampledDrills(commonWords, 12, 3, 1506, (n) => `Quotes ${n}`, ([a, b, c]) => `"${a}" '${b}' "${c}"`)
+            ]
+          },
+          {
+            id: "marks", name: "Questions, exclamations and hyphens", short: "? ! -",
+            instruction: "Question and exclamation marks need Shift; the hyphen sits next to 0 on the number row.",
+            drills: [
+              ...sampledDrills(hyphenated, 12, 4, 1607, (n) => `Hyphenated words ${n}`),
+              ...sampledDrills(commonWords, 12, 3, 1708, (n) => `Questions and exclamations ${n}`, ([a, b, c]) => `${a}? ${b}! ${c}?`)
+            ]
+          },
+          {
+            id: "brackets", name: "Brackets and slashes", short: "Brackets",
+            instruction: "Parentheses sit on 9 and 0 with Shift; square brackets and the slash belong to your right pinky.",
+            drills: sampledDrills(commonWords, 24, 4, 1809, (n) => `Brackets and slashes ${n}`, ([a, b, c, d]) => `(${a}) [${b}] ${c}/${d}`)
+          }
+        ]
+      };
+    }
+
+    function codeCourse() {
+      const units = [
+        {
+          id: "brackets", name: "Brackets", short: "Brackets",
+          instruction: "Type each bracket pair together. Opening and closing brackets share a finger.",
+          drills: [
+            "() () () ()", "[] [] [] []", "{} {} {} {}", "<> <> <> <>", "( ) [ ] { } < >", "([]) ([]) ([])", "{[]} {[]} {[]}", "<()> <()> <()>",
+            "f() g() h()", "a[0] b[1] c[2]", "{a} {b} {c}", "<a> <b> <i>", "(a, b) (c, d)", "[1, 2] [3, 4]", "{x: 1} {y: 2}", "<div></div>",
+            "((a)) [[b]] {{c}}", "f(g(x)) h(i(y))", "a[b[c]] d[e[f]]", "{a: [b]} {c: (d)}", "if () {}", "for () {}", "fn() -> ()", "list<int> map<k, v>"
+          ].map((prompt, index) => ({ title: `Brackets ${index + 1}`, prompt }))
+        },
+        {
+          id: "operators", name: "Operators", short: "Operators",
+          instruction: "Operators mix shifted and unshifted keys. Watch which hand holds Shift.",
+          drills: [
+            "= == ===", "! != !==", "< <= >", "> >= <", "+ += ++", "- -= --", "* *= **", "/ /= //", "% %= %", "&& || !", "a && b", "a || b",
+            "!a !b !c", "a ?? b", "a?.b c?.d", "x => x", "(a, b) => a + b", "a == b", "a != b", "a <= b >= c", "i++ j-- k += 2", "x *= 3 y /= 2",
+            "a % 2 == 0", "n >= 0 && n < 10"
+          ].map((prompt, index) => ({ title: `Operators ${index + 1}`, prompt }))
+        },
+        {
+          id: "slashes", name: "Slashes, pipes and quotes", short: "Slashes",
+          instruction: "The backslash and pipe live above Return; the backtick and tilde sit left of 1.",
+          drills: [
+            "/ / / /", "\\ \\ \\ \\", "| | | |", "~ ~ ~ ~", "` ` ` `", "a/b c/d e/f", "a\\b c\\d", "a|b c|d", "~/src ~/docs", "./app ../lib",
+            "'a' 'b' 'c'", "\"a\" \"b\" \"c\"", "`a` `b` `c`", "a || b | c", "cat a | sort | uniq", "C:\\Users\\me", "/usr/local/bin",
+            "https://example.com", "// note", "/* note */", "# comment", "'single' \"double\"", "x = 'a' + \"b\"", "`${a}` `${b}`"
+          ].map((prompt, index) => ({ title: `Slashes and quotes ${index + 1}`, prompt }))
+        },
+        {
+          id: "snippets", name: "Code snippets", short: "Snippets", phrases: true,
+          instruction: "Short lines of real-looking code. Type every space and symbol exactly.",
+          drills: codeSnippets.map((prompt, index) => ({ title: `Snippet ${index + 1}`, prompt }))
+        }
+      ];
+      const pool = units.slice(0, 3).flatMap(itemsOf);
+      units.push({
+        id: "combined", name: "Combined symbols", short: "Combined",
+        instruction: "Brackets, operators, slashes and quotes in one stream.",
+        drills: sampledDrills(pool, 24, 6, 1910, (n) => `Combined symbols ${n}`)
+      });
+      return { id: "code", name: "Code symbols", units, text: { name: "Code snippets", short: "Snippets", kind: "sentences", list: codeSnippets } };
+    }
+
+    const focusAreas = [numberRowCourse(), homeRowCourse(), topRowCourse(), bottomRowCourse(), capitalsCourse(), punctuationCourse(), codeCourse()];
+    const drills = [];
+    for (const area of focusAreas) {
+      area.units.forEach((unit, unitIndex) => {
+        unit.number = unitIndex + 1;
+        unit.items = itemsOf(unit);
+        unit.list = unit.drills.map((drill, index) => ({ ...drill, area, unit, index: index + 1, id: `${area.id}/${unit.id}-${index + 1}` }));
+      });
+      area.drills = area.units.flatMap((unit) => unit.list);
+      area.drills.forEach((drill, index) => { drill.number = index + 1; });
+      drills.push(...area.drills);
+      const practiceUnits = area.units.filter((unit) => !unit.checkpoint);
+      area.pool = [...new Set(practiceUnits.flatMap((unit) => unit.items))];
+      area.characters = new Set(area.pool.join(""));
+      area.practiceTypes = [
+        { id: "mixed", name: "Mixed", description: `A bit of everything from the ${area.name.toLowerCase()} course.` },
+        ...practiceUnits.map((unit) => ({ id: unit.id, name: unit.short, description: unit.instruction, unit })),
+        { id: "weak", name: "Weak keys", description: "Built from the keys you miss most often in this focus." }
+      ];
+    }
+    const drillById = new Map(drills.map((drill) => [drill.id, drill]));
+    const areaById = new Map(focusAreas.map((area) => [area.id, area]));
+    const passMark = 95;
     // Drill lengths run 2–4 minutes at one key per second.
-    const lessonLengthRange = { min: 120, max: 240 };
-    const passages = JSON.parse(get("passage-data").textContent).flatMap(({ paragraphs, ...book }) =>
+    const lengthRange = { min: 120, max: 240 };
+
+    for (const area of focusAreas) focusSelect.append(new Option(area.name, area.id));
+
+    const books = JSON.parse(get("passage-data").textContent).flatMap(({ paragraphs, ...book }) =>
       paragraphs.map((text) => ({ ...book, text, words: text.split(" ").length })));
-    const passageBags = {
-      short: shuffledBag(passages.filter(({ words }) => words <= 100)),
-      medium: shuffledBag(passages.filter(({ words }) => words > 100 && words <= 200)),
-      long: shuffledBag(passages.filter(({ words }) => words > 200 && words <= 300))
+    const bookBags = {
+      short: shuffledBag(books.filter(({ words }) => words <= 100)),
+      medium: shuffledBag(books.filter(({ words }) => words > 100 && words <= 200)),
+      long: shuffledBag(books.filter(({ words }) => words > 200 && words <= 300))
     };
-    let currentPassage;
+
+    // ---- Settings --------------------------------------------------------------
 
     const settingsKey = "number-row-practice-v1";
-    const settings = {
-      version: 2, view: "lessons", lesson: 1, lessonLength: 180, typoLimit: 5, completed: [],
-      mode: "digits", length: 40, passageLength: "medium", hints: true, keyboard: true, theme: null, layout: "sidebar"
-    };
+    const views = ["course", "practice", "text"];
     const layouts = ["sidebar", "dock", "focus"];
+    // Auto-reset rules. "Pass or reset" only applies to course drills, which are the only attempts with a pass mark.
+    const resetModes = [
+      { id: "pass", name: "Pass or reset", views: ["course"] },
+      { id: "streak", name: "Streak guard" },
+      { id: "perfect", name: "Perfect run" },
+      { id: "custom", name: "Custom" },
+      { id: "off", name: "Off" }
+    ];
+    const resetModesFor = (view) => resetModes.filter((mode) => !mode.views || mode.views.includes(view));
+    const streakWindow = 20;
+    const streakLimit = 3;
+    // With delete-to-continue on, this many typos can wait to be deleted; one more ends the attempt.
+    const maxPending = 10;
+    const settings = {
+      version: 4, focus: "number", view: "course", drills: {}, drillLength: 180, done: [],
+      resetModes: { course: "pass", practice: "streak", text: "off" }, typoLimit: 5,
+      practice: {}, textSource: {}, passageLength: "medium", hints: true, fingerColors: false, correction: false, keyboard: true, theme: null, layout: "sidebar", keyStats: {}
+    };
+    const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
     function readSettings() {
       try { return JSON.parse(localStorage.getItem(settingsKey)); }
@@ -1168,34 +1752,71 @@
     }
 
     const saved = readSettings();
-    if (viewButtons.some((button) => button.dataset.view === saved?.view)) settings.view = saved.view;
-    if (validDrillId(saved?.lesson)) settings.lesson = saved.lesson;
-    if (Number.isInteger(saved?.lessonLength) && saved.lessonLength >= lessonLengthRange.min && saved.lessonLength <= lessonLengthRange.max) {
-      settings.lessonLength = saved.lessonLength;
+    if (areaById.has(saved?.focus)) settings.focus = saved.focus;
+    const savedView = { lessons: "course", free: "practice" }[saved?.view] ?? saved?.view;
+    if (views.includes(savedView)) settings.view = savedView;
+    if (isPlainObject(saved?.drills)) {
+      for (const [areaId, id] of Object.entries(saved.drills)) {
+        if (drillById.get(id)?.area.id === areaId) settings.drills[areaId] = id;
+      }
     }
-    // Saves before version 2 stored null when auto-reset was never set; since then null means the user turned it off.
+    const savedLength = saved?.drillLength ?? saved?.lessonLength;
+    if (Number.isInteger(savedLength) && savedLength >= lengthRange.min && savedLength <= lengthRange.max) settings.drillLength = savedLength;
+    // A number saved by the old single auto-reset setting becomes the Custom limit; null means the field was left blank.
     if (Number.isInteger(saved?.typoLimit) && saved.typoLimit >= 0) settings.typoLimit = saved.typoLimit;
-    else if (saved?.typoLimit === null && saved.version >= 2) settings.typoLimit = null;
-    if (Array.isArray(saved?.completed)) settings.completed = [...new Set(saved.completed.filter(validDrillId))];
-    if (typeof saved?.mode === "string" && Object.hasOwn(modes, saved.mode)) settings.mode = saved.mode;
-    if ([24, 40, 64].includes(saved?.length)) settings.length = saved.length;
-    if (typeof saved?.passageLength === "string" && Object.hasOwn(passageBags, saved.passageLength)) {
-      settings.passageLength = saved.passageLength;
+    else if (saved?.typoLimit === null && saved.version >= 4) settings.typoLimit = null;
+    if (isPlainObject(saved?.resetModes)) {
+      for (const view of views) {
+        if (resetModesFor(view).some((mode) => mode.id === saved.resetModes[view])) settings.resetModes[view] = saved.resetModes[view];
+      }
     }
+    if (Array.isArray(saved?.done)) {
+      settings.done = [...new Set(saved.done.filter((id) => drillById.has(id)))];
+    } else if (Array.isArray(saved?.completed)) {
+      // The old course numbered its runs 14 to 53.
+      const runs = areaById.get("number").units.find((unit) => unit.id === "runs").list;
+      settings.done = saved.completed.map((id) => runs.find((drill) => drill.prompt === legacyRuns[id - 14])?.id).filter(Boolean);
+    }
+    if (isPlainObject(saved?.practice)) {
+      for (const [areaId, type] of Object.entries(saved.practice)) {
+        if (areaById.get(areaId)?.practiceTypes.some((option) => option.id === type)) settings.practice[areaId] = type;
+      }
+    }
+    if (isPlainObject(saved?.textSource)) {
+      for (const [areaId, source] of Object.entries(saved.textSource)) {
+        if (areaById.has(areaId) && (source === "focus" || source === "books")) settings.textSource[areaId] = source;
+      }
+    }
+    if (typeof saved?.passageLength === "string" && Object.hasOwn(bookBags, saved.passageLength)) settings.passageLength = saved.passageLength;
     if (typeof saved?.hints === "boolean") settings.hints = saved.hints;
+    if (typeof saved?.fingerColors === "boolean") settings.fingerColors = saved.fingerColors;
+    if (typeof saved?.correction === "boolean") settings.correction = saved.correction;
     if (typeof saved?.keyboard === "boolean") settings.keyboard = saved.keyboard;
     if (saved?.theme === "light" || saved?.theme === "dark") settings.theme = saved.theme;
     if (layouts.includes(saved?.layout)) settings.layout = saved.layout;
+    if (isPlainObject(saved?.keyStats)) {
+      for (const [key, value] of Object.entries(saved.keyStats)) {
+        if (key.length === 1 && Array.isArray(value) && value.length === 2 && value.every((count) => Number.isInteger(count) && count >= 0)) {
+          settings.keyStats[key] = value;
+        }
+      }
+    }
 
     function saveSettings() {
       const latest = readSettings();
-      if (Array.isArray(latest?.completed)) {
-        settings.completed = [...new Set([...settings.completed, ...latest.completed.filter(validDrillId)])];
+      if (Array.isArray(latest?.done)) {
+        settings.done = [...new Set([...settings.done, ...latest.done.filter((id) => drillById.has(id))])];
       }
       try {
         localStorage.setItem(settingsKey, JSON.stringify(settings));
       } catch { /* Keep the current tab's settings in memory. */ }
     }
+
+    const currentArea = () => areaById.get(settings.focus);
+    const currentDrill = () => drillById.get(settings.drills[settings.focus]) ?? currentArea().drills[0];
+    const isDone = (drill) => settings.done.includes(drill.id);
+
+    // ---- Theme and layout ------------------------------------------------------
 
     const darkScheme = matchMedia("(prefers-color-scheme: dark)");
     const activeTheme = () => settings.theme ?? (darkScheme.matches ? "dark" : "light");
@@ -1218,24 +1839,20 @@
       settingsButton.setAttribute("aria-expanded", String(settingsOpen));
     }
 
-    // Each layout reuses the same controls: the heading and live stats move into the sidebar for layout A.
+    // Each layout reuses the same controls: the heading moves into the sidebar for layout A.
     function applyLayout() {
       document.documentElement.dataset.layout = settings.layout;
       setPressed(layoutButtons, (button) => button.dataset.layoutOption === settings.layout);
-      if (settings.layout === "sidebar") {
-        get("now-card").append(practiceHeading);
-        get("stats-card").append(statsStrip);
-      } else {
-        mainColumn.prepend(practiceHeading);
-        practiceCard.prepend(statsStrip);
-      }
+      if (settings.layout === "sidebar") get("now-card").append(practiceHeading);
+      else mainColumn.prepend(practiceHeading);
       setSettingsOpen(false);
     }
 
-    function sectionProgress(section) {
-      const sectionLessons = lessonsBySection.get(section);
-      const done = sectionLessons.filter((lesson) => settings.completed.includes(lesson.id)).length;
-      return { sectionLessons, done, total: sectionLessons.length, complete: done === sectionLessons.length };
+    // ---- Course progress and map ------------------------------------------------
+
+    function unitProgress(unit) {
+      const done = unit.list.filter(isDone).length;
+      return { done, total: unit.list.length, complete: done === unit.list.length };
     }
 
     function progressBar(fraction) {
@@ -1248,12 +1865,13 @@
     }
 
     function renderProgressCard() {
-      get("progress-total").textContent = `${settings.completed.length} / ${lessons.length}`;
-      get("section-progress").replaceChildren(...lessonSections.map((section) => {
-        const { done, total, complete } = sectionProgress(section);
+      const area = currentArea();
+      get("progress-total").textContent = `${area.drills.filter(isDone).length} / ${area.drills.length}`;
+      get("section-progress").replaceChildren(...area.units.map((unit) => {
+        const { done, total, complete } = unitProgress(unit);
         const item = element("li", complete ? "complete" : "");
         const row = element("div", "section-progress-row");
-        row.append(element("span", "", section.name), element("span", "mono", `${done} / ${total}`));
+        row.append(element("span", "", `${unit.number}. ${unit.name}`), element("span", "mono", `${done} / ${total}`));
         item.append(row, progressBar(done / total));
         return item;
       }));
@@ -1261,54 +1879,54 @@
 
     let libraryOpen = false;
 
-    function firstIncompleteDrill() {
-      return lessons.find((lesson) => !settings.completed.includes(lesson.id))?.id ?? null;
-    }
-
     function renderLibrary() {
-      const done = settings.completed.length;
-      const percent = Math.round(done / lessons.length * 100);
-      get("library-progress-label").textContent = `${done} of ${lessons.length} complete`;
+      const area = currentArea();
+      const done = area.drills.filter(isDone).length;
+      const percent = Math.round(done / area.drills.length * 100);
+      get("course-title").textContent = `${area.name} course`;
+      get("course-summary").textContent = `${area.units.length} units, ${area.drills.length} drills. Pass a drill with ${passMark}% accuracy to complete it.`;
+      get("library-progress-label").textContent = `${done} of ${area.drills.length} complete`;
       get("library-progress-percent").textContent = `${percent}%`;
       get("library-progress-fill").style.width = `${percent}%`;
-      const next = firstIncompleteDrill();
+      const next = area.drills.find((drill) => !isDone(drill));
       const continueButton = get("continue-drill");
-      continueButton.hidden = next === null;
-      continueButton.dataset.drill = next ?? "";
-      get("continue-drill-label").textContent = `Continue with drill ${next}`;
-      get("close-library-label").textContent = settings.view === "lessons"
-        ? `Back to drill ${settings.lesson}`
-        : `Back to ${settings.view === "free" ? "free" : "text"} practice`;
+      continueButton.hidden = !next;
+      continueButton.dataset.drill = next?.id ?? "";
+      if (next) get("continue-drill-label").textContent = `Continue with unit ${next.unit.number}, drill ${next.index}`;
+      const current = currentDrill();
+      get("close-library-label").textContent = settings.view === "course"
+        ? `Back to unit ${current.unit.number}, drill ${current.index}`
+        : `Back to ${settings.view}`;
 
-      get("library-sections").replaceChildren(...lessonSections.map((section, index) => {
-        const { sectionLessons, done: doneCount, total, complete } = sectionProgress(section);
+      get("library-sections").replaceChildren(...area.units.map((unit) => {
+        const { done: doneCount, total, complete } = unitProgress(unit);
         const card = element("section", "card library-section");
-        const headingId = `library-section-${index + 1}`;
+        const headingId = `library-unit-${unit.number}`;
         card.setAttribute("aria-labelledby", headingId);
-
-        const heading = element("h2", "", section.name);
+        const heading = element("h2", "", `${unit.number}. ${unit.name}`);
         heading.id = headingId;
-        heading.append(element("span", "range", `${sectionLessons[0].id}–${sectionLessons.at(-1).id}`));
+        heading.append(element("span", "range", `${total} drills`));
         const intro = element("div");
-        intro.append(heading, element("p", "library-section-description", section.instruction));
+        intro.append(heading, element("p", "library-section-description", unit.instruction));
         const meter = element("div", complete ? "section-meter complete" : "section-meter");
         meter.append(progressBar(doneCount / total), element("span", "mono", `${doneCount} / ${total}`));
         const header = element("div", "library-section-header");
         header.append(intro, meter);
 
         const grid = element("div", "drill-grid");
-        for (const lesson of sectionLessons) {
-          const isDone = settings.completed.includes(lesson.id);
-          const button = element("button", isDone ? "drill-tile done" : "drill-tile");
+        for (const drill of unit.list) {
+          const finished = isDone(drill);
+          const button = element("button", finished ? "drill-tile done" : "drill-tile");
           button.type = "button";
+          button.title = `${drill.title}: ${drill.prompt}`;
+          button.setAttribute("aria-label", `Unit ${unit.number}, drill ${drill.index}: ${drill.title}${finished ? ", complete" : ""}`);
           // Long prompts span extra columns so they show in full.
-          if (lesson.prompt.length > 9) button.style.gridColumn = `span ${lesson.prompt.length > 24 ? 3 : 2}`;
-          button.title = lesson.prompt;
-          button.setAttribute("aria-label", `Drill ${lesson.id}: ${lesson.prompt}${isDone ? ", complete" : ""}`);
-          if (lesson.id === settings.lesson) button.setAttribute("aria-current", "step");
-          button.addEventListener("click", () => chooseDrill(lesson.id));
-          button.append(element("span", "drill-tile-number", String(lesson.id)), element("samp", "drill-tile-prompt", lesson.prompt));
-          if (isDone) button.append(icon("check"));
+          const length = drill.prompt.length;
+          if (length > 9) button.style.gridColumn = length > 48 ? "1 / -1" : `span ${length > 36 ? 4 : length > 24 ? 3 : 2}`;
+          if (drill === current) button.setAttribute("aria-current", "step");
+          button.addEventListener("click", () => chooseDrill(drill.id));
+          button.append(element("span", "drill-tile-number", String(drill.index)), element("samp", "drill-tile-prompt", drill.prompt));
+          if (finished) button.append(icon("check"));
           grid.append(button);
         }
         card.append(header, grid);
@@ -1320,7 +1938,6 @@
       libraryOpen = open;
       library.hidden = !open;
       workspace.hidden = open;
-      libraryButton.setAttribute("aria-pressed", String(open));
       if (!open) return;
       setSettingsOpen(false);
       if (timer !== null) pauseRound();
@@ -1335,13 +1952,17 @@
     }
 
     function chooseDrill(id) {
-      if (!validDrillId(id)) return;
-      settings.lesson = id;
-      settings.view = "lessons";
+      const drill = drillById.get(id);
+      if (!drill) return;
+      settings.focus = drill.area.id;
+      settings.drills[drill.area.id] = drill.id;
+      settings.view = "course";
       saveSettings();
       startRound();
       typingArea.scrollIntoView({ block: "nearest" });
     }
+
+    // ---- Keyboard ----------------------------------------------------------------
 
     const keyMap = new Map();
 
@@ -1360,18 +1981,20 @@
       return key;
     }
 
-    // A modifier shows its macOS symbol centered above its name.
-    function makeModifier(label, title, glyph, span = 4) {
-      const key = element("span", "key modifier");
+    // Modifier legends follow M2-and-later MacBooks: `bottom` sits in the bottom corner on the key's own side and
+    // `top` in the opposite top corner. "globe" draws the globe icon and "led" the caps lock indicator.
+    function makeModifier(title, { side = "left", span = 4, top = "", bottom = "", classes = "" }) {
+      const key = element("span", `key modifier ${side} ${classes}`.trim());
       key.style.gridColumn = `span ${span}`;
       key.title = title;
-      if (glyph) {
-        const mark = element("span", "glyph");
-        if (glyph === "globe") mark.append(icon("globe"));
-        else mark.textContent = glyph;
-        key.append(mark);
-      }
-      key.append(element("span", "mod-label", label));
+      const legend = (content, className) => {
+        const part = element("span", className);
+        if (content === "globe") part.append(icon("globe"));
+        else if (content === "led") part.append(element("span", "led"));
+        else part.textContent = content;
+        return part;
+      };
+      key.append(legend(top, "mod-top"), legend(bottom, "mod-bottom"));
       return key;
     }
 
@@ -1405,8 +2028,9 @@
         ["F10", "mute", "Mute"], ["F11", "volume-down", "Volume down"], ["F12", "volume-up", "Volume up"]
       ];
 
-      const leftShift = makeModifier("shift", "Left Shift", "⇧", 9);
-      const rightShift = makeModifier("shift", "Right Shift", "⇧", 9);
+      const deleteKey = makeModifier("Delete", { side: "right", span: 6, bottom: "delete" });
+      const leftShift = makeModifier("Left Shift", { span: 9, bottom: "shift" });
+      const rightShift = makeModifier("Right Shift", { side: "right", span: 9, bottom: "shift" });
       const arrowStack = element("span", "arrow-stack");
       arrowStack.style.gridColumn = "span 4";
       arrowStack.append(
@@ -1415,24 +2039,24 @@
       );
 
       makeRow([
-        makeModifier("esc", "Escape", "", 6),
+        makeModifier("Escape", { span: 6, bottom: "esc" }),
         ...functionKeys.map(([label, iconName, action]) => makeFunctionKey(label, iconName, action)),
         makeKey({ label: "", classes: "touch-id", title: "Touch ID" })
       ]);
       makeRow([
         ...numberRow.map(([label, upper, finger]) => makeKey({ label, upper, finger, classes: "number" })),
-        makeModifier("delete", "Delete", "⌫", 6)
+        deleteKey
       ]);
       makeRow([
-        makeModifier("tab", "Tab", "⇥", 6),
+        makeModifier("Tab", { span: 6, bottom: "tab" }),
         ...letterKeys("qwertyuiop", ["LP", "LR", "LM", "LI", "LI", "RI", "RI", "RM", "RR", "RP"]),
         punctuation("[", "{", "RP"), punctuation("]", "}", "RP"), punctuation("\\", "|", "RP")
       ]);
       makeRow([
-        makeModifier("caps lock", "Caps Lock", "⇪", 7),
+        makeModifier("Caps Lock", { span: 7, top: "led", bottom: "caps lock", classes: "caps-lock" }),
         ...letterKeys("asdfghjkl", ["LP", "LR", "LM", "LI", "LI", "RI", "RI", "RM", "RR"]),
         punctuation(";", ":", "RP"), punctuation("'", '"', "RP"),
-        makeModifier("return", "Return", "↩︎", 7)
+        makeModifier("Return", { side: "right", span: 7, bottom: "return" })
       ]);
       makeRow([
         leftShift,
@@ -1441,21 +2065,21 @@
         rightShift
       ]);
       makeRow([
-        makeModifier("fn", "Fn / Globe", "globe"),
-        makeModifier("control", "Control", "⌃"),
-        makeModifier("option", "Left Option", "⌥"),
-        makeModifier("command", "Left Command", "⌘", 5),
+        makeModifier("Fn / Globe", { top: "fn", bottom: "globe" }),
+        makeModifier("Control", { top: "⌃", bottom: "control" }),
+        makeModifier("Left Option", { top: "⌥", bottom: "option" }),
+        makeModifier("Left Command", { span: 5, top: "⌘", bottom: "command" }),
         makeKey({ label: "", character: " ", finger: "T", span: 20, classes: "space-key", title: "Space" }),
-        makeModifier("command", "Right Command", "⌘", 5),
-        makeModifier("option", "Right Option", "⌥"),
+        makeModifier("Right Command", { side: "right", span: 5, top: "⌘", bottom: "command" }),
+        makeModifier("Right Option", { side: "right", top: "⌥", bottom: "option" }),
         makeKey({ label: "◀", classes: "arrow arrow-side", title: "Left Arrow" }),
         arrowStack,
         makeKey({ label: "▶", classes: "arrow arrow-side", title: "Right Arrow" })
       ]);
-      return { leftShift, rightShift };
+      return { leftShift, rightShift, deleteKey };
     }
 
-    const { leftShift, rightShift } = drawKeyboard();
+    const { leftShift, rightShift, deleteKey } = drawKeyboard();
     let highlighted = [];
     let round;
     let timer = null;
@@ -1489,41 +2113,86 @@
       else renderStats();
     }
 
-    function shuffledBag(values) {
-      let bag = [];
-      return () => {
-        if (bag.length === 0) {
-          bag = [...values];
-          for (let index = bag.length - 1; index > 0; index--) {
-            const other = Math.floor(Math.random() * (index + 1));
-            [bag[index], bag[other]] = [bag[other], bag[index]];
-          }
-        }
-        return bag.pop();
-      };
+    // ---- Practice and text generation ------------------------------------------
+
+    function practiceItem(area, typeId) {
+      const units = area.units.filter((unit) => !unit.checkpoint);
+      const unit = typeId === "mixed" ? pick(units) : units.find((option) => option.id === typeId);
+      if (unit.generate && Math.random() < 0.5) return unit.generate();
+      return pick(unit.items);
     }
 
-    function generateGroups(mode, length) {
-      const groupCount = Math.round((length + 1) / 4.5);
-      const visibleCount = length - groupCount + 1;
-      const groupSize = Math.floor(visibleCount / groupCount);
-      const largerGroups = visibleCount % groupCount;
-      const nextDigit = shuffledBag(digits);
-      const nextSymbol = shuffledBag(numberRow.map(([, shifted]) => shifted).join("") + "`-=");
-      const nextLetter = shuffledBag(letters);
-      const nextHomeLetter = shuffledBag("asdfjkl");
+    function weakKeysFor(area) {
+      return Object.entries(settings.keyStats)
+        .map(([key, [hits, misses]]) => ({ key, attempts: hits + misses, rate: misses / Math.max(1, hits + misses) }))
+        .filter(({ key, attempts, rate }) => attempts >= 5 && rate > 0 && key !== " " && area.characters.has(key))
+        .sort((a, b) => b.rate - a.rate || b.attempts - a.attempts)
+        .slice(0, 6)
+        .map(({ key }) => key);
+    }
 
-      return Array.from({ length: groupCount }, (_, group) => {
-        const size = groupSize + Number(group < largerGroups);
-        const letterPosition = Math.floor(Math.random() * size);
-        return Array.from({ length: size }, (_, index) => {
-          if (mode === "symbols") return nextSymbol();
-          if (mode === "mixed" && index === letterPosition) {
-            return group % 2 === 0 ? nextHomeLetter() : nextLetter();
-          }
-          return nextDigit();
-        }).join("");
-      });
+    // Weak-key rounds favour real course material that contains the key, then fall back to simple repeats.
+    function weakItem(area, keys) {
+      const key = pick(keys);
+      const matches = area.pool.filter((item) => item.includes(key));
+      if (matches.length > 0 && Math.random() < 0.7) return pick(matches);
+      const home = homeOf[key];
+      return home ? `${home}${key}${home}` : `${key}${key}${key}`;
+    }
+
+    function buildPractice(area, typeId, length) {
+      const type = area.practiceTypes.some((option) => option.id === typeId) ? typeId : "mixed";
+      const keys = type === "weak" ? weakKeysFor(area) : [];
+      const mode = type === "weak" && keys.length < 2 ? "mixed" : type;
+      const parts = [];
+      let size = 0;
+      while (size < length) {
+        const item = mode === "weak" ? (Math.random() < 0.75 ? weakItem(area, keys) : practiceItem(area, "mixed")) : practiceItem(area, mode);
+        if (item === parts.at(-1)) continue;
+        parts.push(item);
+        size += item.length + 1;
+      }
+      return { type, mode, keys, text: parts.join(" ") };
+    }
+
+    // Focus text joins shuffled sentences or words until the passage reaches its minimum length.
+    function focusPassage(area, lengthKey) {
+      const minimum = { short: 60, medium: 120, long: 220 }[lengthKey];
+      const parts = [];
+      let words = 0;
+      while (words < minimum) {
+        for (const piece of shuffle(area.text.list)) {
+          if (words >= minimum) break;
+          if (piece === parts.at(-1)) continue;
+          parts.push(piece);
+          words += piece.split(" ").length;
+        }
+      }
+      const text = parts.join(" ");
+      return { title: area.text.name, author: area.name, url: null, generated: true, text, words: text.split(" ").length };
+    }
+
+    let currentPassage = null;
+    let currentPractice = null;
+
+    function drawPassage() {
+      const area = currentArea();
+      if (settings.textSource[area.id] !== "books") return focusPassage(area, settings.passageLength);
+      const take = bookBags[settings.passageLength];
+      const passage = take();
+      return passage === currentPassage ? take() : passage;
+    }
+
+    function newPassage() {
+      currentPassage = drawPassage();
+      startRound();
+      typingArea.scrollIntoView({ block: "nearest" });
+    }
+
+    function newPractice() {
+      currentPractice = null;
+      startRound();
+      typingArea.scrollIntoView({ block: "nearest" });
     }
 
     function repeatPattern(pattern, length) {
@@ -1540,25 +2209,102 @@
       return chunks;
     }
 
+    // ---- Settings controls -----------------------------------------------------
+
     function updateLengthLabel() {
-      const keys = Number(lessonLengthControl.value);
+      const keys = Number(drillLengthControl.value);
       const minutes = keys / 60;
       const minutesText = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
-      lessonLengthValue.value = `${keys} keys · ~${minutesText} min`;
-      lessonLengthControl.setAttribute("aria-valuetext", `${keys} keys, about ${minutesText} minutes at one key per second`);
+      drillLengthValue.value = `${keys} keys · ~${minutesText} min`;
+      drillLengthControl.setAttribute("aria-valuetext", `${keys} keys, about ${minutesText} minutes at one key per second`);
+    }
+
+    const attemptName = () => (round.drill ? "drill" : round.passage ? "passage" : "round");
+
+    const resetMode = () => settings.resetModes[settings.view];
+
+    // The most typos a drill of this length can have and still round to the pass mark.
+    function allowedForPass(length) {
+      let allowed = 0;
+      while (Math.round(length / (length + allowed + 1) * 100) >= passMark) allowed++;
+      return allowed;
+    }
+
+    // Typo positions within the last few keys; a character counts once however many times it was missed.
+    const recentTypos = () => [...round.typoPositions].filter((position) => position > round.position - streakWindow).length;
+
+    function trippedRule() {
+      const mode = resetMode();
+      if (mode === "pass") return round.drill && round.mistakes > allowedForPass(round.characters.length) ? "pass" : null;
+      if (mode === "streak") return recentTypos() > streakLimit ? "streak" : null;
+      if (mode === "perfect") return "perfect";
+      if (mode === "custom") return settings.typoLimit !== null && round.typoPositions.size > settings.typoLimit ? "custom" : null;
+      return null;
     }
 
     function updateTypoHelp() {
+      const mode = resetMode();
+      get("custom-limit-row").hidden = mode !== "custom";
       const limit = settings.typoLimit;
-      if (limit === null) {
-        typoLimitHelp.textContent = "Leave blank to keep going after typos.";
-        return;
+      const help = {
+        pass: `Stops when a ${passMark}% pass is out of reach: more than ${allowedForPass(round.characters.length)} typos on this ${round.characters.length}-key drill.`,
+        streak: round.passage
+          ? `When more than ${streakLimit} typos land within ${streakWindow} keys, you go back to the start of the sentence.`
+          : `Stops when more than ${streakLimit} typos land within ${streakWindow} keys.`,
+        perfect: `Any typo restarts the ${attemptName()}. Use it on patterns you already know.`,
+        custom: limit === null ? "Enter a number to set the limit." : `Stops after more than ${limit} ${limit === 1 ? "typo" : "typos"}.`,
+        off: "Never resets. Typos still count toward accuracy."
+      }[mode];
+      const note = mode === "streak" || mode === "custom" ? " Repeated presses on one character count once." : "";
+      typoLimitHelp.textContent = help + note;
+      renderBudget();
+    }
+
+    // The typo allowance shown in the stats strip, highlighted when one more typo would trip the rule.
+    function renderBudget() {
+      const mode = resetMode();
+      let value = null;
+      let label = "";
+      let warn = false;
+      if (mode === "pass" && round.drill) {
+        const left = Math.max(0, allowedForPass(round.characters.length) - round.mistakes);
+        [value, label, warn] = [String(left), left === 1 ? "typo left to pass" : "typos left to pass", left <= 1];
+      } else if (mode === "custom" && settings.typoLimit !== null) {
+        const left = Math.max(0, settings.typoLimit - round.typoPositions.size);
+        [value, label, warn] = [String(left), left === 1 ? "typo left" : "typos left", left <= 1];
+      } else if (mode === "streak") {
+        const recent = recentTypos();
+        [value, label, warn] = [`${recent}/${streakLimit}`, `typos in last ${streakWindow} keys`, recent >= streakLimit];
+      } else if (mode === "perfect") {
+        [value, label] = ["0", "typos allowed"];
       }
-      const attemptName = round.passage ? "passage" : "drill";
-      const left = limit - round.mistakes;
-      typoLimitHelp.textContent = left > 0
-        ? `${left} more ${left === 1 ? "typo" : "typos"} allowed before the ${attemptName} restarts.`
-        : `The next typo restarts the ${attemptName}.`;
+      const stat = get("budget-stat");
+      stat.hidden = value === null;
+      stat.classList.toggle("warn", warn);
+      if (value !== null) {
+        get("budget-value").textContent = value;
+        get("budget-label").textContent = label;
+      }
+    }
+
+    // Streak guard in Text sends you back to the start of the current sentence instead of ending the passage.
+    function rewindSentence() {
+      const recent = recentTypos();
+      const before = round.characters.slice(0, round.position);
+      const boundary = [...before.matchAll(/[.!?]["')\]]* /g)].at(-1);
+      const start = boundary ? boundary.index + boundary[0].length : 0;
+      for (let index = start; index < round.position; index++) round.cells[index].classList.remove("done");
+      round.position = start;
+      round.typoPositions.clear();
+      round.pending.length = 0;
+      round.lastWrong = null;
+      renderPending();
+      setStatus(`${recent} typos in ${streakWindow} keys. Back to the start of the sentence.`, "error");
+      updateProgress();
+      renderStats();
+      updateTypoHelp();
+      renderMisses();
+      renderKeyboard();
     }
 
     function commitTypoLimit() {
@@ -1572,42 +2318,55 @@
       return true;
     }
 
-    function drawPassage() {
-      const takePassage = passageBags[settings.passageLength];
-      const passage = takePassage();
-      return passage === currentPassage ? takePassage() : passage;
-    }
-
-    function newPassage() {
-      currentPassage = drawPassage();
-      startRound();
-      typingArea.scrollIntoView({ block: "nearest" });
-    }
-
     function setPressed(buttons, isPressed) {
       for (const button of buttons) button.setAttribute("aria-pressed", String(isPressed(button)));
     }
 
-    function startRound(focus = true) {
+    function renderPracticeTypes(area, selected) {
+      practiceTypeGrid.replaceChildren(...area.practiceTypes.map((option) => {
+        const chip = element("button", "chip", option.name);
+        chip.type = "button";
+        chip.title = option.description;
+        chip.setAttribute("aria-pressed", String(option.id === selected));
+        chip.addEventListener("click", () => {
+          if (option.id === selected) {
+            typingArea.focus({ preventScroll: true });
+            return;
+          }
+          settings.practice[area.id] = option.id;
+          saveSettings();
+          newPractice();
+        });
+        return chip;
+      }));
+    }
+
+    // ---- Rounds ------------------------------------------------------------------
+
+    function startRound(moveFocus = true) {
       stopClock();
       if (libraryOpen) setLibraryOpen(false);
-      const lesson = settings.view === "lessons" ? lessons[settings.lesson - 1] : null;
+      const area = currentArea();
+      focusSelect.value = area.id;
+      const drill = settings.view === "course" ? currentDrill() : null;
       const passage = settings.view === "text" ? (currentPassage ??= drawPassage()) : null;
-      const groups = lesson
-        ? repeatPattern(lesson.prompt, Math.max(settings.lessonLength, lesson.prompt.length))
-        : (passage?.text ?? generateGroups(settings.mode, settings.length).join(" ")).match(/\S+ ?/g);
+      const practice = settings.view === "practice"
+        ? (currentPractice ??= buildPractice(area, settings.practice[area.id] ?? "mixed", settings.drillLength))
+        : null;
+      const groups = drill ? repeatPattern(drill.prompt, settings.drillLength) : (passage ? passage.text : practice.text).match(/\S+ ?/g);
       round = {
-        lesson, passage, characters: groups.join(""), cells: [], position: 0, activeMs: 0, lastKeyAt: null, endedAt: null,
-        failed: false, mistakes: 0, misses: new Map(), lastWrong: null
+        drill, passage, practice, characters: groups.join(""), cells: [], position: 0, activeMs: 0, lastKeyAt: null, endedAt: null,
+        failed: false, passed: false, newlyDone: false, correct: 0, mistakes: 0, typoPositions: new Set(), tripReason: null,
+        pending: [], deleted: 0, pileSizes: [],
+        misses: new Map(), lastWrong: null
       };
       resultBanner.hidden = true;
       typingArea.hidden = false;
 
       const prompt = get("prompt");
-      prompt.classList.toggle("short", !!lesson && round.characters.length <= 9);
-      prompt.classList.toggle("long", !passage && round.characters.length > 64);
       prompt.classList.toggle("prose", !!passage);
-      prompt.classList.toggle("grouped", !!lesson && !lesson.prompt.includes(" "));
+      prompt.classList.toggle("grouped", !!drill && !drill.prompt.includes(" "));
+      prompt.classList.toggle("long", !passage && round.characters.length > 64);
       prompt.replaceChildren();
       for (const group of groups) {
         const chunk = element("span", "chunk");
@@ -1620,76 +2379,80 @@
       }
       prompt.scrollTop = 0;
 
-      const hasPreset = Boolean(lesson || passage);
-      const attemptName = passage ? "passage" : "drill";
+      const attempt = attemptName();
       setPressed(viewButtons, (button) => button.dataset.view === settings.view);
-      setPressed(modeButtons, (button) => button.dataset.mode === settings.mode);
-      setPressed(lengthButtons, (button) => Number(button.dataset.length) === settings.length);
+      setPressed(textSourceButtons, (button) => button.dataset.textSource === (settings.textSource[area.id] ?? "focus"));
       setPressed(passageLengthButtons, (button) => button.dataset.passageLength === settings.passageLength);
+      get("focus-source-name").textContent = area.text.short;
 
       progress.max = round.characters.length;
       wpmStat.hidden = !passage;
-      get("settings-title").textContent = lesson ? "Drill settings" : passage ? "Passage settings" : "Round settings";
-      get("lesson-length-settings").hidden = !lesson;
-      get("free-settings").hidden = hasPreset;
-      get("passage-length-settings").hidden = !passage;
-      get("typo-settings").hidden = !hasPreset;
-      get("progress-card").hidden = !lesson;
-      get("misses-scope").textContent = lesson ? "This drill" : passage ? "This passage" : "This round";
-      passageSource.hidden = !passage;
+      get("settings-title").textContent = drill ? "Drill settings" : passage ? "Text settings" : "Practice settings";
+      get("length-settings").hidden = !!passage;
+      get("practice-settings").hidden = !practice;
+      if (practice) renderPracticeTypes(area, practice.type);
+      get("text-settings").hidden = !passage;
+      get("progress-card").hidden = !drill;
+      get("misses-scope").textContent = `This ${attempt}`;
+      passageSource.hidden = !passage?.url;
+      if (passage?.url) passageSource.href = passage.url;
       typoLimitControl.value = settings.typoLimit ?? "";
+      const modeSelect = get("reset-mode");
+      modeSelect.replaceChildren(...resetModesFor(settings.view).map((mode) => new Option(mode.name, mode.id)));
+      modeSelect.value = resetMode();
+      drillLengthControl.value = settings.drillLength;
+      updateLengthLabel();
 
       let location;
       let title;
-      if (lesson) {
-        location = `${lesson.section.name} · Drill ${lesson.id} of ${lessons.length}`;
-        title = lesson.section.title(lesson.prompt);
-        lessonLengthControl.value = settings.lessonLength;
-        updateLengthLabel();
+      let description;
+      if (drill) {
+        location = `Unit ${drill.unit.number} · ${drill.unit.name} · Drill ${drill.index} of ${drill.unit.list.length}`;
+        title = drill.title;
+        description = `${drill.unit.instruction} Pass with ${passMark}% accuracy.`;
       } else if (passage) {
         location = `${passage.author} · ${passage.words} words`;
         title = passage.title;
-        passageSource.href = passage.url;
+        description = passage.generated
+          ? "Generated for this focus. Type it exactly as shown."
+          : "Type the passage, including capitalization and punctuation.";
       } else {
-        location = `Free practice · ${settings.length} keys`;
-        title = modeNames[settings.mode];
+        const type = area.practiceTypes.find((option) => option.id === practice.type);
+        location = `${area.name} · Practice`;
+        title = practice.mode === "weak" ? `Weak keys: ${practice.keys.map(describeKey).join("  ")}` : type.name;
+        description = practice.type === "weak" && practice.mode !== "weak"
+          ? "There isn't enough typing history for this focus yet, so this round mixes the whole course. Weak keys appear after a few rounds."
+          : type.description;
       }
       get("lesson-location").textContent = location;
       get("lesson-title").textContent = title;
-      get("mode-description").textContent = passage
-        ? "Type the passage, including capitalization and punctuation."
-        : lesson?.section.instruction ?? modes[settings.mode];
+      get("mode-description").textContent = description;
 
-      previousDrill.hidden = !lesson;
-      nextDrill.hidden = !hasPreset;
-      previousDrill.disabled = lesson?.id === 1;
-      nextDrill.disabled = lesson?.id === lessons.length;
+      courseMapButton.hidden = !drill;
+      previousDrill.hidden = !drill;
+      previousDrill.disabled = drill?.number === 1;
+      nextDrill.disabled = !!drill && drill.number === area.drills.length;
       nextDrill.classList.remove("primary");
-      nextDrill.classList.toggle("is-passage", !!passage);
-      nextDrillLabel.textContent = passage ? "New passage" : "Next drill";
+      nextDrill.classList.toggle("is-passage", !drill);
+      nextDrillLabel.textContent = drill ? "Next drill" : passage ? "New passage" : "New round";
       newRound.classList.remove("primary");
-      newRoundLabel.textContent = hasPreset ? `Reset ${attemptName}` : "New round";
-      newRound.title = hasPreset ? `Reset this ${attemptName} (esc)` : "New round (esc)";
-      get("escape-hint").textContent = hasPreset ? "reset" : "new round";
-      let enterHint = "next round when done";
-      if (passage) enterHint = "new passage when done";
-      else if (lesson) enterHint = lesson.id < lessons.length ? "next drill when done" : "reset when done";
-      get("enter-hint").textContent = enterHint;
+      newRoundLabel.textContent = `Reset ${attempt}`;
+      newRound.title = `Reset this ${attempt} (esc)`;
+      get("escape-hint").textContent = "reset";
+      get("enter-hint").textContent = drill ? "results when done" : passage ? "new passage when done" : "new round when done";
 
-      let spaceInstruction = "";
-      if (!passage && round.characters.includes(" ")) {
-        spaceInstruction = lesson ? " Type Space at the dot." : " Use Space between groups.";
-      }
-      const escapeInstruction = hasPreset ? ` Escape resets this ${attemptName}.` : " Escape starts a new round.";
-      get("typing-instructions").textContent = `Type each character in order.${spaceInstruction}${escapeInstruction}`;
+      const spaceInstruction = !passage && round.characters.includes(" ") ? " Type Space at the dot." : "";
+      const deleteInstruction = settings.correction ? " Press Delete to remove typos before you continue." : "";
+      get("typing-instructions").textContent = `Type each character in order.${spaceInstruction}${deleteInstruction} Escape resets this ${attempt}.`;
+      renderTypoHandling();
       setStatus(`Type to start.${spaceInstruction}`);
       updateProgress();
       renderStats();
       updateTypoHelp();
       renderMisses();
       renderKeyboard();
-      if (lesson) renderProgressCard();
-      if (focus) typingArea.focus({ preventScroll: true });
+      if (drill) renderProgressCard();
+      if (moveFocus) typingArea.focus({ preventScroll: true });
     }
 
     function describeKey(character) {
@@ -1729,13 +2492,14 @@
 
     function renderStats() {
       const duration = activeTime();
-      const attempts = round.position + round.mistakes;
-      const keysPerMinute = duration >= 1000 ? round.position * 60000 / duration : null;
-      statFields.accuracy.textContent = attempts ? `${Math.round(round.position / attempts * 100)}%` : "—";
+      const attempts = round.correct + round.mistakes;
+      const keysPerMinute = duration >= 1000 ? round.correct * 60000 / duration : null;
+      statFields.accuracy.textContent = attempts ? `${Math.round(round.correct / attempts * 100)}%` : "—";
       statFields.mistakes.textContent = round.mistakes;
       statFields.elapsed.textContent = formatTime(duration);
       statFields.speed.textContent = keysPerMinute === null ? "—" : Math.round(keysPerMinute);
       if (round.passage) wpmValue.textContent = keysPerMinute === null ? "—" : Math.round(keysPerMinute / 5);
+      renderBudget();
     }
 
     function renderMisses() {
@@ -1774,25 +2538,34 @@
       keyboardButton.textContent = settings.keyboard ? "Hide keyboard" : "Show keyboard";
       hintButton.setAttribute("aria-checked", String(settings.hints));
       hintButton.disabled = !settings.keyboard;
+      fingerColorButton.setAttribute("aria-checked", String(settings.fingerColors));
+      fingerColorButton.disabled = !settings.keyboard;
+      keyboard.classList.toggle("finger-colors", settings.fingerColors);
       if (!settings.keyboard) return;
+
+      // While typos wait to be deleted, the next key to press is delete.
+      if (settings.hints && round.pending.length > 0 && round.endedAt === null) {
+        deleteKey.classList.add("target");
+        highlighted.push(deleteKey);
+        const count = round.pending.length;
+        fingerGuide.replaceChildren("Press", element("kbd", "guide-key", "delete"), element("strong", "", `Right pinky · ${count} ${count === 1 ? "typo" : "typos"} to remove`));
+        return;
+      }
 
       const target = round.characters[round.position];
       const entry = keyMap.get(target);
-      if (!settings.hints || !entry) {
+      if (!settings.hints || !entry || round.endedAt !== null) {
         fingerGuide.textContent = "Find the raised marks on F and J to reset your hands.";
         return;
       }
 
       entry.key.classList.add("target");
       highlighted.push(entry.key);
-      let shiftInstruction = "";
       if (entry.shifted) {
-        const useRightShift = entry.finger.startsWith("L");
-        const shift = useRightShift ? rightShift : leftShift;
+        const shift = entry.finger.startsWith("L") ? rightShift : leftShift;
         shift.classList.add("shift-hint");
         entry.key.classList.add("use-shift");
         highlighted.push(shift);
-        shiftInstruction = useRightShift ? " + right Shift" : " + left Shift";
       }
       const wrongKey = keyMap.get(round.lastWrong)?.key;
       if (wrongKey && wrongKey !== entry.key) {
@@ -1800,7 +2573,7 @@
         highlighted.push(wrongKey);
       }
 
-      const parts = ["Next", element("kbd", "guide-key", describeKey(target)), element("strong", "", `${fingers[entry.finger]}${shiftInstruction}`)];
+      const parts = ["Next", element("kbd", "guide-key", describeKey(target)), element("strong", "", fingerText(entry))];
       if (round.lastWrong !== null) {
         const chip = element("span", "wrong-chip", "you hit");
         chip.append(element("kbd", "", describeKey(round.lastWrong)));
@@ -1809,39 +2582,15 @@
       fingerGuide.replaceChildren(...parts);
     }
 
-    function finishRound() {
-      round.endedAt = performance.now();
-      pauseClock();
-      const accuracy = Math.round(round.position / (round.position + round.mistakes) * 100);
-      const lesson = round.lesson;
-
-      if (lesson) {
-        if (!settings.completed.includes(lesson.id)) {
-          settings.completed.push(lesson.id);
-          saveSettings();
-          renderProgressCard();
-        }
-        const hasNext = lesson.id < lessons.length;
-        const instruction = hasNext ? "Press return for the next drill." : "Press return to reset.";
-        if (hasNext) nextDrill.classList.add("primary");
-        setStatus(`Drill complete · ${accuracy}% accuracy. ${instruction}`, "complete");
-      } else if (round.passage) {
-        setStatus(`Passage complete · ${accuracy}% accuracy. Press return for a new passage.`, "complete");
-        nextDrill.classList.add("primary");
-      } else {
-        setStatus(`Round complete · ${accuracy}% accuracy. Press return for the next round.`, "complete");
-        newRound.classList.add("primary");
-        newRoundLabel.textContent = "Next round";
-      }
-      renderMisses();
-    }
-
     function fingerText(entry) {
       if (!entry.shifted) return fingers[entry.finger];
       return `${fingers[entry.finger]} + ${entry.finger.startsWith("L") ? "right" : "left"} Shift`;
     }
 
+    // ---- Results -----------------------------------------------------------------
+
     function resultAdvice(accuracy) {
+      if (round.mistakes === 0) return ["No typos at all. Try a longer length, or turn key hints off."];
       const advice = [];
       const share = (matches) => [...round.misses].reduce((sum, [key, count]) => sum + (matches(key) ? count : 0), 0) / round.mistakes;
       const [topKey, topCount] = [...round.misses].sort((a, b) => b[1] - a[1])[0];
@@ -1855,29 +2604,83 @@
       if (share((key) => key === " ") >= 0.5) {
         advice.push("Several typos were on Space. Tap it with a thumb and keep your fingers on the home row.");
       }
-      if (round.position < round.characters.length * 0.2) {
+      if (round.failed && round.position < round.characters.length * 0.2) {
         advice.push("The typos came early. Start slower and build speed once the rhythm feels steady.");
       }
       if (accuracy < 90) {
         advice.push(`Accuracy was ${accuracy}%. Ease off the pace: clean keystrokes build speed faster than fixing typos.`);
       }
-      if (advice.length === 0) advice.push("Take a breath and try again. Aim for a clean run over a fast one.");
+      // In Delete to continue, each pile counts the typo plus every key typed after it before the first delete.
+      const piles = round.pileSizes;
+      const keysPastTypo = piles.length ? piles.reduce((sum, size) => sum + size - 1, 0) / piles.length : 0;
+      if (keysPastTypo >= 1.5) {
+        advice.push(`You typed about ${keysPastTypo.toFixed(1)} more keys after each typo before deleting. Stop as soon as a key feels wrong.`);
+      }
+      if (advice.length === 0) advice.push("Take a breath and go again. Aim for a clean run over a fast one.");
       return advice.slice(0, 3);
     }
 
+    let resultActions = null;
+
     function showResults() {
-      const attemptName = round.passage ? "passage" : "drill";
+      const area = currentArea();
+      const attempt = attemptName();
       const duration = activeTime();
       const typed = round.position;
       const total = round.characters.length;
-      const accuracy = Math.round(typed / (typed + round.mistakes) * 100);
-      const keysPerMinute = duration >= 1000 ? typed * 60000 / duration : null;
-      const words = round.passage
-        ? (round.characters.slice(0, typed).match(/\S+(?=\s)/g) ?? []).length
-        : Math.floor(typed / 5);
+      const accuracy = round.correct + round.mistakes ? Math.round(round.correct / (round.correct + round.mistakes) * 100) : 100;
+      const keysPerMinute = duration >= 1000 ? round.correct * 60000 / duration : null;
+      const words = round.passage ? (round.characters.slice(0, typed).match(/\S+(?=\s|$)/g) ?? []).length : Math.floor(typed / 5);
+      const nextDrillInArea = round.drill ? area.drills[round.drill.number] : null;
 
-      get("result-title").textContent = `${attemptName[0].toUpperCase()}${attemptName.slice(1)} stopped after ${round.mistakes} typos`;
-      get("result-subtitle").textContent = `Auto-reset is set past ${settings.typoLimit}. You typed ${typed} of ${total} characters (${Math.round(typed / total * 100)}%).`;
+      const retry = { label: "Try again", verb: "try again", run: () => startRound() };
+      const next = { label: "Next drill", verb: "go to the next drill", run: () => chooseDrill(nextDrillInArea.id) };
+      const map = { label: "Course map", verb: "open the course map", run: () => setLibraryOpen(true) };
+      const newText = { label: "New passage", verb: "get a new passage", run: newPassage };
+      const another = { label: "New round", verb: "start a new round", run: newPractice };
+      let title;
+      let subtitle;
+      let primary;
+      let secondary;
+      let success;
+      if (round.failed) {
+        success = false;
+        const name = `${attempt[0].toUpperCase()}${attempt.slice(1)}`;
+        const progressText = `You typed ${typed} of ${total} characters (${Math.round(typed / total * 100)}%).`;
+        const reasons = {
+          pass: [`${name} stopped: a pass is out of reach`, `${round.mistakes} typos on ${total} keys. A ${passMark}% pass allows ${allowedForPass(total)}. ${progressText}`],
+          streak: [`${name} stopped: ${streakLimit + 1} typos within ${streakWindow} keys`, `Streak guard stops when typos bunch up. ${progressText}`],
+          perfect: [`${name} stopped at the first typo`, `Perfect run is on. ${progressText}`],
+          custom: [`${name} stopped after ${round.typoPositions.size} typos`, `Auto-reset is set past ${settings.typoLimit}. ${progressText}`],
+          pileup: [`${name} stopped: more than ${maxPending} typos in a row`, `With Delete to continue, typos have to be deleted before you go on. ${progressText}`]
+        };
+        [title, subtitle] = reasons[round.tripReason];
+        primary = retry;
+        secondary = round.drill ? map : round.passage ? newText : another;
+      } else if (round.drill) {
+        success = round.passed;
+        if (round.passed) {
+          title = "Drill passed";
+          subtitle = `${accuracy}% accuracy. ${round.newlyDone ? "This drill is now marked complete." : "You had already completed this drill."}`;
+          primary = nextDrillInArea ? next : map;
+          secondary = retry;
+        } else {
+          title = "Below the pass mark";
+          subtitle = `${accuracy}% accuracy. Reach ${passMark}% to complete this drill.`;
+          primary = retry;
+          secondary = nextDrillInArea ? next : map;
+        }
+      } else {
+        success = true;
+        title = round.passage ? "Passage complete" : "Round complete";
+        subtitle = `${accuracy}% accuracy over ${total} characters.`;
+        primary = round.passage ? newText : another;
+        secondary = retry;
+      }
+
+      resultBanner.classList.toggle("success", success);
+      get("result-title").textContent = title;
+      get("result-subtitle").textContent = subtitle;
       const stats = [
         ["Characters", String(typed), `of ${total}`],
         [round.passage ? "Words" : "Words (5 keys)", String(words), ""],
@@ -1886,6 +2689,7 @@
         ["Accuracy", `${accuracy}%`, ""],
         ["Time", formatTime(duration), ""]
       ];
+      if (settings.correction) stats.push(["Deleted", String(round.deleted), round.deleted === 1 ? "character" : "characters"]);
       get("result-stats").replaceChildren(...stats.map(([label, value, detail]) => {
         const item = element("div");
         const amount = element("dd", "", value);
@@ -1893,8 +2697,8 @@
         item.append(element("dt", "", label), amount);
         return item;
       }));
-
       const missed = [...round.misses.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+      get("result-keys").hidden = missed.length === 0;
       get("result-keys").replaceChildren(...missed.map(([key, count]) => {
         const entry = keyMap.get(key);
         const item = element("li");
@@ -1902,7 +2706,34 @@
         return item;
       }));
       get("result-advice").replaceChildren(...resultAdvice(accuracy).map((tip) => element("li", "", tip)));
-      get("result-alternative").textContent = round.passage ? "New passage" : "Drill library";
+      get("result-primary-label").textContent = primary.label;
+      get("result-secondary").textContent = secondary?.label ?? "";
+      get("result-secondary").hidden = !secondary;
+      resultActions = { primary, secondary };
+
+      typingArea.hidden = true;
+      resultBanner.hidden = false;
+      setStatus(`${title}. Press return to ${primary.verb}.`, success ? "complete" : "error");
+      get("enter-hint").textContent = primary.verb;
+      if (primary === next) nextDrill.classList.add("primary");
+      get("result-primary").focus({ preventScroll: true });
+    }
+
+    function finishRound() {
+      round.endedAt = performance.now();
+      pauseClock();
+      const accuracy = Math.round(round.correct / (round.correct + round.mistakes) * 100);
+      round.passed = accuracy >= passMark;
+      if (round.drill && round.passed && !isDone(round.drill)) {
+        settings.done.push(round.drill.id);
+        round.newlyDone = true;
+      }
+      saveSettings();
+      if (round.drill) renderProgressCard();
+      renderStats();
+      renderMisses();
+      renderKeyboard();
+      showResults();
     }
 
     // Auto-reset stops the attempt and shows a summary; the next attempt starts on return.
@@ -1910,50 +2741,144 @@
       round.failed = true;
       round.endedAt = performance.now();
       pauseClock();
-      typingArea.hidden = true;
-      resultBanner.hidden = false;
-      showResults();
-      const attemptName = round.passage ? "Passage" : "Drill";
-      setStatus(`${attemptName} stopped after ${round.mistakes} typos. Press return to try again.`, "error");
-      get("enter-hint").textContent = "try again";
+      saveSettings();
       renderStats();
       updateTypoHelp();
       renderMisses();
       renderKeyboard();
-      get("retry-round").focus({ preventScroll: true });
+      showResults();
     }
 
-    function handleAttempt(character) {
+    function markActivity() {
       const now = performance.now();
       round.activeMs = activeTime(now);
       round.lastKeyAt = now;
       timer ??= setInterval(tick, 250);
-      const target = round.characters[round.position];
-      if (character === target) {
-        round.cells[round.position].classList.add("done");
-        round.position++;
-        round.lastWrong = null;
-        if (round.position === round.characters.length) {
-          finishRound();
-        } else if (status.textContent !== "Round in progress") {
-          setStatus("Round in progress", "active");
-        }
-      } else {
-        round.mistakes++;
-        round.lastWrong = character;
-        round.misses.set(target, (round.misses.get(target) ?? 0) + 1);
-        if ((round.lesson || round.passage) && settings.typoLimit !== null && round.mistakes > settings.typoLimit) {
-          failRound();
-          return;
-        }
-        setStatus(`Expected ${describeKey(target)} · typed ${describeKey(character)}`, "error");
-        updateTypoHelp();
-        renderMisses();
+    }
+
+    // Typos waiting to be deleted appear at the cursor, just before the character still to type.
+    function renderPending() {
+      for (const node of typingArea.querySelectorAll(".character.extra")) node.remove();
+      const anchor = round.cells[round.position];
+      if (!anchor || round.pending.length === 0) return;
+      for (const typed of round.pending) anchor.before(element("span", "character extra", typed === " " ? "·" : typed));
+      anchor.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+
+    function renderTypoHandling() {
+      typoHandling.value = settings.correction ? "delete" : "stop";
+      get("correction-help").textContent = settings.correction
+        ? `Typos stay on screen until you press delete; option-delete clears them all. More than ${maxPending} in a row ends the ${attemptName()}.`
+        : "The cursor waits on the key until you type it correctly.";
+    }
+
+    function handleDelete(all) {
+      if (round.pending.length === 0) return;
+      markActivity();
+      // The first delete of a run records how many typos had piled up by then.
+      if (!round.deletingRun) {
+        round.pileSizes.push(round.pending.length);
+        round.deletingRun = true;
       }
+      const removed = all ? round.pending.length : 1;
+      round.pending.length -= removed;
+      round.deleted += removed;
+      if (round.pending.length === 0) {
+        round.lastWrong = null;
+        round.deletingRun = false;
+        setStatus("Round in progress", "active");
+      } else {
+        setStatus(`${round.pending.length} more to delete.`, "error");
+      }
+      renderPending();
       updateProgress();
       renderStats();
       renderKeyboard();
     }
+
+    function handleAttempt(character) {
+      markActivity();
+      const target = round.characters[round.position];
+
+      // With Delete to continue, every key typed while typos are waiting is another typo.
+      if (round.pending.length > 0) {
+        round.mistakes++;
+        if (round.pending.length >= maxPending) {
+          round.tripReason = "pileup";
+          failRound();
+          return;
+        }
+        round.pending.push(character);
+        round.deletingRun = false;
+        const rule = trippedRule();
+        if (rule && !(rule === "streak" && round.passage)) {
+          round.tripReason = rule;
+          failRound();
+          return;
+        }
+        const count = round.pending.length;
+        setStatus(count === maxPending
+          ? `${count} typos to delete. One more and the ${attemptName()} stops.`
+          : `${count} typos to delete before you continue.`, "error");
+        renderPending();
+        renderStats();
+        renderKeyboard();
+        return;
+      }
+
+      const record = (settings.keyStats[target] ??= [0, 0]);
+      if (character === target) {
+        record[0]++;
+        round.correct++;
+        round.cells[round.position].classList.add("done");
+        round.position++;
+        round.lastWrong = null;
+        if (round.position === round.characters.length) {
+          updateProgress();
+          finishRound();
+          return;
+        }
+        if (status.textContent !== "Round in progress") setStatus("Round in progress", "active");
+      } else {
+        record[1]++;
+        round.mistakes++;
+        round.lastWrong = character;
+        round.misses.set(target, (round.misses.get(target) ?? 0) + 1);
+        round.typoPositions.add(round.position);
+        const rule = trippedRule();
+        if (rule === "streak" && round.passage) {
+          rewindSentence();
+          return;
+        }
+        if (rule) {
+          round.tripReason = rule;
+          failRound();
+          return;
+        }
+        if (settings.correction) {
+          round.pending.push(character);
+          setStatus(`Expected ${describeKey(target)} · typed ${describeKey(character)}. Press delete to fix it.`, "error");
+        } else {
+          setStatus(`Expected ${describeKey(target)} · typed ${describeKey(character)}`, "error");
+        }
+        updateTypoHelp();
+        renderMisses();
+      }
+      updateProgress();
+      renderPending();
+      renderStats();
+      renderKeyboard();
+    }
+
+    // ---- Events ------------------------------------------------------------------
+
+    focusSelect.addEventListener("change", () => {
+      settings.focus = focusSelect.value;
+      saveSettings();
+      currentPassage = null;
+      currentPractice = null;
+      startRound();
+    });
 
     for (const button of viewButtons) {
       button.addEventListener("click", () => {
@@ -1969,28 +2894,16 @@
       });
     }
 
-    for (const button of modeButtons) {
+    for (const button of textSourceButtons) {
       button.addEventListener("click", () => {
-        if (button.dataset.mode !== settings.mode) {
-          settings.mode = button.dataset.mode;
-          saveSettings();
-          startRound();
-        } else {
+        const area = currentArea();
+        if (button.dataset.textSource === (settings.textSource[area.id] ?? "focus")) {
           typingArea.focus({ preventScroll: true });
+          return;
         }
-      });
-    }
-
-    for (const button of lengthButtons) {
-      button.addEventListener("click", () => {
-        const length = Number(button.dataset.length);
-        if (length !== settings.length) {
-          settings.length = length;
-          saveSettings();
-          startRound();
-        } else {
-          typingArea.focus({ preventScroll: true });
-        }
+        settings.textSource[area.id] = button.dataset.textSource;
+        saveSettings();
+        newPassage();
       });
     }
 
@@ -2006,32 +2919,38 @@
       });
     }
 
-    lessonLengthControl.addEventListener("input", updateLengthLabel);
-    lessonLengthControl.addEventListener("change", () => {
-      settings.lessonLength = Number(lessonLengthControl.value);
+    drillLengthControl.addEventListener("input", updateLengthLabel);
+    drillLengthControl.addEventListener("change", () => {
+      settings.drillLength = Number(drillLengthControl.value);
       saveSettings();
+      currentPractice = null;
       startRound(false);
     });
-    lessonLengthControl.addEventListener("click", () => typingArea.focus({ preventScroll: true }));
+    drillLengthControl.addEventListener("click", () => typingArea.focus({ preventScroll: true }));
     typoLimitControl.addEventListener("change", commitTypoLimit);
+    get("reset-mode").addEventListener("change", (event) => {
+      settings.resetModes[settings.view] = event.target.value;
+      saveSettings();
+      updateTypoHelp();
+    });
     typoLimitControl.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
       event.preventDefault();
       if (commitTypoLimit()) typingArea.focus({ preventScroll: true });
     });
     newRound.addEventListener("click", () => startRound());
-    previousDrill.addEventListener("click", () => chooseDrill(settings.lesson - 1));
+    previousDrill.addEventListener("click", () => chooseDrill(currentArea().drills[round.drill.number - 2]?.id));
     nextDrill.addEventListener("click", () => {
-      if (round.passage) newPassage();
-      else chooseDrill(settings.lesson + 1);
+      if (round.drill) chooseDrill(currentArea().drills[round.drill.number]?.id);
+      else if (round.passage) newPassage();
+      else newPractice();
     });
-    libraryButton.addEventListener("click", () => {
-      if (libraryOpen) closeLibrary();
-      else setLibraryOpen(true);
-    });
+    courseMapButton.addEventListener("click", () => setLibraryOpen(true));
     get("open-library-side").addEventListener("click", () => setLibraryOpen(true));
     get("close-library").addEventListener("click", closeLibrary);
-    get("retry-round").addEventListener("click", () => startRound());
+    get("continue-drill").addEventListener("click", (event) => chooseDrill(event.currentTarget.dataset.drill));
+    get("result-primary").addEventListener("click", () => resultActions?.primary.run());
+    get("result-secondary").addEventListener("click", () => resultActions?.secondary?.run());
     for (const button of layoutButtons) {
       button.addEventListener("click", () => {
         settings.layout = button.dataset.layoutOption;
@@ -2047,12 +2966,25 @@
     new ResizeObserver(() => {
       document.documentElement.style.setProperty("--dock-h", `${keyboardCard.offsetHeight}px`);
     }).observe(keyboardCard);
-    get("result-alternative").addEventListener("click", () => {
-      if (round.passage) newPassage();
-      else setLibraryOpen(true);
-    });
-    get("continue-drill").addEventListener("click", (event) => chooseDrill(Number(event.currentTarget.dataset.drill)));
     typingArea.addEventListener("click", () => typingArea.focus({ preventScroll: true }));
+    typoHandling.addEventListener("change", () => {
+      settings.correction = typoHandling.value === "delete";
+      saveSettings();
+      if (!settings.correction && round.pending.length > 0) {
+        round.pending.length = 0;
+        round.lastWrong = null;
+        renderPending();
+        updateProgress();
+      }
+      renderTypoHandling();
+      renderKeyboard();
+    });
+    fingerColorButton.addEventListener("click", () => {
+      settings.fingerColors = !settings.fingerColors;
+      saveSettings();
+      renderKeyboard();
+      typingArea.focus({ preventScroll: true });
+    });
     hintButton.addEventListener("click", () => {
       settings.hints = !settings.hints;
       saveSettings();
@@ -2075,6 +3007,13 @@
     });
 
     document.addEventListener("keydown", (event) => {
+      // Option-delete and command-delete clear every waiting typo at once.
+      if (event.key === "Backspace" && (event.altKey || event.metaKey) && !event.ctrlKey && !event.defaultPrevented && !libraryOpen
+        && round.endedAt === null && round.pending.length > 0 && !event.target.closest("input, select, textarea, [contenteditable]")) {
+        event.preventDefault();
+        handleDelete(true);
+        return;
+      }
       if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
       if (settingsOpen && event.key === "Escape") {
         event.preventDefault();
@@ -2092,20 +3031,26 @@
       }
       // Space and Enter still activate a focused button, link, or summary; every other key goes to the drill.
       if (event.target.closest("button, a, summary") && (event.key === " " || event.key === "Enter")) return;
-      const advance = round.endedAt !== null && event.key === "Enter";
-      if (event.key === "Escape" || advance) {
+      if (event.key === "Escape") {
         event.preventDefault();
-        if (event.repeat) return;
-        if (advance && !round.failed && round.passage) {
-          newPassage();
-        } else if (advance && !round.failed && round.lesson && round.lesson.id < lessons.length) {
-          chooseDrill(round.lesson.id + 1);
-        } else {
-          startRound();
+        if (!event.repeat) startRound();
+        return;
+      }
+      if (round.endedAt !== null) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          if (!event.repeat) resultActions?.primary.run();
         }
         return;
       }
-      if (round.endedAt !== null || event.key.length !== 1) return;
+      if (event.key === "Backspace") {
+        if (round.pending.length > 0) {
+          event.preventDefault();
+          handleDelete(false);
+        }
+        return;
+      }
+      if (event.key.length !== 1) return;
       event.preventDefault();
       if (settingsOpen) setSettingsOpen(false);
       if (document.activeElement !== typingArea) typingArea.focus({ preventScroll: true });
