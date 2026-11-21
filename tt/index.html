@@ -769,9 +769,9 @@
               <p class="finger-guide" id="finger-guide"></p>
             </div>
             <div class="keyboard-controls">
+              <button class="switch-button" id="toggle-keyboard" type="button" role="switch" aria-checked="true" aria-controls="keyboard-figure"><span class="switch" aria-hidden="true"></span>Keyboard</button>
               <button class="switch-button" id="toggle-hints" type="button" role="switch" aria-checked="true" aria-controls="keyboard-figure"><span class="switch" aria-hidden="true"></span>Key hints</button>
               <button class="switch-button" id="toggle-finger-colors" type="button" role="switch" aria-checked="false" aria-controls="keyboard-figure"><span class="switch" aria-hidden="true"></span>Finger colors</button>
-              <button class="text-button" id="toggle-keyboard" type="button" aria-expanded="true" aria-controls="keyboard-figure">Hide keyboard</button>
             </div>
           </div>
           <figure class="keyboard-figure" id="keyboard-figure">
@@ -2534,8 +2534,7 @@
       highlighted = [];
       keyboardFigure.hidden = !settings.keyboard;
       fingerGuide.hidden = !settings.keyboard;
-      keyboardButton.setAttribute("aria-expanded", String(settings.keyboard));
-      keyboardButton.textContent = settings.keyboard ? "Hide keyboard" : "Show keyboard";
+      keyboardButton.setAttribute("aria-checked", String(settings.keyboard));
       hintButton.setAttribute("aria-checked", String(settings.hints));
       hintButton.disabled = !settings.keyboard;
       fingerColorButton.setAttribute("aria-checked", String(settings.fingerColors));
@@ -2598,6 +2597,12 @@
       if (topCount >= 2 && topEntry) {
         advice.push(`${describeKey(topKey)} tripped you up ${topCount} times. Slow down for it and use your ${fingerText(topEntry).toLowerCase()}.`);
       }
+      // In Delete to continue, each pile counts the typo plus every key typed after it before the first delete.
+      const piles = round.pileSizes;
+      const keysPastTypo = piles.length ? piles.reduce((sum, size) => sum + size - 1, 0) / piles.length : 0;
+      if (keysPastTypo >= 1.5) {
+        advice.push(`You typed about ${keysPastTypo.toFixed(1)} more keys after each typo before deleting. Stop as soon as a key feels wrong.`);
+      }
       if (share((key) => keyMap.get(key)?.shifted) >= 0.5) {
         advice.push("Most typos were shifted characters. Hold Shift with the opposite hand before you press the key.");
       }
@@ -2609,12 +2614,6 @@
       }
       if (accuracy < 90) {
         advice.push(`Accuracy was ${accuracy}%. Ease off the pace: clean keystrokes build speed faster than fixing typos.`);
-      }
-      // In Delete to continue, each pile counts the typo plus every key typed after it before the first delete.
-      const piles = round.pileSizes;
-      const keysPastTypo = piles.length ? piles.reduce((sum, size) => sum + size - 1, 0) / piles.length : 0;
-      if (keysPastTypo >= 1.5) {
-        advice.push(`You typed about ${keysPastTypo.toFixed(1)} more keys after each typo before deleting. Stop as soon as a key feels wrong.`);
       }
       if (advice.length === 0) advice.push("Take a breath and go again. Aim for a clean run over a fast one.");
       return advice.slice(0, 3);
