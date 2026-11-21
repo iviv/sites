@@ -2619,7 +2619,8 @@
       const [topKey, topCount] = [...round.misses].sort((a, b) => b[1] - a[1])[0];
       const topEntry = keyMap.get(topKey);
       if (topCount >= 2 && topEntry) {
-        advice.push(`${describeKey(topKey)} tripped you up ${topCount} times. Slow down for it and use your ${fingerText(topEntry).toLowerCase()}.`);
+        const keyLabel = topKey === " " ? "Space" : keyName(topKey);
+        advice.push(`Watch the ${keyLabel} key: ${topCount} misses. Slow down for it and use your ${fingerText(topEntry).toLowerCase()}.`);
       }
       // In Delete to continue, each pile counts the typo plus every key typed after it before the first delete.
       const piles = round.pileSizes;
@@ -2649,16 +2650,19 @@
 
     let resultActions = null;
 
+    // Clean runs get a next step to stretch for, not a generic reminder.
     function cleanRunTip() {
       return pick([
         "No typos at all. Try a longer length next time.",
         "A clean run. Turn key hints off for the next one and type from memory.",
         "Spotless. Nudge the pace up a little on the next one.",
-        ...practiceTips
+        "Clean and steady. Keep your eyes on the text instead of the keyboard guide.",
+        "No typos. Next time, read a few characters ahead as you type."
       ]);
     }
 
-    let roundsThisSession = 0;
+    // Finished attempts this session, counted separately for drills, practice rounds and passages.
+    const sessionCounts = { drill: 0, round: 0, passage: 0 };
 
     function showResults() {
       const area = currentArea();
@@ -2726,7 +2730,9 @@
       } else {
         success = true;
         title = round.passage ? "Passage complete" : "Round complete";
-        line = bestNote || (roundsThisSession > 1 ? `That's ${roundsThisSession} this session. Keep the rhythm going.` : "Keep the rhythm going with another one.");
+        const kind = round.passage ? "passage" : "round";
+        const count = sessionCounts[kind];
+        line = bestNote || (count > 1 ? `That's ${count} ${kind}s this session. Keep the rhythm going.` : "Keep the rhythm going with another one.");
         primary = round.passage ? newText : another;
         secondary = retry;
       }
@@ -2779,7 +2785,7 @@
         settings.done.push(round.drill.id);
         round.newlyDone = true;
       }
-      roundsThisSession++;
+      sessionCounts[attemptName()]++;
       saveSettings();
       if (round.drill) renderProgressCard();
       renderStats();
