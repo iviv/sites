@@ -7,7 +7,7 @@
   <meta name="description" content="Practice touch typing with 100 number-row drills, free practice, and public-domain book passages.">
   <title>Touch Typing Practice</title>
   <script>
-    // Apply saved appearance settings before first paint.
+    // Apply the saved or system theme and the saved layout before first paint.
     (() => {
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem("number-row-practice-v1")); } catch { /* Use the defaults. */ }
@@ -16,7 +16,6 @@
       document.documentElement.dataset.theme = theme;
       const layout = saved?.layout;
       document.documentElement.dataset.layout = ["sidebar", "dock", "focus"].includes(layout) ? layout : "sidebar";
-      if (saved?.festive === true) document.documentElement.dataset.festive = "thanksgiving";
     })();
   </script>
   <style>
@@ -179,45 +178,6 @@
     .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
     .shell { width: min(1176px, 100% - 64px); margin-inline: auto; }
-
-    /* Thanksgiving decorations */
-    .festive-layer, .festive-lights { display: none; position: fixed; inset: 0; pointer-events: none; }
-    [data-festive="thanksgiving"] body { isolation: isolate; }
-    [data-festive="thanksgiving"] :is(.festive-layer, .festive-lights) { display: block; }
-    .festive-layer { z-index: -1; overflow: hidden; }
-    .festive-item {
-      position: absolute; left: var(--x); top: var(--y); width: var(--size); height: var(--size);
-      transform: translate(-50%, -50%); fill: none; stroke: currentColor; stroke-width: 1.6;
-      stroke-linecap: round; stroke-linejoin: round; color: #b9682b; opacity: .32;
-    }
-    .festive-item.turkey { color: #a44b40; }
-    .festive-item.leaf { color: #a17916; }
-    .festive-item.acorn { color: #967247; }
-    [data-theme="dark"] .festive-item { opacity: .48; }
-    .festive-item.falls { --travel-y: 120px; }
-    .festive-lights { z-index: 1; }
-    .light-strip {
-      position: absolute; display: flex; align-items: center; justify-content: space-around;
-      border-color: rgb(153 103 59 / 35%); border-style: solid; border-width: 0;
-    }
-    .light-strip.top { inset: 2px 12% auto; height: 4px; border-top-width: 1px; }
-    .light-strip.side { inset-block: 15%; width: 4px; flex-direction: column; }
-    .light-strip.left { left: 2px; border-left-width: 1px; }
-    .light-strip.right { right: 2px; border-right-width: 1px; }
-    .light-strip i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 7px currentColor; color: #d48925; }
-    .light-strip i:nth-child(2) { color: #bc5645; }
-    .light-strip i:nth-child(3) { color: #dda934; }
-    .festive-button .icon { stroke-width: 4; }
-
-    @media (prefers-reduced-motion: no-preference) {
-      .festive-item { animation: festive-drift var(--dur) var(--delay) ease-in-out infinite alternate; }
-    }
-    @keyframes festive-drift {
-      from { transform: translate(-50%, -50%); }
-      to {
-        transform: translate(calc(-50% + var(--drift)), calc(-50% + var(--travel-y, -90px))) rotate(var(--spin));
-      }
-    }
 
     /* Top bar */
     .topbar { background: var(--topbar); border-bottom: 1px solid var(--line); }
@@ -688,10 +648,6 @@
     <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4L10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
-    <symbol id="i-pumpkin" viewBox="0 0 64 64"><path d="M32 19c-3.5-1.6-7.6-1.4-10.8.6C13.4 17.5 6 24.6 6 36.5S13.4 55.5 21.2 53.4c3.2 2 7.3 2.2 10.8.6 3.5 1.6 7.6 1.4 10.8-.6C50.6 55.5 58 48.4 58 36.5S50.6 17.5 42.8 19.6c-3.2-2-7.3-2.2-10.8-.6z"/><path d="M21.2 19.6c-3.4 4.6-5.2 10.4-5.2 16.9s1.8 12.3 5.2 16.9M42.8 19.6c3.4 4.6 5.2 10.4 5.2 16.9s-1.8 12.3-5.2 16.9M32 19v35"/><path d="M32 19c-.4-4.6 1.4-8.6 5-11"/><path d="M36 11c3.5-3.2 8.6-3.4 12.2-.6-3.8 2.6-8.6 2.8-12.2.6z"/></symbol>
-    <symbol id="i-turkey" viewBox="0 0 64 64"><path d="M12 42C12 25 22 13 37 13s25 12 25 29"/><path d="M37 13v17M25 17l7 14M49 17l-7 14M16 28l13 8M58 28l-13 8"/><ellipse cx="37" cy="43" rx="11" ry="10"/><path d="M28 37c-5-3-7-8-5-12 1.4-2.6 4.6-3 6.2-.8"/><circle cx="25.5" cy="24" r="2.8"/><path d="M22.8 23.6l-3.6 1.2 3.4 1.4M23.6 26.6c-1 2.2-.4 4.2 1 5"/><path d="M34 53v6M40 53v6M31.5 59h5M37.5 59h5"/></symbol>
-    <symbol id="i-leaf" viewBox="0 0 64 64"><path d="M32 5l4.5 10.5 7.5-4-2 12.5 9.5-3.5-3 8.5 7.5 2.5-12.5 9.5 2 5.5-10.5-2.2L34 57h-4l-1.5-12.7-10.5 2.2 2-5.5L7.5 31.5 15 29l-3-8.5 9.5 3.5-2-12.5 7.5 4z"/><path d="M32 57v4"/></symbol>
-    <symbol id="i-acorn" viewBox="0 0 64 64"><path d="M18 28h28c0-8.3-6.3-14-14-14s-14 5.7-14 14z"/><path d="M20.5 28c.5 13 4.8 21.8 11.5 26 6.7-4.2 11-13 11.5-26"/><path d="M32 14V8M24 20l6 5M34 18l7 6"/></symbol>
     <symbol id="i-layout-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
     <symbol id="i-layout-dock" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/></symbol>
     <symbol id="i-layout-focus" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M16 4v16"/></symbol>
@@ -711,29 +667,6 @@
     <symbol id="i-volume-down" viewBox="0 0 24 24"><path d="M3.5 9.5h3.2L11 6v12l-4.3-3.5H3.5z" fill="currentColor" stroke="none"/><path d="M14.8 9.4a3.7 3.7 0 0 1 0 5.2"/></symbol>
     <symbol id="i-volume-up" viewBox="0 0 24 24"><path d="M3.5 9.5h3.2L11 6v12l-4.3-3.5H3.5z" fill="currentColor" stroke="none"/><path d="M14.8 9.4a3.7 3.7 0 0 1 0 5.2M17.4 7a7.1 7.1 0 0 1 0 10M20 4.6a10.5 10.5 0 0 1 0 14.8"/></symbol>
   </svg>
-
-  <!-- Thanksgiving theme: outline shapes drifting behind the page, and string lights along the top and sides -->
-  <div class="festive-layer" aria-hidden="true">
-    <svg class="festive-item pumpkin" style="--x: 3%; --y: 20vh; --size: 84px; --dur: 52s; --delay: -8s; --drift: 50px; --spin: 320deg"><use href="#i-pumpkin"></use></svg>
-    <svg class="festive-item turkey" style="--x: 10%; --y: 70vh; --size: 96px; --dur: 64s; --delay: -30s; --drift: -40px; --spin: -200deg"><use href="#i-turkey"></use></svg>
-    <svg class="festive-item leaf falls" style="--x: 18%; --y: 35vh; --size: 44px; --dur: 34s; --delay: -12s; --drift: 70px; --spin: 540deg"><use href="#i-leaf"></use></svg>
-    <svg class="festive-item acorn" style="--x: 27%; --y: 82vh; --size: 46px; --dur: 48s; --delay: -20s; --drift: 30px; --spin: 260deg"><use href="#i-acorn"></use></svg>
-    <svg class="festive-item pumpkin" style="--x: 36%; --y: 55vh; --size: 64px; --dur: 58s; --delay: -44s; --drift: -60px; --spin: -300deg"><use href="#i-pumpkin"></use></svg>
-    <svg class="festive-item leaf falls" style="--x: 45%; --y: 15vh; --size: 38px; --dur: 30s; --delay: -4s; --drift: -60px; --spin: -480deg"><use href="#i-leaf"></use></svg>
-    <svg class="festive-item turkey" style="--x: 55%; --y: 40vh; --size: 88px; --dur: 70s; --delay: -12s; --drift: 50px; --spin: 240deg"><use href="#i-turkey"></use></svg>
-    <svg class="festive-item leaf falls" style="--x: 60%; --y: 5vh; --size: 36px; --dur: 32s; --delay: -28s; --drift: 50px; --spin: 460deg"><use href="#i-leaf"></use></svg>
-    <svg class="festive-item pumpkin" style="--x: 64%; --y: 78vh; --size: 72px; --dur: 50s; --delay: -26s; --drift: 40px; --spin: 360deg"><use href="#i-pumpkin"></use></svg>
-    <svg class="festive-item leaf falls" style="--x: 71%; --y: 50vh; --size: 48px; --dur: 38s; --delay: -22s; --drift: 60px; --spin: 600deg"><use href="#i-leaf"></use></svg>
-    <svg class="festive-item acorn" style="--x: 79%; --y: 25vh; --size: 40px; --dur: 44s; --delay: -36s; --drift: -30px; --spin: -280deg"><use href="#i-acorn"></use></svg>
-    <svg class="festive-item pumpkin" style="--x: 86%; --y: 62vh; --size: 90px; --dur: 62s; --delay: -50s; --drift: -50px; --spin: -260deg"><use href="#i-pumpkin"></use></svg>
-    <svg class="festive-item leaf falls" style="--x: 93%; --y: 30vh; --size: 42px; --dur: 36s; --delay: -16s; --drift: -70px; --spin: -520deg"><use href="#i-leaf"></use></svg>
-    <svg class="festive-item turkey" style="--x: 1%; --y: 88vh; --size: 80px; --dur: 66s; --delay: -56s; --drift: 40px; --spin: 220deg"><use href="#i-turkey"></use></svg>
-  </div>
-  <div class="festive-lights" aria-hidden="true">
-    <div class="light-strip top"><i></i><i></i><i></i></div>
-    <div class="light-strip side left"><i></i><i></i><i></i></div>
-    <div class="light-strip side right"><i></i><i></i><i></i></div>
-  </div>
 
   <header class="topbar">
     <div class="shell topbar-inner">
@@ -758,7 +691,6 @@
           <button class="segment" type="button" data-layout-option="focus" aria-pressed="false" title="Layout C · focus column" aria-label="Layout C, focus column"><svg class="icon" aria-hidden="true"><use href="#i-layout-focus"></use></svg>C</button>
         </div>
         <button class="button settings-button" id="toggle-settings" type="button" aria-expanded="false" aria-controls="sidebar"><svg class="icon" aria-hidden="true"><use href="#i-sliders"></use></svg>Settings</button>
-        <button class="button icon-button festive-button" id="toggle-festive" type="button" aria-pressed="false" aria-label="Thanksgiving theme" title="Turn on the Thanksgiving theme"><svg class="icon" aria-hidden="true"><use href="#i-leaf"></use></svg></button>
         <button class="button icon-button" id="toggle-theme" type="button" aria-label="Switch to dark theme">
           <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"></use></svg>
           <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"></use></svg>
@@ -1120,7 +1052,6 @@
     const typoHandlingButtons = [...document.querySelectorAll("[data-typo-handling]")];
     const keyboardButton = get("toggle-keyboard");
     const themeButton = get("toggle-theme");
-    const festiveButton = get("toggle-festive");
     const themeColor = document.querySelector('meta[name="theme-color"]');
     const fingerGuide = get("finger-guide");
     const emptyMisses = get("empty-misses");
@@ -1825,7 +1756,7 @@
     const settings = {
       version: 4, focus: "number", view: "course", drills: {}, drillLength: 180, done: [],
       resetModes: { course: "pass", practice: "streak", text: "off" }, typoLimit: 5,
-      practice: {}, textSource: {}, passageLength: "medium", hints: true, fingerColors: false, correction: false, keyboard: true, theme: null, festive: false, layout: "sidebar", keyStats: {}, best: {}
+      practice: {}, textSource: {}, passageLength: "medium", hints: true, fingerColors: false, correction: false, keyboard: true, theme: null, layout: "sidebar", keyStats: {}, best: {}
     };
     const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -1875,7 +1806,6 @@
     if (typeof saved?.correction === "boolean") settings.correction = saved.correction;
     if (typeof saved?.keyboard === "boolean") settings.keyboard = saved.keyboard;
     if (saved?.theme === "light" || saved?.theme === "dark") settings.theme = saved.theme;
-    settings.festive = saved?.festive === true;
     if (layouts.includes(saved?.layout)) settings.layout = saved.layout;
     // Personal bests: the best wpm and accuracy reached per drill, per practice type, and per focus for text.
     if (isPlainObject(saved?.best)) {
@@ -1919,14 +1849,6 @@
       const label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
       themeButton.setAttribute("aria-label", label);
       themeButton.title = label;
-    }
-
-    function applyFestiveTheme() {
-      const { dataset } = document.documentElement;
-      if (settings.festive) dataset.festive = "thanksgiving";
-      else delete dataset.festive;
-      festiveButton.setAttribute("aria-pressed", String(settings.festive));
-      festiveButton.title = `Turn ${settings.festive ? "off" : "on"} the Thanksgiving theme`;
     }
 
     let settingsOpen = false;
@@ -3207,11 +3129,6 @@
       saveSettings();
       applyTheme();
     });
-    festiveButton.addEventListener("click", () => {
-      settings.festive = !settings.festive;
-      saveSettings();
-      applyFestiveTheme();
-    });
     darkScheme.addEventListener("change", () => {
       if (settings.theme === null) applyTheme();
     });
@@ -3274,7 +3191,6 @@
     });
 
     applyTheme();
-    applyFestiveTheme();
     applyLayout();
     startRound(false);
     showPracticeTip();
