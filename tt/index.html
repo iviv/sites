@@ -3,442 +3,810 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f7fb">
+  <meta name="theme-color" content="#ffffff">
   <meta name="description" content="Practice touch typing with 100 number-row drills, free practice, and public-domain book passages.">
   <title>Touch Typing Practice</title>
+  <script>
+    // Apply the saved or system theme and the saved layout before first paint.
+    (() => {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem("number-row-practice-v1")); } catch { /* Use the defaults. */ }
+      let theme = saved?.theme;
+      if (theme !== "light" && theme !== "dark") theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = theme;
+      const layout = saved?.layout;
+      document.documentElement.dataset.layout = ["sidebar", "dock", "focus"].includes(layout) ? layout : "sidebar";
+    })();
+  </script>
   <style>
     :root {
       color-scheme: light;
-      --background: #f7f7fb;
-      --surface: #fff;
-      --text: #211e33;
-      --muted: #615d74;
-      --line: #e7e5ef;
-      --accent: #563acb;
-      --accent-light: #eee9ff;
-      --danger: #a1274a;
-      --radius: 18px;
-      font: 100%/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: var(--text);
-      background: var(--background);
+      --sans: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      --bg: #f6f5f9;
+      --topbar: #ffffff;
+      --surface: #ffffff;
+      --surface-2: #fafafc;
+      --surface-3: #efedf4;
+      --ink: #17151f;
+      --ink-2: #3a3747;
+      --muted: #67637a;
+      --muted-2: #6e6a80;
+      --typed: #77738a;
+      --line: #e7e5ee;
+      --line-2: #eeecf3;
+      --control-bg: #ffffff;
+      --control-line: #e1deea;
+      --control-line-hover: #cfcbdb;
+      --hover: #f1eff6;
+      --input-bg: #ffffff;
+      --track: #eeecf3;
+      --accent: #5536d6;
+      --accent-hover: #4a2dc4;
+      --accent-text: #5536d6;
+      --accent-ink: #4327b8;
+      --accent-soft: #eeeafe;
+      --accent-soft-line: #d9d0fb;
+      --accent-ring: #dcd3ff;
+      --accent-shadow: #3b22a8;
+      --on-accent: #ffffff;
+      --focus-line: #cfc4fa;
+      --focus-ring: rgb(85 54 214 / 10%);
+      --segment-ink: #5c5870;
+      --segment-active-bg: #ffffff;
+      --segment-active-line: #e1deea;
+      --segment-shadow: 0 1px 2px rgb(23 21 31 / 6%);
+      --wpm-bg: #f5f2ff;
+      --success: #12795a;
+      --danger: #b3264f;
+      --danger-soft: #fbe8ee;
+      --danger-line: #f3cbd8;
+      --danger-strong: #e0608e;
+      --switch-off: #79758b;
+      --switch-knob: #ffffff;
+      --card-shadow: 0 1px 2px rgb(23 21 31 / 4%), 0 10px 30px rgb(23 21 31 / 5%);
+      --dock-bg: #ffffff;
+
+      --kbd-tray: #e6e5ec;
+      --kbd-tray-line: #dad8e4;
+      --key-bg: #2c2d3e;
+      --key-number-bg: #443d59;
+      --key-shadow: #17171f;
+      --key-ink: #f6f4ff;
+      --key-muted: #c9c6d9;
+      --key-upper: #cdc7e0;
+      --key-target-bg: #cbbaff;
+      --key-target-ink: #25164e;
+      --key-target-shadow: #a58af1;
+      --key-target-upper: #38255e;
+      --key-hint-bg: #3e3566;
+      --key-hint-line: #cbbaff;
+      --key-hint-ink: #ede8ff;
+      --key-missed-bg: #ffb9cd;
+      --key-missed-ink: #55142a;
+      --key-missed-shadow: #d7839b;
+      --f-pinky: #f07aa3;
+      --f-ring: #f0b550;
+      --f-middle: #45b8a8;
+      --f-index-left: #5b7cf0;
+      --f-index-right: #4fb6f2;
+      --f-thumb: #8c889f;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f0e14;
+      --topbar: #15141c;
+      --surface: #18171f;
+      --surface-2: #1b1a23;
+      --surface-3: #1d1c25;
+      --ink: #eeedf5;
+      --ink-2: #cfccdc;
+      --muted: #a3a0b5;
+      --muted-2: #8f8ba3;
+      --typed: #85819a;
+      --line: #2a2834;
+      --line-2: #24222d;
+      --control-bg: #1d1c25;
+      --control-line: #2f2d3a;
+      --control-line-hover: #3d3a4a;
+      --hover: #22212b;
+      --input-bg: #121118;
+      --track: #24222d;
+      --accent: #a08fff;
+      --accent-hover: #b0a2ff;
+      --accent-text: #b7aaff;
+      --accent-ink: #d3cbff;
+      --accent-soft: #262046;
+      --accent-soft-line: #3b3370;
+      --accent-ring: #3b3370;
+      --accent-shadow: #7c69e8;
+      --on-accent: #140f2e;
+      --focus-line: #3b3370;
+      --focus-ring: rgb(160 143 255 / 12%);
+      --segment-ink: #a3a0b5;
+      --segment-active-bg: #2a2834;
+      --segment-active-line: #34323f;
+      --segment-shadow: none;
+      --wpm-bg: #1e1a33;
+      --success: #5fd3a6;
+      --danger: #ff9dba;
+      --danger-soft: #3a1824;
+      --danger-line: #5a2438;
+      --danger-strong: #ff6f9a;
+      --switch-off: #4a4757;
+      --switch-knob: #cfccdc;
+      --card-shadow: 0 10px 30px rgb(0 0 0 / 25%);
+      --dock-bg: #121118;
+
+      --kbd-tray: #0c0b10;
+      --kbd-tray-line: #22202a;
+      --key-bg: #27262f;
+      --key-number-bg: #332e46;
+      --key-shadow: #050407;
+      --key-ink: #eeedf5;
+      --key-muted: #b3b0c4;
+      --key-upper: #aaa6bf;
+      --key-target-bg: #a08fff;
+      --key-target-ink: #140f2e;
+      --key-target-shadow: #7c69e8;
+      --key-target-upper: #2e2463;
+      --key-hint-bg: #2e2752;
+      --key-hint-line: #a08fff;
+      --key-hint-ink: #e3dcff;
+      --f-thumb: #7d7990;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; }
-    h1, h2, p, figure, dl, dd { margin: 0; }
-    button, select { font: inherit; }
-    button { cursor: pointer; }
-    button:disabled { cursor: default; opacity: .55; }
-    button, select { touch-action: manipulation; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    html { background: var(--bg); }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+    h1, h2, p, figure { margin: 0; }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; touch-action: manipulation; }
+    button:disabled { cursor: default; opacity: .45; }
+    kbd, samp, output { font: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     [hidden] { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .mono { font-family: var(--mono); }
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-    .shell { width: min(1100px, calc(100% - 48px)); margin-inline: auto; }
-    .topbar { background: var(--surface); border-bottom: 1px solid var(--line); }
-    .topbar .shell { display: flex; align-items: center; min-height: 64px; }
-    .brand { display: flex; align-items: center; gap: 10px; }
-    .brand { font-size: .95rem; font-weight: 700; white-space: nowrap; }
-    .brand-mark {
-      display: grid;
-      place-items: center;
-      width: 34px;
-      height: 34px;
-      border-radius: 10px;
-      background: var(--accent);
-      color: white;
-      font: 700 .82rem ui-monospace, Menlo, monospace;
-      box-shadow: inset 0 -3px 0 #4126a7;
-    }
+    .shell { width: min(1176px, 100% - 64px); margin-inline: auto; }
 
-    main.shell { padding-block: 38px 48px; }
-    .intro { margin-bottom: 25px; }
-    h1 { font-size: clamp(2.15rem, 5vw, 3.35rem); line-height: 1.06; letter-spacing: -.065em; font-weight: 760; }
-    .intro p { margin-top: 12px; color: var(--muted); }
-    .dashboard { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 18px; align-items: start; }
-    .main-column, .side-column { display: grid; gap: 18px; min-width: 0; }
-    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 2px 6px #28203c06; }
-    .panel-heading { font-size: 1rem; font-weight: 720; letter-spacing: -.015em; }
-    .practice { padding: 20px; }
-    .toolbar, .round-footer, .keyboard-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .workspace-toolbar { flex-wrap: wrap; margin-bottom: 15px; }
-    .modes { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 10px; background: #f1eff6; }
-    .mode, .action, .length, .text-button {
-      border: 1px solid transparent;
-      border-radius: 8px;
-      color: var(--muted);
-      background: transparent;
-      font-size: .875rem;
-      font-weight: 660;
-      line-height: 1.25;
-    }
-    .mode { padding: 8px 12px; white-space: nowrap; }
-    .mode:hover, .text-button:hover:not(:disabled) { color: var(--accent); }
-    .mode[aria-pressed="true"] { background: var(--surface); border-color: var(--line); color: var(--accent); box-shadow: 0 1px 2px #28203c12; }
-    .length-control { position: relative; }
-    .length-control::after {
-      content: "";
-      position: absolute;
-      right: 13px;
-      top: calc(50% - 5px);
-      width: 6px;
-      height: 6px;
-      border: solid var(--muted);
-      border-width: 0 1.5px 1.5px 0;
-      transform: rotate(45deg);
-      pointer-events: none;
-    }
-    .length { appearance: none; border-color: var(--line); background: white; padding: 9px 29px 9px 11px; }
-    .mode-description { color: var(--muted); font-size: .875rem; margin: 12px 0 10px; }
+    /* Top bar */
+    .topbar { background: var(--topbar); border-bottom: 1px solid var(--line); }
+    .topbar-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-block: 10px; }
+    .brand { flex: 1 1 180px; display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+    .brand-mark { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font: 700 14px var(--mono); box-shadow: inset 0 -3px 0 var(--accent-shadow); }
+    .topbar-actions { flex: 1 1 180px; display: flex; justify-content: flex-end; gap: 8px; }
 
-    .browse-button { border-color: var(--line); padding: 8px 10px; }
-    .browse-button[aria-expanded="true"] { color: var(--accent); background: var(--accent-light); border-color: transparent; }
-    .lesson-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; }
-    .lesson-location { display: flex; flex-wrap: wrap; gap: 2px 9px; margin-bottom: 3px; font-size: .875rem; color: var(--muted); }
-    .lesson-title { font-size: 1.3rem; line-height: 1.25; letter-spacing: -.035em; }
-    .passage-source { color: var(--accent); text-underline-offset: 2px; }
-    .lesson-options { width: min(100%, 205px); }
-    .passage-lengths .mode { flex: 1; padding: 5px 4px; }
-    .passage-range { display: block; margin-top: 2px; font-size: .75rem; font-weight: 500; }
-    .lesson-length-caption { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .875rem; }
-    .lesson-length-caption output { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
-    .lesson-options input[type="range"] { display: block; width: 100%; height: 1.4rem; margin: 0; accent-color: var(--accent); cursor: pointer; }
-    .typo-limit { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 5px; color: var(--muted); font-size: .875rem; white-space: nowrap; }
-    .typo-limit input { width: 3.25rem; min-width: 0; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
-    .typo-limit input:invalid { border-color: var(--danger); }
-    .drill-catalog { padding: 9px 12px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 12px; background: #faf9fc; }
-    .catalog-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; padding-block: 3px 6px; }
-    .catalog-progress { color: var(--muted); font-size: .8125rem; }
-    .drill-section { border-top: 1px solid var(--line); }
-    .drill-section summary { padding-block: 8px; color: var(--text); font-size: .875rem; font-weight: 670; cursor: pointer; }
-    .drill-section summary::marker { color: var(--accent); }
-    .section-range { float: right; margin-left: 8px; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
-    .drill-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(min(100%, 125px), 1fr));
-      gap: 6px;
-      max-height: 194px;
-      overflow: auto;
-      padding: 4px 4px 9px;
+    /* Controls */
+    .button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 44px; padding: 0 16px;
+      border: 1px solid var(--control-line); border-radius: 11px;
+      background: var(--control-bg); color: var(--ink-2);
+      font-size: 14px; font-weight: 600; line-height: 1.2; white-space: nowrap;
     }
-    .drill-option {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      min-width: 0;
-      padding: 6px 7px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: var(--surface);
-      color: var(--text);
-      text-align: left;
-    }
-    .drill-option:hover, .drill-option[aria-current="step"] { border-color: #c9b9f9; background: var(--accent-light); }
-    .drill-option-number { flex: none; color: var(--muted); font: 600 .75rem ui-monospace, Menlo, Consolas, monospace; }
-    .drill-option samp { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 .875rem ui-monospace, Menlo, Consolas, monospace; }
-    .drill-done { margin-left: auto; color: #18704f; font-size: .875rem; }
+    .button:hover:not(:disabled) { border-color: var(--control-line-hover); color: var(--ink); }
+    .button .icon { width: 17px; height: 17px; }
+    .button.ghost { border-color: transparent; background: transparent; }
+    .button.ghost:hover:not(:disabled) { background: var(--hover); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); box-shadow: 0 1px 0 var(--accent-shadow); }
+    .button.primary:hover:not(:disabled) { border-color: var(--accent-hover); background: var(--accent-hover); color: var(--on-accent); }
+    .button[aria-pressed="true"] { border-color: var(--accent-soft-line); background: var(--accent-soft); color: var(--accent-ink); }
+    .button.full { width: 100%; }
+    .icon-button { width: 44px; padding: 0; }
+    :root[data-theme="dark"] .icon-moon, :root:not([data-theme="dark"]) .icon-sun { display: none; }
+    #next-drill .icon-shuffle, #next-drill.is-passage .icon-next { display: none; }
+    #next-drill.is-passage .icon-shuffle { display: block; }
+    .text-button { min-height: 44px; padding: 0 10px; border: 0; background: transparent; color: var(--accent-text); font-size: 14px; font-weight: 600; }
+    .text-button:hover { color: var(--accent-ink); }
 
-    .typing-area {
-      padding: 19px 19px 14px;
-      border: 1px solid #e6dff9;
-      border-radius: 13px;
-      background: #f8f5ff;
-      cursor: text;
+    .segmented { display: flex; gap: 4px; padding: 4px; border-radius: 13px; background: var(--surface-3); }
+    .segment {
+      flex: 1; min-width: 0; min-height: 44px; padding: 0 16px;
+      border: 1px solid transparent; border-radius: 10px; background: transparent;
+      color: var(--segment-ink); font-size: 14px; font-weight: 600; line-height: 1.25; white-space: nowrap;
     }
-    .typing-area:focus-visible { outline-offset: 2px; }
+    .segment:hover { color: var(--ink); }
+    .segment[aria-pressed="true"] { border-color: var(--segment-active-line); background: var(--segment-active-bg); color: var(--accent-ink); box-shadow: var(--segment-shadow); }
+    .segment small { display: block; font: 500 11.5px/1.3 var(--mono); color: var(--muted-2); }
+    .segment[aria-pressed="true"] small { color: var(--accent-text); }
+    .view-switch .segment { flex: none; padding: 0 18px; }
+    .side-card .segment { padding: 0 6px; }
+    .passage-lengths .segment { min-height: 52px; }
+
+    /* Layout */
+    main.shell { padding-block: 32px 56px; }
+    .workspace { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
+    .main-column { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+    .sidebar { flex: 1 1 300px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); align-items: start; gap: 16px; }
+
+    .page-heading { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .page-heading-text { min-width: 0; }
+    .eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+    .source-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-text); text-underline-offset: 3px; }
+    .source-link:hover { color: var(--accent-ink); }
+    .source-link .icon { width: 13px; height: 13px; stroke-width: 2; }
+    .page-title { margin-top: 4px; font-size: clamp(1.75rem, 3vw, 2.125rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.15; }
+    .page-description { margin-top: 6px; color: var(--muted); }
+    .heading-actions { display: flex; gap: 8px; }
+
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+    .card-title { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+    .card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .card-meta { font-size: 12.5px; color: var(--muted-2); }
+
+    /* Typing card */
+    .practice { overflow: hidden; box-shadow: var(--card-shadow); transition: border-color .15s, box-shadow .15s; }
+    .practice:has(.typing-area:focus) { border-color: var(--focus-line); box-shadow: 0 0 0 3px var(--focus-ring), var(--card-shadow); }
+    .stats-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); margin: 0; border-bottom: 1px solid var(--line-2); }
+    .stat { min-width: 0; padding: 14px 22px; }
+    .stat:not([hidden]) ~ .stat { border-left: 1px solid var(--line-2); }
+    .stat dt { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+    .stat dd { margin: 2px 0 0; font: 600 22px/1.3 var(--mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .stat-wpm { background: var(--wpm-bg); }
+    .stat-wpm dt { color: var(--accent-text); }
+    .stat-wpm dd { color: var(--accent-ink); }
+
+    .typing-area { padding: clamp(20px, 3.4vw, 40px) clamp(18px, 3.4vw, 40px) 24px; cursor: text; }
+    .typing-area:focus { outline: none; }
     .prompt {
-      display: flex;
-      flex-wrap: wrap;
-      align-content: center;
-      min-height: 112px;
-      margin-bottom: 14px;
-      font: 600 clamp(1.45rem, 4vw, 2.05rem)/1.55 ui-monospace, Menlo, Consolas, monospace;
-      font-variant-ligatures: none;
-      user-select: none;
+      display: flex; flex-wrap: wrap; justify-content: center; align-content: center; row-gap: 10px;
+      min-height: 150px; margin-bottom: 24px;
+      font: 500 clamp(1.6rem, 3.6vw, 2.5rem)/1.45 var(--mono);
+      font-variant-ligatures: none; user-select: none;
     }
-    .prompt.short {
-      justify-content: center;
-      min-height: 76px;
-      margin-bottom: 9px;
-      font-size: clamp(1.4rem, 7vw, 2.8rem);
+    .prompt.grouped { column-gap: .7em; }
+    .prompt.short { min-height: 110px; font-size: clamp(1.9rem, 6vw, 3.4rem); }
+    .prompt.long {
+      justify-content: flex-start; align-content: flex-start; min-height: 0; max-height: clamp(8.5rem, 27vh, 12.5rem);
+      overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+      font-size: clamp(1.3rem, 2.4vw, 1.75rem);
     }
     .prompt.prose {
-      display: block;
-      min-height: 0;
-      max-height: clamp(10rem, 35vh, 21rem);
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      scrollbar-gutter: stable;
-      padding-inline-end: 7px;
-      font-size: clamp(1.02rem, 2.2vw, 1.25rem);
-      font-weight: 500;
-      line-height: 1.8;
+      display: block; min-height: 0; max-height: clamp(12rem, 42vh, 26rem); overflow-y: auto;
+      overscroll-behavior: contain; scrollbar-gutter: stable; padding-inline-end: 6px;
+      font-size: clamp(1rem, 1.6vw, 1.3rem); font-weight: 450; line-height: 1.85;
     }
     .chunk { display: inline-flex; white-space: pre; }
     .prompt.prose .chunk { max-width: 100%; flex-wrap: wrap; }
-    .character { display: inline-block; width: 1.05ch; text-align: center; }
-    .prompt.prose .character { width: 1ch; }
-    .prompt.short .character { width: 1.38ch; }
+    .character { display: inline-block; width: 1.25ch; text-align: center; border-radius: 8px; }
+    .prompt.prose .character { width: 1ch; border-radius: 4px; }
+    .prompt.short .character { width: 1.4ch; }
     .character.space { position: relative; width: .85ch; }
     .character.space::before { content: "·"; position: absolute; inset: 0; visibility: hidden; }
     .character.space.current::before, .chunk:last-child .character.space:last-child::before { visibility: visible; }
-    .character.done { color: #69617d; }
-    .character.current { color: #4628ac; background: #e8dfff; border-radius: 5px; box-shadow: inset 0 -3px 0 var(--accent); }
-    .character.current.wrong { color: var(--danger); background: #f9dee6; box-shadow: inset 0 -3px 0 var(--danger); }
-    .progress-row { display: flex; align-items: center; gap: 12px; }
-    progress { flex: 1; min-width: 0; height: 5px; appearance: none; border: 0; border-radius: 5px; background: #e6dff4; color: var(--accent); overflow: hidden; }
-    progress::-webkit-progress-bar { background: #e6dff4; border-radius: 5px; }
-    progress::-webkit-progress-value { background: var(--accent); border-radius: 5px; }
-    progress::-moz-progress-bar { background: var(--accent); border-radius: 5px; }
-    .counter { min-width: 4.2em; color: var(--muted); text-align: right; font-size: .8125rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .wpm-counter { padding-inline-start: 10px; border-inline-start: 1px solid #e6dff4; }
-    .wpm-counter strong { color: var(--accent); }
+    .character.done { color: var(--typed); }
+    .character.current { color: var(--accent-ink); background: var(--accent-soft); box-shadow: inset 0 -3px 0 var(--accent); }
+    .character.current.wrong { color: var(--danger); background: var(--danger-soft); box-shadow: inset 0 -3px 0 var(--danger-strong); }
 
-    .round-footer { margin-top: 15px; flex-wrap: wrap; }
-    .round-footer .status { flex: 1 1 200px; }
-    .round-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .round-actions .text-button { padding: 8px 6px; }
-    .round-actions .reset-button { padding-inline: 9px; border-color: var(--line); }
-    .reset-button:hover { background: #f8f7fb; }
-    .status { color: var(--muted); font-size: .875rem; }
+    .progress-row { display: flex; align-items: center; gap: 14px; }
+    progress { flex: 1; min-width: 0; height: 6px; appearance: none; border: 0; border-radius: 6px; background: var(--track); color: var(--accent); overflow: hidden; }
+    progress::-webkit-progress-bar { background: var(--track); border-radius: 6px; }
+    progress::-webkit-progress-value { background: var(--accent); border-radius: 6px; }
+    progress::-moz-progress-bar { background: var(--accent); border-radius: 6px; }
+    .counter { font: 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    .card-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding: 10px 14px 10px 22px; border-top: 1px solid var(--line-2); background: var(--surface-2); }
+    .status { flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+    .status::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-2); }
+    .status.active::before { background: var(--accent); }
     .status.error { color: var(--danger); }
-    .status.complete { color: #18704f; font-weight: 690; }
-    .practice-tip { display: flex; align-items: center; gap: 8px; min-height: 3.375rem; margin-top: 12px; padding: 6px 10px; border-radius: 9px; background: #f8f7fb; color: var(--muted); font-size: .875rem; }
-    .practice-tip strong { flex: none; color: var(--accent); }
-    .action { flex-shrink: 0; padding: 9px 11px; color: var(--accent); border-color: #ded4fd; background: #f6f2ff; }
-    .action:hover { background: var(--accent-light); }
-    .action.primary { color: white; border-color: var(--accent); background: var(--accent); }
-    .action.primary:hover { background: #4628ac; }
+    .status.error::before { background: var(--danger-strong); }
+    .status.complete { color: var(--success); font-weight: 650; }
+    .status.complete::before { background: var(--success); }
+    .footer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+    .shortcuts { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+    .shortcuts kbd { padding: 2px 7px; border: 1px solid var(--control-line); border-bottom-width: 2px; border-radius: 6px; background: var(--control-bg); color: var(--ink-2); font: 12px var(--sans); }
+    .shortcut-gap { width: 10px; }
 
-    .keyboard-panel { padding: 17px 20px 16px; }
-    .keyboard-header { flex-wrap: wrap; }
-    .keyboard-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
-    .text-button { padding: 5px 2px; }
-    .hint-button { display: inline-flex; align-items: center; gap: 7px; }
-    .switch { position: relative; width: 27px; height: 16px; background: #79758b; border-radius: 10px; }
-    .switch::before { content: ""; position: absolute; inset: 3px auto 3px 3px; width: 10px; background: white; border-radius: 50%; }
-    .hint-button[aria-checked="true"] .switch { background: var(--accent); }
-    .hint-button[aria-checked="true"] .switch::before { transform: translateX(11px); }
+    /* Results after auto-reset */
+    .result-banner { padding: clamp(20px, 3vw, 32px) clamp(18px, 3.4vw, 40px); }
+    .result-head { display: flex; align-items: flex-start; gap: 14px; }
+    .result-badge { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); }
+    .result-badge .icon { width: 20px; height: 20px; }
+    .result-title { font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
+    .result-subtitle { margin-top: 2px; font-size: 14px; color: var(--muted); }
+    .result-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 20px 0 0; }
+    .result-stats div { min-width: 0; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
+    .result-stats dt { font-size: 12.5px; color: var(--muted); }
+    .result-stats dd { margin: 2px 0 0; font: 600 20px/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+    .result-stats small { margin-left: 6px; font: 500 12px var(--sans); color: var(--muted); }
+    .result-watch { margin-top: 20px; }
+    .result-label { margin-bottom: 10px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
+    .result-keys { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .result-keys li { display: inline-flex; align-items: center; gap: 10px; padding: 5px 12px 5px 5px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
+    .result-keys kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 7px; border: 1px solid var(--danger-line); border-radius: 8px; background: var(--danger-soft); color: var(--danger); font: 600 14px var(--mono); }
+    .result-keys .count { color: var(--muted); font-family: var(--mono); }
+    .result-advice { display: grid; gap: 6px; margin: 12px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); }
+    .result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .result-actions kbd { padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, currentColor 18%, transparent); font: 500 11.5px var(--sans); }
 
-    .keyboard-figure { margin-top: 12px; }
+    /* Keyboard */
+    .keyboard-card { padding: 18px 24px 22px; }
+    .keyboard-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; }
+    .keyboard-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-width: 0; }
+    .finger-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; color: var(--muted); }
+    .finger-guide strong { color: var(--ink); font-weight: 600; }
+    .guide-key { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 7px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font: 600 15px var(--mono); }
+    .wrong-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 9px; border-radius: 20px; background: var(--danger-soft); color: var(--danger); font-size: 13px; }
+    .wrong-chip kbd { font: 600 13px var(--mono); }
+    .keyboard-controls { display: flex; align-items: center; gap: 6px; }
+    .switch-button { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border: 0; background: transparent; color: var(--ink-2); font-size: 14px; font-weight: 500; }
+    .switch { position: relative; flex: none; width: 34px; height: 20px; border-radius: 20px; background: var(--switch-off); transition: background .15s; }
+    .switch::before { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--switch-knob); transition: transform .15s; }
+    .switch-button[aria-checked="true"] .switch { background: var(--accent); }
+    .switch-button[aria-checked="true"] .switch::before { transform: translateX(14px); background: var(--on-accent); }
+
+    .keyboard-figure { margin-top: 14px; }
     .keyboard {
+      --key-height: clamp(22px, 6.1cqw, 46px);
+      --key-gap: clamp(1.5px, .38cqw, 3px);
       container-type: inline-size;
-      display: grid;
-      gap: clamp(2px, .45vw, 5px);
-      padding: clamp(6px, 1.15vw, 13px);
-      background: #e9e8f0;
-      border: 1px solid #dedce9;
-      border-radius: 13px;
+      display: grid; gap: 6px; padding: 10px 7px;
+      border: 1px solid var(--kbd-tray-line); border-radius: 16px; background: var(--kbd-tray);
     }
-    .key-row { display: grid; grid-template-columns: var(--columns); gap: clamp(2px, .45vw, 5px); }
+    .key-row { display: grid; grid-template-columns: repeat(58, minmax(0, 1fr)); gap: clamp(3px, .75cqw, 6px) 0; }
     .key {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 0;
-      height: clamp(20px, 5.8cqw, 43px);
-      border-radius: clamp(2px, .8cqw, 6px);
-      background: #2c2d3e;
-      color: #f6f4ff;
-      box-shadow: inset 0 -2px 0 #181924;
-      font: 550 clamp(.56rem, 2cqw, .94rem)/1 ui-monospace, Menlo, Consolas, monospace;
+      position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-width: 0; height: var(--key-height); margin: 0 var(--key-gap);
+      border-radius: clamp(4px, 1.05cqw, 8px);
+      background: var(--key-bg); color: var(--key-ink); box-shadow: inset 0 -2px 0 var(--key-shadow);
+      font: 500 clamp(.58rem, 1.9cqw, .92rem)/1 var(--sans);
     }
-    .key.number { background: #48405c; box-shadow: inset 0 -2px 0 #2c243d; }
-    .key.function {
-      height: clamp(15px, 3.6cqw, 27px);
-      gap: .3em;
-      font-size: clamp(.44rem, 1.4cqw, .67rem);
-      color: #edebf6;
+    .key.number { background: var(--key-number-bg); }
+    .key .upper { margin-bottom: .3em; font-size: .74em; color: var(--key-upper); }
+    .key[data-zone]::before { content: ""; position: absolute; left: 32%; right: 32%; bottom: clamp(2px, .65cqw, 5px); height: clamp(2px, .38cqw, 3px); border-radius: 3px; background: var(--zone); }
+    .key.space-key[data-zone]::before { left: 45%; right: 45%; }
+    .key.home::after { content: ""; position: absolute; bottom: clamp(6px, 1.5cqw, 11px); left: calc(50% - 5px); width: 10px; height: 1.5px; border-radius: 2px; background: currentColor; opacity: .6; }
+    .key.modifier, .key.function { gap: clamp(2px, .6cqw, 5px); padding: 0 3px; font-size: clamp(.46rem, 1.3cqw, .66rem); color: var(--key-muted); }
+    .key .glyph { display: inline-flex; color: var(--key-ink); font: 400 clamp(.66rem, 1.95cqw, .98rem)/1 var(--sans); }
+    .key .glyph .icon, .key.function .icon { width: clamp(9px, 2.25cqw, 17px); height: clamp(9px, 2.25cqw, 17px); color: var(--key-ink); stroke-width: 1.7; }
+    .key.touch-id::after { content: ""; width: 40%; aspect-ratio: 1; border: 1px solid var(--key-muted); border-radius: 50%; opacity: .7; }
+    .arrow-stack { display: flex; flex-direction: column; gap: 2px; height: var(--key-height); margin: 0 var(--key-gap); }
+    .arrow-stack .key { flex: 1; height: auto; margin: 0; }
+    .key.arrow { border-radius: clamp(3px, .7cqw, 5px); color: var(--key-muted); font-size: clamp(.4rem, 1.15cqw, .6rem); }
+    .key.arrow-side { align-self: end; height: calc((var(--key-height) - 2px) / 2); }
+    @container (max-width: 560px) {
+      .mod-label, .fn-label { display: none; }
     }
-    .function-icon { display: inline-flex; align-items: center; justify-content: center; }
-    .microphone { width: .8em; height: .9em; border: 1px solid currentColor; border-top: 0; border-radius: 0 0 1em 1em; padding-bottom: .12em; }
-    .microphone::before { content: ""; width: .37em; height: .75em; border-radius: .3em; background: currentColor; }
-    @container (max-width: 355px) {
-      .function-icon { display: none; }
-    }
-    .key.modifier { font-family: system-ui, sans-serif; font-size: clamp(.47rem, 1.53cqw, .73rem); }
-    .key.shifted { flex-direction: column; gap: clamp(1px, .38cqw, 3px); }
-    .key .upper { font-size: .75em; color: #ddd7ee; }
-    .key.home::after { content: ""; position: absolute; height: 1px; width: 24%; background: currentColor; opacity: .67; bottom: 15%; }
-    .key.target, .key.shift-hint { color: #25164e; background: #cbbaff; box-shadow: inset 0 -2px 0 #a58af1; }
-    .key.target .upper { color: #38255e; }
-    .key.target.use-shift.shifted .base { opacity: .69; }
-    .key.target.use-shift .upper { font-weight: 900; color: #25164e; }
-    .key.missed { color: #55142a; background: #ffb9cd; box-shadow: inset 0 -2px 0 #d7839b; }
+
+    .key.target { background: var(--key-target-bg); color: var(--key-target-ink); box-shadow: inset 0 -2px 0 var(--key-target-shadow), 0 0 0 3px var(--accent-ring); }
+    .key.target .upper { color: var(--key-target-upper); }
+    .key.target[data-zone]::before { background: var(--key-target-ink); opacity: .45; }
+    .key.target.use-shift .upper { font-weight: 800; color: var(--key-target-ink); }
+    .key.target.use-shift.shifted .base { opacity: .65; }
+    .key.shift-hint { background: var(--key-hint-bg); color: var(--key-hint-ink); box-shadow: inset 0 0 0 1.5px var(--key-hint-line); }
+    .key.shift-hint .glyph { color: var(--key-hint-ink); }
+    .key.missed { background: var(--key-missed-bg); color: var(--key-missed-ink); box-shadow: inset 0 -2px 0 var(--key-missed-shadow); }
     .key.missed .upper { color: inherit; }
-    .touch-id::after { content: ""; width: min(12px, 45%); aspect-ratio: 1; border: 1px solid #8b879f; border-radius: 50%; }
-    .arrow-stack { display: grid; grid-template-rows: 1fr 1fr; gap: 2px; }
-    .arrow-stack .key, .key.arrow-side { height: auto; font-size: clamp(.55rem, 1.5cqw, .75rem); }
-    .key.arrow-side { align-self: end; height: calc(clamp(20px, 5.8cqw, 43px) / 2 - 1px); }
-    .finger-guide { margin-top: 10px; color: var(--muted); font-size: .875rem; }
-    .finger-guide strong { color: var(--accent); font-weight: 700; }
 
-    .side-column .panel { padding: 18px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 13px; }
-    .stat { display: flex; flex-direction: column-reverse; gap: 3px; min-width: 0; padding: 9px 10px; border: 1px solid #efedf5; border-radius: 10px; background: #f8f7fb; }
-    .stat dt { font-size: .8125rem; color: var(--muted); }
-    .stat dd { font: 650 1.42rem/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: -.06em; font-variant-numeric: tabular-nums; }
-    .empty-misses { margin-top: 8px; font-size: .875rem; color: var(--muted); }
-    .miss-list { display: grid; gap: 7px; padding: 0; margin: 10px 0 0; list-style: none; }
-    .miss-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .875rem; }
-    .miss-list kbd { border: 1px solid #efccda; border-radius: 5px; padding: 2px 7px; background: #fbecf1; color: var(--danger); font: 600 .875rem/1.4 ui-monospace, Menlo, monospace; }
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    [data-zone="pinky"] { --zone: var(--f-pinky); }
+    [data-zone="ring"] { --zone: var(--f-ring); }
+    [data-zone="middle"] { --zone: var(--f-middle); }
+    [data-zone="index-left"] { --zone: var(--f-index-left); }
+    [data-zone="index-right"] { --zone: var(--f-index-right); }
+    [data-zone="thumb"] { --zone: var(--f-thumb); }
+    .finger-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+    .legend-item { display: inline-flex; align-items: center; gap: 8px; }
+    .swatch { width: 14px; height: 4px; border-radius: 3px; background: var(--zone); }
+    .legend-note { margin-left: auto; }
 
-    @media (max-width: 820px) {
-      .dashboard { grid-template-columns: minmax(0, 1fr); }
-      .side-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Sidebar */
+    .side-card { padding: 20px; border-radius: 18px; }
+    .settings-title { margin-bottom: 16px; }
+    .field-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .field-row label, .field-label { font-size: 14px; font-weight: 500; color: var(--ink-2); }
+    .field-label { margin-bottom: 8px; }
+    .segmented + .field-label { margin-top: 16px; }
+    .length-value { font: 600 14px var(--mono); color: var(--accent-text); }
+    .side-card input[type="range"] { display: block; width: 100%; margin: 10px 0 2px; accent-color: var(--accent); cursor: pointer; }
+    .range-scale { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--muted-2); }
+    .divider { height: 1px; margin: 16px 0; background: var(--line-2); }
+    .typo-input { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+    .typo-input input { width: 64px; min-height: 40px; padding: 0 10px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--input-bg); color: var(--ink); font: 14px var(--mono); }
+    .typo-input input:invalid { border-color: var(--danger); }
+    .field-help { margin-top: 8px; font-size: 12.5px; color: var(--muted-2); }
+
+    .empty-note { margin-top: 10px; font-size: 14px; color: var(--muted); }
+    .miss-list { display: grid; gap: 10px; margin: 14px 0 0; padding: 0; list-style: none; }
+    .miss-list li { display: flex; align-items: center; gap: 12px; }
+    .miss-list kbd { display: inline-grid; place-items: center; min-width: 34px; height: 34px; padding: 0 7px; border: 1px solid var(--danger-line); border-radius: 9px; background: var(--danger-soft); color: var(--danger); font: 600 15px var(--mono); }
+    .miss-bar { flex: 1; height: 6px; border-radius: 6px; background: var(--track); overflow: hidden; }
+    .miss-bar-fill { display: block; height: 100%; border-radius: 6px; background: var(--danger-strong); }
+    .miss-count { min-width: 58px; text-align: right; font-size: 13px; color: var(--muted); }
+
+    .section-progress { display: grid; gap: 12px; margin: 14px 0 18px; padding: 0; list-style: none; }
+    .section-progress-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+    .section-progress-row > span:first-child { color: var(--ink-2); font-weight: 500; }
+    .section-progress-row .mono, .section-meter .mono { font-size: 12.5px; color: var(--muted); }
+    .complete .mono { color: var(--success); }
+    .bar { height: 4px; margin-top: 6px; border-radius: 4px; background: var(--track); overflow: hidden; }
+    .bar.large { height: 8px; margin-top: 8px; }
+    .bar-fill { height: 100%; border-radius: inherit; background: var(--accent); }
+    .complete .bar-fill { background: var(--success); }
+
+    .tip-card { padding: 18px 20px; }
+    .tip-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
+    .tip-card p { min-height: 3em; margin-top: 6px; font-size: 14.5px; color: var(--ink-2); }
+
+    /* Drill library */
+    .library-page { display: flex; flex-direction: column; gap: 16px; }
+    .library-page .page-heading { gap: 20px 32px; margin-bottom: 8px; }
+    .library-sections { display: flex; flex-direction: column; gap: 16px; }
+    .back-link { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px 0 0; border: 0; background: transparent; color: var(--accent-text); font-size: 13px; font-weight: 600; }
+    .back-link:hover { color: var(--accent-ink); }
+    .back-link .icon { width: 16px; height: 16px; stroke-width: 2; }
+    .library-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
+    .overall-progress { width: 240px; }
+    .overall-progress .field-row { font-size: 13.5px; }
+    .overall-progress .field-row > span:first-child { color: var(--ink-2); font-weight: 600; }
+    .overall-progress .mono { font-size: 12.5px; color: var(--muted); }
+    .library-section { padding: 20px 24px 24px; border-radius: 18px; }
+    .library-section-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+    .library-section h2 { display: flex; align-items: baseline; gap: 10px; font-size: 17px; font-weight: 650; letter-spacing: -.015em; }
+    .library-section h2 .range { font: 500 12.5px var(--mono); color: var(--muted-2); }
+    .library-section-description { margin-top: 2px; font-size: 14px; color: var(--muted); }
+    .section-meter { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+    .section-meter .bar { flex: 1; height: 6px; margin: 0; }
+    .drill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; margin-top: 16px; }
+    .drill-tile {
+      display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 0 10px;
+      border: 1px solid var(--control-line); border-radius: 10px; background: var(--control-bg); color: var(--ink); text-align: left;
     }
-    @media (max-width: 510px) {
-      .shell { width: calc(100% - 24px); }
-      main.shell { padding-block: 27px; }
-      .topbar .shell { min-height: 55px; }
-      .intro { margin-bottom: 19px; }
-      .practice, .keyboard-panel, .side-column .panel { padding: 12px; }
-      .toolbar, .round-footer { flex-wrap: wrap; }
-      .mode { padding-inline: 7px; }
-      .typing-area { padding: 11px; }
-      .prompt { min-height: 90px; }
-      .dashboard, .main-column, .side-column { gap: 12px; }
-      .side-column { grid-template-columns: minmax(0, 1fr); }
-      .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .stat { padding-inline: 5px; }
-      .stat dd { font-size: 1.13rem; }
-      .stat dt { font-size: .75rem; }
+    .drill-tile:hover { border-color: var(--focus-line); background: var(--accent-soft); }
+    .drill-tile.done { border-color: var(--line); color: var(--ink-2); }
+    .drill-tile-number { flex: none; font: 600 11.5px var(--mono); color: var(--muted-2); }
+    .drill-tile-prompt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; font: 600 14.5px var(--mono); }
+    .drill-tile .icon { width: 15px; height: 15px; stroke-width: 2.4; color: var(--success); }
+    .drill-tile[aria-current="step"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+    .drill-tile[aria-current="step"] .drill-tile-number { color: var(--accent-text); }
+
+    /* Compact sizing so the whole keyboard fits a full-screen MacBook browser */
+    .topbar-inner { gap: 12px 20px; }
+    .topbar .segmented { gap: 3px; padding: 3px; border-radius: 11px; }
+    .topbar .button, .topbar .segment { min-height: 36px; font-size: 13.5px; }
+    .topbar .segment { border-radius: 9px; }
+    .topbar .icon-button { width: 36px; }
+    .layout-switch .segment { display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; }
+    .layout-switch .icon { width: 16px; height: 16px; }
+    .settings-button { display: none; }
+    main.shell { padding-block: 20px 32px; }
+    .main-column { gap: 14px; }
+    .stat { padding: 10px 18px; }
+    .stat dd { font-size: 19px; }
+    .typing-area { padding: 20px 28px 16px; }
+    .prompt { min-height: 110px; margin-bottom: 16px; }
+    .prompt.prose { max-height: calc(5 * 1.85em); }
+    .prompt.long { max-height: calc(4 * 1.45em + 30px); }
+    .card-footer { padding: 6px 8px 6px 20px; }
+    .footer-actions .button { min-height: 34px; }
+    .keyboard-card { padding: 14px 18px; }
+    .keyboard-controls .switch-button, .keyboard-controls .text-button { min-height: 32px; }
+    .keyboard-figure { margin-top: 12px; }
+    .keyboard { --key-height: clamp(22px, 5.4cqw, 42px); gap: 5px; padding: 8px 5px; }
+    .finger-legend { margin-top: 10px; }
+    .missed-inline, .tip-inline, .now-card, .stats-card { display: none; }
+    .missed-inline { align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+    .missed-inline kbd { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px; border: 1px solid var(--danger-line); border-radius: 7px; background: var(--danger-soft); color: var(--danger); font: 600 13px var(--mono); }
+    .missed-inline kbd span { font-size: 11px; font-weight: 500; opacity: .8; }
+    .tip-inline { font-size: 13px; color: var(--muted); }
+    .tip-inline strong { margin-right: 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
+
+    /* Layout A: the heading and live stats move into the sidebar */
+    [data-layout="sidebar"] .now-card, [data-layout="sidebar"] .stats-card { display: block; }
+    .now-card { padding: 16px 18px; }
+    .now-card .page-heading { display: block; }
+    .now-card .page-title { font-size: 21px; letter-spacing: -.02em; }
+    .now-card .page-description { font-size: 13.5px; }
+    .now-card .heading-actions { margin-top: 14px; }
+    .now-card .heading-actions .button { flex: 1; min-height: 36px; padding: 0 10px; }
+    .stats-card { padding: 14px; }
+    .stats-card .stats-strip { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border: 0; }
+    .stats-card .stat { padding: 8px 12px; border: 0 !important; border-radius: 10px; background: var(--surface-3); }
+    .stats-card .stat-wpm { grid-column: span 2; display: flex; align-items: baseline; justify-content: space-between; background: var(--wpm-bg); }
+    .stats-card .stat-wpm dd { font-size: 28px; }
+
+    /* Layouts B and C: a one-line heading, and the finger legend inline with the keyboard controls */
+    :is([data-layout="dock"], [data-layout="focus"]) .page-heading { align-items: center; }
+    :is([data-layout="dock"], [data-layout="focus"]) .page-heading-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+    :is([data-layout="dock"], [data-layout="focus"]) .page-title { order: -1; margin: 0; font-size: 22px; }
+    :is([data-layout="dock"], [data-layout="focus"]) .page-description { display: none; }
+    :is([data-layout="dock"], [data-layout="focus"]) .heading-actions .button { min-height: 36px; }
+    :is([data-layout="dock"], [data-layout="focus"]) .keyboard-card {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "heading controls" "keyboard keyboard" "legend tip";
+      align-items: center; gap: 10px 16px;
+    }
+    :is([data-layout="dock"], [data-layout="focus"]) :is(.keyboard-header, .keyboard-figure) { display: contents; }
+    :is([data-layout="dock"], [data-layout="focus"]) .keyboard-heading { grid-area: heading; }
+    :is([data-layout="dock"], [data-layout="focus"]) .keyboard-controls { grid-area: controls; }
+    :is([data-layout="dock"], [data-layout="focus"]) .keyboard { grid-area: keyboard; }
+    :is([data-layout="dock"], [data-layout="focus"]) .finger-legend { grid-area: legend; gap: 6px 14px; margin: 0; font-size: 12px; }
+    :is([data-layout="dock"], [data-layout="focus"]) .tip-inline { grid-area: tip; justify-self: end; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :is([data-layout="dock"], [data-layout="focus"]) :is(.legend-note, #keyboard-title) { display: none; }
+
+    /* Layout B: the keyboard is docked to the bottom of the window */
+    [data-layout="dock"] .workspace { padding-bottom: calc(var(--dock-h, 360px) - 12px); }
+    [data-layout="dock"] .keyboard-card {
+      position: fixed; right: 0; bottom: 0; left: 0; z-index: 10;
+      padding: 8px max(16px, calc((100% - 1000px) / 2)) 10px;
+      border-width: 1px 0 0; border-radius: 0; background: var(--dock-bg); box-shadow: 0 -10px 30px rgb(0 0 0 / 8%);
+    }
+    [data-layout="dock"] :is(.prompt.prose, .prompt.long) { max-height: max(5.5rem, calc(100vh - var(--dock-h, 380px) - 310px)); }
+
+    /* Layout C: one centered column; settings open in a popover */
+    [data-layout="focus"] main.shell { padding-top: 16px; }
+    [data-layout="focus"] .workspace { display: block; max-width: 1000px; margin-inline: auto; }
+    [data-layout="focus"] .main-column { gap: 12px; }
+    [data-layout="focus"] .settings-button { display: inline-flex; }
+    [data-layout="focus"] .settings-button[aria-expanded="true"] { border-color: var(--accent-soft-line); background: var(--accent-soft); color: var(--accent-ink); }
+    [data-layout="focus"] .sidebar { display: none; }
+    [data-layout="focus"] .sidebar.open {
+      position: fixed; top: 62px; right: max(16px, calc((100% - 1176px) / 2)); z-index: 20;
+      display: grid; grid-template-columns: minmax(0, 1fr); width: 330px; max-height: calc(100vh - 78px); overflow-y: auto;
+      padding: 10px; border: 1px solid var(--line); border-radius: 18px; background: var(--bg); box-shadow: 0 18px 50px rgb(0 0 0 / 18%);
+    }
+    [data-layout="focus"] .sidebar .tip-card { display: none; }
+    [data-layout="focus"] .stats-strip { display: flex; align-items: center; gap: 22px; height: 40px; padding: 0 20px; }
+    [data-layout="focus"] .stat { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 6px; padding: 0; border: 0 !important; }
+    [data-layout="focus"] .stat dd { margin: 0; font-size: 15px; }
+    [data-layout="focus"] .stat-wpm { padding: 3px 10px; border-radius: 8px; }
+    [data-layout="focus"] .keyboard-card { padding: 0; border: 0; background: transparent; }
+    [data-layout="focus"] .missed-inline { display: flex; }
+    [data-layout="focus"] .tip-inline { display: block; }
+
+    @media (max-width: 720px) {
+      .shell { width: calc(100% - 32px); }
+      main.shell { padding-block: 24px 40px; }
+      .view-switch { order: 3; width: 100%; }
+      .view-switch .segment { flex: 1; padding: 0 8px; }
+      .stat { padding: 12px; }
+      .stat dd { font-size: 18px; }
+      .keyboard-card { padding: 16px; }
+      .card-footer { padding-left: 16px; }
+      .legend-note { margin-left: 0; }
     }
   </style>
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4L10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="i-layout-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-layout-dock" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/></symbol>
+    <symbol id="i-layout-focus" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M16 4v16"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4.5M12 17.3v.2"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M4.6 7.5h14.8M4.6 16.5h14.8"/></symbol>
+    <symbol id="i-sun-min" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 5.5v1.3M12 17.2v1.3M5.5 12h1.3M17.2 12h1.3M7.4 7.4l.9.9M15.7 15.7l.9.9M7.4 16.6l.9-.9M15.7 8.3l.9-.9"/></symbol>
+    <symbol id="i-sun-max" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></symbol>
+    <symbol id="i-mission" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="6.5" rx="1.2"/><rect x="13" y="4" width="8" height="6.5" rx="1.2"/><rect x="3" y="13" width="18" height="7" rx="1.2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></symbol>
+    <symbol id="i-rewind" viewBox="0 0 24 24"><path d="M11.5 6.5v11L4 12zM20 6.5v11L12.5 12z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-play-pause" viewBox="0 0 24 24"><path d="M3.5 6.5v11L11 12z" fill="currentColor" stroke="none"/><rect x="14" y="6.5" width="2.4" height="11" rx=".6" fill="currentColor" stroke="none"/><rect x="18.6" y="6.5" width="2.4" height="11" rx=".6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="M4 6.5v11l7.5-5.5zM12.5 6.5v11L20 12z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M3.5 9.5h3.2L11 6v12l-4.3-3.5H3.5z" fill="currentColor" stroke="none"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></symbol>
+    <symbol id="i-volume-down" viewBox="0 0 24 24"><path d="M3.5 9.5h3.2L11 6v12l-4.3-3.5H3.5z" fill="currentColor" stroke="none"/><path d="M14.8 9.4a3.7 3.7 0 0 1 0 5.2"/></symbol>
+    <symbol id="i-volume-up" viewBox="0 0 24 24"><path d="M3.5 9.5h3.2L11 6v12l-4.3-3.5H3.5z" fill="currentColor" stroke="none"/><path d="M14.8 9.4a3.7 3.7 0 0 1 0 5.2M17.4 7a7.1 7.1 0 0 1 0 10M20 4.6a10.5 10.5 0 0 1 0 14.8"/></symbol>
+  </svg>
+
   <header class="topbar">
-    <div class="shell">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">A1</span> Touch Typing</div>
+    <div class="shell topbar-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">fj</span>Touch Typing</div>
+      <div class="segmented view-switch" role="group" aria-label="Practice type">
+        <button class="segment" type="button" data-view="lessons" aria-pressed="true">Lessons</button>
+        <button class="segment" type="button" data-view="free" aria-pressed="false">Free practice</button>
+        <button class="segment" type="button" data-view="text" aria-pressed="false">Text practice</button>
+      </div>
+      <div class="topbar-actions">
+        <div class="segmented layout-switch" role="group" aria-label="Layout">
+          <button class="segment" type="button" data-layout-option="sidebar" aria-pressed="true" title="Layout A · details in the sidebar" aria-label="Layout A, details in the sidebar"><svg class="icon" aria-hidden="true"><use href="#i-layout-sidebar"></use></svg>A</button>
+          <button class="segment" type="button" data-layout-option="dock" aria-pressed="false" title="Layout B · keyboard docked at the bottom" aria-label="Layout B, keyboard docked at the bottom"><svg class="icon" aria-hidden="true"><use href="#i-layout-dock"></use></svg>B</button>
+          <button class="segment" type="button" data-layout-option="focus" aria-pressed="false" title="Layout C · focus column" aria-label="Layout C, focus column"><svg class="icon" aria-hidden="true"><use href="#i-layout-focus"></use></svg>C</button>
+        </div>
+        <button class="button settings-button" id="toggle-settings" type="button" aria-expanded="false" aria-controls="sidebar"><svg class="icon" aria-hidden="true"><use href="#i-sliders"></use></svg>Settings</button>
+        <button class="button" id="open-library" type="button" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>Drill library</button>
+        <button class="button icon-button" id="toggle-theme" type="button" aria-label="Switch to dark theme">
+          <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"></use></svg>
+          <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"></use></svg>
+        </button>
+      </div>
     </div>
   </header>
 
   <main class="shell">
-    <div class="intro">
-      <h1>Touch typing practice</h1>
-      <p>Practice with number-row drills, mixed sequences, and passages from classic books.</p>
-    </div>
-
-    <div class="dashboard">
+    <div class="workspace" id="workspace">
       <div class="main-column">
-        <section class="panel practice" aria-label="Typing drill">
-          <div class="toolbar workspace-toolbar">
-            <div class="modes" role="group" aria-label="Practice type">
-              <button class="mode" type="button" data-view="lessons" aria-pressed="true">Lessons</button>
-              <button class="mode" type="button" data-view="free" aria-pressed="false">Free practice</button>
-              <button class="mode" type="button" data-view="text" aria-pressed="false">Text practice</button>
-            </div>
-            <button class="text-button browse-button" id="browse-drills" type="button" aria-expanded="false" aria-controls="drill-catalog">Browse drills</button>
+        <div class="page-heading" id="practice-heading">
+          <div class="page-heading-text">
+            <p class="eyebrow">
+              <span id="lesson-location"></span>
+              <a class="source-link" id="passage-source" target="_blank" rel="noopener noreferrer" hidden>Read source<svg class="icon" aria-hidden="true"><use href="#i-external"></use></svg></a>
+            </p>
+            <h1 class="page-title" id="lesson-title"></h1>
+            <p class="page-description" id="mode-description"></p>
           </div>
-          <section class="drill-catalog" id="drill-catalog" aria-labelledby="catalog-title" hidden>
-            <div class="catalog-heading">
-              <h2 class="panel-heading" id="catalog-title">Drill library</h2>
-              <p class="catalog-progress" id="catalog-progress"></p>
-            </div>
-            <div id="drill-sections"></div>
-          </section>
-          <div class="lesson-heading" id="lesson-heading">
-            <div>
-              <p class="lesson-location">
-                <span id="lesson-location"></span>
-                <a class="passage-source" id="passage-source" target="_blank" rel="noopener noreferrer" hidden>Read source</a>
-              </p>
-              <h2 class="lesson-title" id="lesson-title"></h2>
-            </div>
-            <div class="lesson-options">
-              <div id="lesson-length-settings">
-                <div class="lesson-length-caption">
-                  <label for="lesson-length">Drill length</label>
-                  <output id="lesson-length-value" for="lesson-length" aria-hidden="true"></output>
-                </div>
-                <input type="range" id="lesson-length" step="1">
-              </div>
-              <div class="modes passage-lengths" id="passage-length-settings" role="group" aria-label="Passage length" hidden>
-                <button class="mode" type="button" data-passage-length="short" aria-pressed="false" aria-label="Short, up to 100 words">Short<span class="passage-range">≤100</span></button>
-                <button class="mode" type="button" data-passage-length="medium" aria-pressed="true" aria-label="Medium, 101 to 200 words">Medium<span class="passage-range">101–200</span></button>
-                <button class="mode" type="button" data-passage-length="long" aria-pressed="false" aria-label="Long, 201 to 300 words">Long<span class="passage-range">201–300</span></button>
-              </div>
-              <label class="typo-limit" for="typo-limit">
-                <span>Auto-reset past</span>
-                <input type="number" id="typo-limit" min="0" step="1" inputmode="numeric" placeholder="Off" aria-describedby="typo-limit-help">
-                <span>typos</span>
-              </label>
-              <span class="sr-only" id="typo-limit-help">The current attempt resets once you exceed this many typos. Leave blank to turn off auto-reset.</span>
-            </div>
+          <div class="heading-actions">
+            <button class="button ghost" id="previous-drill" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg>Previous</button>
+            <button class="button" id="next-drill" type="button">
+              <svg class="icon icon-shuffle" aria-hidden="true"><use href="#i-shuffle"></use></svg>
+              <span id="next-drill-label">Next drill</span>
+              <svg class="icon icon-next" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+            </button>
           </div>
-          <div class="toolbar" id="free-controls" hidden>
-            <div class="modes" role="group" aria-label="Drill type">
-              <button class="mode" type="button" data-mode="digits" aria-pressed="true">Digits</button>
-              <button class="mode" type="button" data-mode="symbols" aria-pressed="false">Symbols</button>
-              <button class="mode" type="button" data-mode="mixed" aria-pressed="false">Mixed</button>
-            </div>
-            <label class="length-control">
-              <span class="sr-only">Round length</span>
-              <select class="length" id="round-length">
-                <option value="24">24 keys</option>
-                <option value="40" selected>40 keys</option>
-                <option value="64">64 keys</option>
-              </select>
-            </label>
-          </div>
-          <p class="mode-description" id="mode-description"></p>
+        </div>
 
+        <section class="card practice" aria-label="Typing drill">
+          <dl class="stats-strip" id="stats-strip">
+            <div class="stat stat-wpm" id="wpm-stat" hidden><dt>Words/min</dt><dd id="wpm-value">—</dd></div>
+            <div class="stat"><dt>Accuracy</dt><dd id="accuracy">—</dd></div>
+            <div class="stat"><dt>Keys/min</dt><dd id="speed">—</dd></div>
+            <div class="stat"><dt>Mistakes</dt><dd id="mistakes">0</dd></div>
+            <div class="stat"><dt>Time</dt><dd id="elapsed">0:00</dd></div>
+          </dl>
           <div class="typing-area" id="typing-area" tabindex="0" role="group" aria-label="Practice prompt" aria-describedby="typing-instructions">
             <p class="sr-only" id="typing-instructions"></p>
             <div class="prompt" id="prompt" aria-hidden="true"></div>
             <div class="sr-only" id="remaining-prompt"></div>
             <div class="progress-row">
               <progress id="progress" value="0" max="40" aria-label="Round progress"></progress>
-              <span id="counter" class="counter" aria-hidden="true">0 / 40</span>
-              <span id="wpm-counter" class="counter wpm-counter" title="Words per minute" hidden><strong id="wpm-value">—</strong> WPM</span>
+              <span class="counter" id="counter" aria-hidden="true">0 / 40</span>
             </div>
           </div>
-
-          <div class="round-footer">
+          <div class="result-banner" id="result-banner" role="group" aria-labelledby="result-title" hidden>
+            <div class="result-head">
+              <span class="result-badge" aria-hidden="true"><svg class="icon"><use href="#i-alert"></use></svg></span>
+              <div>
+                <h2 class="result-title" id="result-title"></h2>
+                <p class="result-subtitle" id="result-subtitle"></p>
+              </div>
+            </div>
+            <dl class="result-stats" id="result-stats"></dl>
+            <div class="result-watch">
+              <h3 class="result-label">What to watch</h3>
+              <ul class="result-keys" id="result-keys"></ul>
+              <ul class="result-advice" id="result-advice"></ul>
+            </div>
+            <div class="result-actions">
+              <button class="button primary" id="retry-round" type="button"><svg class="icon" aria-hidden="true"><use href="#i-reset"></use></svg>Try again<kbd>return</kbd></button>
+              <button class="button" id="result-alternative" type="button"></button>
+            </div>
+          </div>
+          <div class="card-footer">
             <p class="status" id="status" role="status"></p>
-            <div class="round-actions">
-              <button class="text-button" id="previous-drill" type="button">Previous</button>
-              <button class="action" id="new-round" type="button"></button>
-              <button class="action" id="next-drill" type="button">Next drill</button>
+            <p class="missed-inline" id="missed-inline" hidden></p>
+            <div class="footer-actions">
+              <p class="shortcuts"><kbd>esc</kbd><span id="escape-hint">reset</span><span class="shortcut-gap"></span><kbd>↩&#xFE0E; return</kbd><span id="enter-hint">next drill when done</span></p>
+              <button class="button" id="new-round" type="button"><svg class="icon" aria-hidden="true"><use href="#i-reset"></use></svg><span id="new-round-label">Reset drill</span></button>
             </div>
           </div>
-          <p class="practice-tip"><strong>Tip</strong><span id="practice-tip-text"></span></p>
         </section>
 
-        <section class="panel keyboard-panel" aria-labelledby="keyboard-title">
+        <section class="card keyboard-card" aria-labelledby="keyboard-title">
           <div class="keyboard-header">
-            <h2 class="panel-heading" id="keyboard-title">Keyboard guide</h2>
+            <div class="keyboard-heading">
+              <h2 class="card-title" id="keyboard-title">Keyboard guide</h2>
+              <p class="finger-guide" id="finger-guide"></p>
+            </div>
             <div class="keyboard-controls">
-              <button class="text-button hint-button" id="toggle-hints" type="button" role="switch" aria-checked="true" aria-controls="keyboard-figure">
-                <span class="switch" aria-hidden="true"></span> Key hints
-              </button>
+              <button class="switch-button" id="toggle-hints" type="button" role="switch" aria-checked="true" aria-controls="keyboard-figure"><span class="switch" aria-hidden="true"></span>Key hints</button>
               <button class="text-button" id="toggle-keyboard" type="button" aria-expanded="true" aria-controls="keyboard-figure">Hide keyboard</button>
             </div>
           </div>
           <figure class="keyboard-figure" id="keyboard-figure">
             <div class="keyboard" id="keyboard" aria-hidden="true"></div>
-            <figcaption class="finger-guide" id="finger-guide"></figcaption>
+            <figcaption class="finger-legend">
+              <span class="legend-item" data-zone="pinky"><span class="swatch"></span>Pinky</span>
+              <span class="legend-item" data-zone="ring"><span class="swatch"></span>Ring</span>
+              <span class="legend-item" data-zone="middle"><span class="swatch"></span>Middle</span>
+              <span class="legend-item" data-zone="index-left"><span class="swatch"></span>Left index</span>
+              <span class="legend-item" data-zone="index-right"><span class="swatch"></span>Right index</span>
+              <span class="legend-item" data-zone="thumb"><span class="swatch"></span>Thumbs</span>
+              <span class="legend-note">Shift with the opposite hand</span>
+            </figcaption>
           </figure>
+          <p class="tip-inline"><strong>Tip</strong><span id="tip-inline-text"></span></p>
         </section>
       </div>
 
-      <aside class="side-column" aria-label="Round results">
-        <section class="panel" aria-labelledby="stats-title">
-          <h2 class="panel-heading" id="stats-title">Round stats</h2>
-          <dl class="stats-grid">
-            <div class="stat"><dt>Accuracy</dt><dd id="accuracy">—</dd></div>
-            <div class="stat"><dt>Keys/min</dt><dd id="speed">—</dd></div>
-            <div class="stat"><dt>Mistakes</dt><dd id="mistakes">0</dd></div>
-            <div class="stat"><dt>Time</dt><dd id="elapsed">0:00</dd></div>
-          </dl>
+      <aside class="sidebar" id="sidebar" aria-label="Practice details">
+        <section class="card side-card now-card" id="now-card" aria-label="Current practice"></section>
+        <section class="card side-card stats-card" id="stats-card" aria-label="Live stats"></section>
+        <section class="card side-card" aria-labelledby="settings-title">
+          <h2 class="card-title settings-title" id="settings-title">Drill settings</h2>
+          <div id="lesson-length-settings">
+            <div class="field-row">
+              <label for="lesson-length">Drill length</label>
+              <output class="length-value" id="lesson-length-value" for="lesson-length" aria-hidden="true"></output>
+            </div>
+            <input type="range" id="lesson-length" min="120" max="240" step="10">
+            <div class="range-scale" aria-hidden="true"><span>120</span><span>180</span><span>240</span></div>
+          </div>
+          <div id="free-settings" hidden>
+            <p class="field-label" id="drill-type-label">Drill type</p>
+            <div class="segmented" role="group" aria-labelledby="drill-type-label">
+              <button class="segment" type="button" data-mode="digits" aria-pressed="true">Digits</button>
+              <button class="segment" type="button" data-mode="symbols" aria-pressed="false">Symbols</button>
+              <button class="segment" type="button" data-mode="mixed" aria-pressed="false">Mixed</button>
+            </div>
+            <p class="field-label" id="round-length-label">Round length</p>
+            <div class="segmented" role="group" aria-labelledby="round-length-label">
+              <button class="segment" type="button" data-length="24" aria-pressed="false">24 keys</button>
+              <button class="segment" type="button" data-length="40" aria-pressed="true">40 keys</button>
+              <button class="segment" type="button" data-length="64" aria-pressed="false">64 keys</button>
+            </div>
+          </div>
+          <div class="segmented passage-lengths" id="passage-length-settings" role="group" aria-label="Passage length" hidden>
+            <button class="segment" type="button" data-passage-length="short" aria-pressed="false" aria-label="Short, up to 100 words">Short<small>≤100</small></button>
+            <button class="segment" type="button" data-passage-length="medium" aria-pressed="true" aria-label="Medium, 101 to 200 words">Medium<small>101–200</small></button>
+            <button class="segment" type="button" data-passage-length="long" aria-pressed="false" aria-label="Long, 201 to 300 words">Long<small>201–300</small></button>
+          </div>
+          <div id="typo-settings">
+            <div class="divider"></div>
+            <div class="field-row">
+              <label for="typo-limit">Auto-reset past</label>
+              <span class="typo-input"><input type="number" id="typo-limit" min="0" step="1" inputmode="numeric" placeholder="Off" aria-describedby="typo-limit-help">typos</span>
+            </div>
+            <p class="field-help" id="typo-limit-help"></p>
+          </div>
         </section>
-        <section class="panel" aria-labelledby="misses-title">
-          <h2 class="panel-heading" id="misses-title">Most missed</h2>
-          <p class="empty-misses" id="empty-misses">Missed keys will show up here during the round.</p>
+
+        <section class="card side-card" aria-labelledby="misses-title">
+          <div class="card-heading">
+            <h2 class="card-title" id="misses-title">Most missed</h2>
+            <span class="card-meta" id="misses-scope">This drill</span>
+          </div>
+          <p class="empty-note" id="empty-misses">Missed keys will show up here during the round.</p>
           <ul class="miss-list" id="miss-list" hidden></ul>
         </section>
+
+        <section class="card side-card" id="progress-card" aria-labelledby="progress-title">
+          <div class="card-heading">
+            <h2 class="card-title" id="progress-title">Your progress</h2>
+            <span class="card-meta mono" id="progress-total"></span>
+          </div>
+          <ul class="section-progress" id="section-progress"></ul>
+          <button class="button full" id="open-library-side" type="button"><svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>Open drill library</button>
+        </section>
+
+        <section class="card side-card tip-card" aria-labelledby="tip-title">
+          <h2 class="tip-label" id="tip-title">Tip</h2>
+          <p id="practice-tip-text"></p>
+        </section>
       </aside>
+    </div>
+
+    <div class="library-page" id="library" hidden>
+      <div class="page-heading">
+        <div class="page-heading-text">
+          <button class="back-link" id="close-library" type="button"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg><span id="close-library-label">Back</span></button>
+          <h1 class="page-title">Drill library</h1>
+          <p class="page-description">100 number-row drills in five sections. Pick any drill to start it.</p>
+        </div>
+        <div class="library-summary">
+          <div class="overall-progress">
+            <div class="field-row"><span id="library-progress-label"></span><span class="mono" id="library-progress-percent"></span></div>
+            <div class="bar large" aria-hidden="true"><div class="bar-fill" id="library-progress-fill"></div></div>
+          </div>
+          <button class="button primary" id="continue-drill" type="button"><span id="continue-drill-label"></span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
+        </div>
+      </div>
+      <div class="library-sections" id="library-sections"></div>
     </div>
   </main>
 
@@ -571,32 +939,64 @@
 
     const get = (id) => document.getElementById(id);
     const typingArea = get("typing-area");
+    const workspace = get("workspace");
+    const library = get("library");
     const viewButtons = [...document.querySelectorAll("[data-view]")];
     const modeButtons = [...document.querySelectorAll("[data-mode]")];
+    const lengthButtons = [...document.querySelectorAll("[data-length]")];
     const passageLengthButtons = [...document.querySelectorAll("[data-passage-length]")];
-    const lengthControl = get("round-length");
     const lessonLengthControl = get("lesson-length");
     const lessonLengthValue = get("lesson-length-value");
     const typoLimitControl = get("typo-limit");
+    const typoLimitHelp = get("typo-limit-help");
     const progress = get("progress");
-    const wpmCounter = get("wpm-counter");
+    const wpmStat = get("wpm-stat");
     const wpmValue = get("wpm-value");
     const status = get("status");
     const newRound = get("new-round");
+    const newRoundLabel = get("new-round-label");
     const previousDrill = get("previous-drill");
     const nextDrill = get("next-drill");
-    const browseDrills = get("browse-drills");
-    const drillCatalog = get("drill-catalog");
+    const nextDrillLabel = get("next-drill-label");
+    const libraryButton = get("open-library");
     const passageSource = get("passage-source");
     const keyboard = get("keyboard");
     const keyboardFigure = get("keyboard-figure");
     const hintButton = get("toggle-hints");
     const keyboardButton = get("toggle-keyboard");
+    const themeButton = get("toggle-theme");
+    const themeColor = document.querySelector('meta[name="theme-color"]');
     const fingerGuide = get("finger-guide");
     const emptyMisses = get("empty-misses");
     const missList = get("miss-list");
     const statFields = { accuracy: get("accuracy"), speed: get("speed"), elapsed: get("elapsed"), mistakes: get("mistakes") };
     const practiceTipText = get("practice-tip-text");
+    const resultBanner = get("result-banner");
+    const layoutButtons = [...document.querySelectorAll("[data-layout-option]")];
+    const practiceHeading = get("practice-heading");
+    const statsStrip = get("stats-strip");
+    const mainColumn = document.querySelector(".main-column");
+    const practiceCard = document.querySelector(".practice");
+    const keyboardCard = document.querySelector(".keyboard-card");
+    const sidebar = get("sidebar");
+    const settingsButton = get("toggle-settings");
+
+    function element(tag, className = "", text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function icon(name) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "icon");
+      svg.setAttribute("aria-hidden", "true");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", `#i-${name}`);
+      svg.append(use);
+      return svg;
+    }
 
     const practiceTips = [
       "Find the bumps on F and J with your index fingers.",
@@ -659,6 +1059,8 @@
     function showPracticeTip() {
       const tip = takePracticeTip();
       practiceTipText.textContent = tip === practiceTipText.textContent ? takePracticeTip() : tip;
+      get("tip-inline-text").textContent = practiceTipText.textContent;
+      get("tip-inline-text").parentElement.title = practiceTipText.textContent;
     }
 
     const fingers = {
@@ -666,6 +1068,7 @@
       RI: "Right index finger", RM: "Right middle finger", RR: "Right ring finger", RP: "Right pinky",
       T: "Thumb"
     };
+    const zones = { P: "pinky", R: "ring", M: "middle", I: "index", T: "thumb" };
 
     const numberRow = [
       ["`", "~", "LP"], ["1", "!", "LP"], ["2", "@", "LR"], ["3", "#", "LM"],
@@ -679,11 +1082,13 @@
       symbols: "Practice number-row punctuation and reach for Shift with the opposite hand.",
       mixed: "Practice mostly digits, with letters to bring your fingers back down."
     };
+    const modeNames = { digits: "Digits", symbols: "Symbols", mixed: "Mixed" };
     const homePairs = ["1a", "2s", "3d", "4f", "5g", "6h", "7j", "8k", "9l", "0;", "-'", "=;", "`a"];
+    const keyName = (key) => (key === "`" ? "backtick" : key);
     const lessonSections = [
       {
         name: "Single keys",
-        title: (prompt) => `Repeat ${prompt[0] === "`" ? "backtick" : prompt[0]}`,
+        title: (prompt) => `Repeat ${keyName(prompt[0])}`,
         instruction: "Tap the same key repeatedly. Return your finger to home row afterward.",
         prompts: numberRow.map(([key]) => key.repeat(4))
       },
@@ -704,7 +1109,7 @@
       },
       {
         name: "Home-row returns",
-        title: (prompt) => prompt.slice(0, 2).repeat(3) === prompt ? `Alternate ${prompt[0]} and ${prompt[1]}` : "Link home-row returns",
+        title: (prompt) => prompt.slice(0, 2).repeat(3) === prompt ? `Alternate ${keyName(prompt[0])} and ${prompt[1]}` : "Link home-row returns",
         instruction: "Use the same finger for each number-row key and the home-row key that follows.",
         prompts: [
           ...homePairs.map((pair) => pair.repeat(3)),
@@ -737,8 +1142,10 @@
     ];
     const lessons = lessonSections.flatMap((section) => section.prompts.map((prompt) => ({ section, prompt })))
       .map((lesson, index) => ({ ...lesson, id: index + 1 }));
+    const lessonsBySection = new Map(lessonSections.map((section) => [section, lessons.filter((lesson) => lesson.section === section)]));
     const validDrillId = (id) => Number.isInteger(id) && id >= 1 && id <= lessons.length;
-    const maximumLessonLength = 120;
+    // Drill lengths run 2–4 minutes at one key per second.
+    const lessonLengthRange = { min: 120, max: 240 };
     const passages = JSON.parse(get("passage-data").textContent).flatMap(({ paragraphs, ...book }) =>
       paragraphs.map((text) => ({ ...book, text, words: text.split(" ").length })));
     const passageBags = {
@@ -750,9 +1157,10 @@
 
     const settingsKey = "number-row-practice-v1";
     const settings = {
-      view: "lessons", lesson: 1, lessonLength: 24, typoLimit: null, completed: [],
-      mode: "digits", length: 40, passageLength: "medium", hints: true, keyboard: true
+      version: 2, view: "lessons", lesson: 1, lessonLength: 180, typoLimit: 5, completed: [],
+      mode: "digits", length: 40, passageLength: "medium", hints: true, keyboard: true, theme: null, layout: "sidebar"
     };
+    const layouts = ["sidebar", "dock", "focus"];
 
     function readSettings() {
       try { return JSON.parse(localStorage.getItem(settingsKey)); }
@@ -762,10 +1170,12 @@
     const saved = readSettings();
     if (viewButtons.some((button) => button.dataset.view === saved?.view)) settings.view = saved.view;
     if (validDrillId(saved?.lesson)) settings.lesson = saved.lesson;
-    if (Number.isInteger(saved?.lessonLength) && saved.lessonLength >= 2 && saved.lessonLength <= maximumLessonLength) {
+    if (Number.isInteger(saved?.lessonLength) && saved.lessonLength >= lessonLengthRange.min && saved.lessonLength <= lessonLengthRange.max) {
       settings.lessonLength = saved.lessonLength;
     }
+    // Saves before version 2 stored null when auto-reset was never set; since then null means the user turned it off.
     if (Number.isInteger(saved?.typoLimit) && saved.typoLimit >= 0) settings.typoLimit = saved.typoLimit;
+    else if (saved?.typoLimit === null && saved.version >= 2) settings.typoLimit = null;
     if (Array.isArray(saved?.completed)) settings.completed = [...new Set(saved.completed.filter(validDrillId))];
     if (typeof saved?.mode === "string" && Object.hasOwn(modes, saved.mode)) settings.mode = saved.mode;
     if ([24, 40, 64].includes(saved?.length)) settings.length = saved.length;
@@ -774,6 +1184,8 @@
     }
     if (typeof saved?.hints === "boolean") settings.hints = saved.hints;
     if (typeof saved?.keyboard === "boolean") settings.keyboard = saved.keyboard;
+    if (saved?.theme === "light" || saved?.theme === "dark") settings.theme = saved.theme;
+    if (layouts.includes(saved?.layout)) settings.layout = saved.layout;
 
     function saveSettings() {
       const latest = readSettings();
@@ -785,160 +1197,260 @@
       } catch { /* Keep the current tab's settings in memory. */ }
     }
 
-    function renderDrillCatalog() {
-      get("catalog-progress").textContent = `${settings.completed.length} of ${lessons.length} complete`;
-      const sections = lessonSections.map((section) => {
-        const sectionLessons = lessons.filter((lesson) => lesson.section === section);
-        const details = document.createElement("details");
-        details.className = "drill-section";
-        details.name = "drill-section";
-        details.open = section === round.lesson.section;
-        const summary = document.createElement("summary");
-        summary.textContent = section.name;
-        const range = document.createElement("span");
-        range.className = "section-range";
-        range.textContent = `${sectionLessons[0].id}–${sectionLessons.at(-1).id}`;
-        summary.append(range);
+    const darkScheme = matchMedia("(prefers-color-scheme: dark)");
+    const activeTheme = () => settings.theme ?? (darkScheme.matches ? "dark" : "light");
 
-        const grid = document.createElement("div");
-        grid.className = "drill-grid";
-        for (const lesson of sectionLessons) {
-          const button = document.createElement("button");
-          const completed = settings.completed.includes(lesson.id);
-          button.className = "drill-option";
-          button.type = "button";
-          button.title = lesson.prompt;
-          button.setAttribute("aria-label", `Drill ${lesson.id}: ${lesson.prompt}${completed ? ", complete" : ""}`);
-          if (lesson.id === settings.lesson) button.setAttribute("aria-current", "step");
-          button.addEventListener("click", () => chooseDrill(lesson.id));
-
-          const number = document.createElement("span");
-          number.className = "drill-option-number";
-          number.textContent = String(lesson.id);
-          const sample = document.createElement("samp");
-          sample.textContent = lesson.prompt;
-          button.append(number, sample);
-          if (completed) {
-            const marker = document.createElement("span");
-            marker.className = "drill-done";
-            marker.textContent = "✓";
-            button.append(marker);
-          }
-          grid.append(button);
-        }
-        details.append(summary, grid);
-        return details;
-      });
-      get("drill-sections").replaceChildren(...sections);
+    function applyTheme() {
+      const theme = activeTheme();
+      document.documentElement.dataset.theme = theme;
+      themeColor.content = theme === "dark" ? "#15141c" : "#ffffff";
+      const label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+      themeButton.setAttribute("aria-label", label);
+      themeButton.title = label;
     }
 
-    function setCatalogOpen(visible) {
-      drillCatalog.hidden = !visible;
-      browseDrills.setAttribute("aria-expanded", String(visible));
-      browseDrills.textContent = visible ? "Close library" : "Browse drills";
-      if (visible) renderDrillCatalog();
+    let settingsOpen = false;
+
+    // The settings popover only exists in the focus layout; elsewhere the sidebar is always shown.
+    function setSettingsOpen(open) {
+      settingsOpen = open && settings.layout === "focus";
+      sidebar.classList.toggle("open", settingsOpen);
+      settingsButton.setAttribute("aria-expanded", String(settingsOpen));
+    }
+
+    // Each layout reuses the same controls: the heading and live stats move into the sidebar for layout A.
+    function applyLayout() {
+      document.documentElement.dataset.layout = settings.layout;
+      setPressed(layoutButtons, (button) => button.dataset.layoutOption === settings.layout);
+      if (settings.layout === "sidebar") {
+        get("now-card").append(practiceHeading);
+        get("stats-card").append(statsStrip);
+      } else {
+        mainColumn.prepend(practiceHeading);
+        practiceCard.prepend(statsStrip);
+      }
+      setSettingsOpen(false);
+    }
+
+    function sectionProgress(section) {
+      const sectionLessons = lessonsBySection.get(section);
+      const done = sectionLessons.filter((lesson) => settings.completed.includes(lesson.id)).length;
+      return { sectionLessons, done, total: sectionLessons.length, complete: done === sectionLessons.length };
+    }
+
+    function progressBar(fraction) {
+      const bar = element("div", "bar");
+      bar.setAttribute("aria-hidden", "true");
+      const fill = element("div", "bar-fill");
+      fill.style.width = `${Math.round(fraction * 100)}%`;
+      bar.append(fill);
+      return bar;
+    }
+
+    function renderProgressCard() {
+      get("progress-total").textContent = `${settings.completed.length} / ${lessons.length}`;
+      get("section-progress").replaceChildren(...lessonSections.map((section) => {
+        const { done, total, complete } = sectionProgress(section);
+        const item = element("li", complete ? "complete" : "");
+        const row = element("div", "section-progress-row");
+        row.append(element("span", "", section.name), element("span", "mono", `${done} / ${total}`));
+        item.append(row, progressBar(done / total));
+        return item;
+      }));
+    }
+
+    let libraryOpen = false;
+
+    function firstIncompleteDrill() {
+      return lessons.find((lesson) => !settings.completed.includes(lesson.id))?.id ?? null;
+    }
+
+    function renderLibrary() {
+      const done = settings.completed.length;
+      const percent = Math.round(done / lessons.length * 100);
+      get("library-progress-label").textContent = `${done} of ${lessons.length} complete`;
+      get("library-progress-percent").textContent = `${percent}%`;
+      get("library-progress-fill").style.width = `${percent}%`;
+      const next = firstIncompleteDrill();
+      const continueButton = get("continue-drill");
+      continueButton.hidden = next === null;
+      continueButton.dataset.drill = next ?? "";
+      get("continue-drill-label").textContent = `Continue with drill ${next}`;
+      get("close-library-label").textContent = settings.view === "lessons"
+        ? `Back to drill ${settings.lesson}`
+        : `Back to ${settings.view === "free" ? "free" : "text"} practice`;
+
+      get("library-sections").replaceChildren(...lessonSections.map((section, index) => {
+        const { sectionLessons, done: doneCount, total, complete } = sectionProgress(section);
+        const card = element("section", "card library-section");
+        const headingId = `library-section-${index + 1}`;
+        card.setAttribute("aria-labelledby", headingId);
+
+        const heading = element("h2", "", section.name);
+        heading.id = headingId;
+        heading.append(element("span", "range", `${sectionLessons[0].id}–${sectionLessons.at(-1).id}`));
+        const intro = element("div");
+        intro.append(heading, element("p", "library-section-description", section.instruction));
+        const meter = element("div", complete ? "section-meter complete" : "section-meter");
+        meter.append(progressBar(doneCount / total), element("span", "mono", `${doneCount} / ${total}`));
+        const header = element("div", "library-section-header");
+        header.append(intro, meter);
+
+        const grid = element("div", "drill-grid");
+        for (const lesson of sectionLessons) {
+          const isDone = settings.completed.includes(lesson.id);
+          const button = element("button", isDone ? "drill-tile done" : "drill-tile");
+          button.type = "button";
+          // Long prompts span extra columns so they show in full.
+          if (lesson.prompt.length > 9) button.style.gridColumn = `span ${lesson.prompt.length > 24 ? 3 : 2}`;
+          button.title = lesson.prompt;
+          button.setAttribute("aria-label", `Drill ${lesson.id}: ${lesson.prompt}${isDone ? ", complete" : ""}`);
+          if (lesson.id === settings.lesson) button.setAttribute("aria-current", "step");
+          button.addEventListener("click", () => chooseDrill(lesson.id));
+          button.append(element("span", "drill-tile-number", String(lesson.id)), element("samp", "drill-tile-prompt", lesson.prompt));
+          if (isDone) button.append(icon("check"));
+          grid.append(button);
+        }
+        card.append(header, grid);
+        return card;
+      }));
+    }
+
+    function setLibraryOpen(open) {
+      libraryOpen = open;
+      library.hidden = !open;
+      workspace.hidden = open;
+      libraryButton.setAttribute("aria-pressed", String(open));
+      if (!open) return;
+      setSettingsOpen(false);
+      if (timer !== null) pauseRound();
+      renderLibrary();
+      window.scrollTo({ top: 0 });
+      get("close-library").focus({ preventScroll: true });
+    }
+
+    function closeLibrary() {
+      setLibraryOpen(false);
+      typingArea.focus({ preventScroll: true });
     }
 
     function chooseDrill(id) {
       if (!validDrillId(id)) return;
       settings.lesson = id;
+      settings.view = "lessons";
       saveSettings();
       startRound();
       typingArea.scrollIntoView({ block: "nearest" });
     }
 
     const keyMap = new Map();
-    const functionIcons = ["☼", "☀", "▣", "⌕", "", "☾", "◂◂", "⏵", "▸▸", "◖×", "◖)", "◖))"];
-    const functionNames = [
-      "Brightness down", "Brightness up", "Mission Control", "Spotlight", "Dictation", "Do Not Disturb",
-      "Previous track", "Play or pause", "Next track", "Mute", "Volume down", "Volume up"
-    ];
 
-    function makeKey({ label, character = label, upper, finger, classes = "", title = label }) {
-      const key = document.createElement("span");
-      key.className = `key ${classes}`;
+    function makeKey({ label, character = label, upper, finger, span = 4, classes = "", title = label }) {
+      const key = element("span", `key ${classes}`.trim());
+      key.style.gridColumn = `span ${span}`;
       if (title) key.title = title;
-      const base = document.createElement("span");
-      base.className = "base";
-      base.textContent = label;
+      if (finger) key.dataset.zone = finger.endsWith("I") ? (finger.startsWith("L") ? "index-left" : "index-right") : zones[finger.at(-1)];
       if (upper) {
-        const shifted = document.createElement("span");
-        shifted.className = "upper";
-        shifted.textContent = upper;
         key.classList.add("shifted");
-        key.append(shifted);
+        key.append(element("span", "upper", upper));
         keyMap.set(upper, { key, finger, shifted: true });
       }
-      key.append(base);
+      key.append(element("span", "base", label));
       if (finger) keyMap.set(character, { key, finger, shifted: false });
       return key;
     }
 
+    // A modifier shows its macOS symbol centered above its name.
+    function makeModifier(label, title, glyph, span = 4) {
+      const key = element("span", "key modifier");
+      key.style.gridColumn = `span ${span}`;
+      key.title = title;
+      if (glyph) {
+        const mark = element("span", "glyph");
+        if (glyph === "globe") mark.append(icon("globe"));
+        else mark.textContent = glyph;
+        key.append(mark);
+      }
+      key.append(element("span", "mod-label", label));
+      return key;
+    }
+
+    function makeFunctionKey(label, iconName, action) {
+      const key = element("span", "key function");
+      key.style.gridColumn = "span 4";
+      key.title = `${label} · ${action}`;
+      key.append(icon(iconName), element("span", "fn-label", label));
+      return key;
+    }
+
+    // The keyboard follows the Apple silicon MacBook layout (US).
     function drawKeyboard() {
-      const makeModifier = (label, title = label, classes = "") =>
-        makeKey({ label, title, classes: `modifier ${classes}` });
       const letterKeys = (row, fingering) => [...row].map((letter, index) => {
         const label = letter.toUpperCase();
         const finger = fingering[index];
-        const key = makeKey({
-          label, character: letter, finger, classes: letter === "f" || letter === "j" ? "home" : ""
-        });
+        const key = makeKey({ label, character: letter, finger, classes: letter === "f" || letter === "j" ? "home" : "" });
         keyMap.set(label, { key, finger, shifted: true });
         return key;
       });
       const punctuation = (label, upper, finger) => makeKey({ label, upper, finger });
-      const makeRow = (widths, keys) => {
-        const row = document.createElement("div");
-        row.className = "key-row";
-        row.style.setProperty("--columns", widths.map((width) => `minmax(0, ${width}fr)`).join(" "));
+      const makeRow = (keys) => {
+        const row = element("div", "key-row");
         row.append(...keys);
         keyboard.append(row);
       };
+      const functionKeys = [
+        ["F1", "sun-min", "Brightness down"], ["F2", "sun-max", "Brightness up"], ["F3", "mission", "Mission Control"],
+        ["F4", "search", "Spotlight"], ["F5", "mic", "Dictation"], ["F6", "focus", "Do Not Disturb"],
+        ["F7", "rewind", "Previous track"], ["F8", "play-pause", "Play or pause"], ["F9", "forward", "Next track"],
+        ["F10", "mute", "Mute"], ["F11", "volume-down", "Volume down"], ["F12", "volume-up", "Volume up"]
+      ];
 
-      const leftShift = makeModifier("⇧ shift", "Left Shift");
-      const rightShift = makeModifier("shift ⇧", "Right Shift");
-      const arrowStack = document.createElement("div");
-      arrowStack.className = "arrow-stack";
-      arrowStack.append(makeKey({ label: "↑", title: "Up Arrow" }), makeKey({ label: "↓", title: "Down Arrow" }));
+      const leftShift = makeModifier("shift", "Left Shift", "⇧", 9);
+      const rightShift = makeModifier("shift", "Right Shift", "⇧", 9);
+      const arrowStack = element("span", "arrow-stack");
+      arrowStack.style.gridColumn = "span 4";
+      arrowStack.append(
+        makeKey({ label: "▲", classes: "arrow", title: "Up Arrow" }),
+        makeKey({ label: "▼", classes: "arrow", title: "Down Arrow" })
+      );
 
-      makeRow([1, ...Array(12).fill(1), 1], [
-        makeKey({ label: "esc", classes: "function", title: "Escape" }),
-        ...functionIcons.map((icon, index) => {
-          const label = `F${index + 1}`;
-          const key = makeKey({ label, classes: "function", title: `${label} · ${functionNames[index]}` });
-          const mark = document.createElement("span");
-          mark.className = icon ? "function-icon" : "function-icon microphone";
-          mark.textContent = icon;
-          key.prepend(mark);
-          return key;
-        }),
-        makeKey({ label: "", classes: "function touch-id", title: "Touch ID / power" })
+      makeRow([
+        makeModifier("esc", "Escape", "", 6),
+        ...functionKeys.map(([label, iconName, action]) => makeFunctionKey(label, iconName, action)),
+        makeKey({ label: "", classes: "touch-id", title: "Touch ID" })
       ]);
-      makeRow([...Array(13).fill(1), 1.5], [
+      makeRow([
         ...numberRow.map(([label, upper, finger]) => makeKey({ label, upper, finger, classes: "number" })),
-        makeModifier("delete", "Delete")
+        makeModifier("delete", "Delete", "⌫", 6)
       ]);
-      makeRow([1.5, ...Array(13).fill(1)], [
-        makeModifier("tab", "Tab"),
+      makeRow([
+        makeModifier("tab", "Tab", "⇥", 6),
         ...letterKeys("qwertyuiop", ["LP", "LR", "LM", "LI", "LI", "RI", "RI", "RM", "RR", "RP"]),
         punctuation("[", "{", "RP"), punctuation("]", "}", "RP"), punctuation("\\", "|", "RP")
       ]);
-      makeRow([1.75, ...Array(11).fill(1), 1.75], [
-        makeModifier("caps lock", "Caps Lock"),
+      makeRow([
+        makeModifier("caps lock", "Caps Lock", "⇪", 7),
         ...letterKeys("asdfghjkl", ["LP", "LR", "LM", "LI", "LI", "RI", "RI", "RM", "RR"]),
-        punctuation(";", ":", "RP"), punctuation("'", '"', "RP"), makeModifier("return", "Return")
+        punctuation(";", ":", "RP"), punctuation("'", '"', "RP"),
+        makeModifier("return", "Return", "↩︎", 7)
       ]);
-      makeRow([2.25, ...Array(10).fill(1), 2.25], [
-        leftShift, ...letterKeys("zxcvbnm", ["LP", "LR", "LM", "LI", "LI", "RI", "RI"]),
-        punctuation(",", "<", "RM"), punctuation(".", ">", "RR"), punctuation("/", "?", "RP"), rightShift
+      makeRow([
+        leftShift,
+        ...letterKeys("zxcvbnm", ["LP", "LR", "LM", "LI", "LI", "RI", "RI"]),
+        punctuation(",", "<", "RM"), punctuation(".", ">", "RR"), punctuation("/", "?", "RP"),
+        rightShift
       ]);
-      makeRow([1, 1, 1, 1.25, 4.75, 1.25, 1, 1, 1, 1], [
-        makeModifier("fn", "Fn / Globe"), makeModifier("⌃ control", "Control"), makeModifier("⌥ option", "Left Option"),
-        makeModifier("⌘ cmd", "Left Command"),
-        makeKey({ label: "", character: " ", finger: "T", title: "Space" }),
-        makeModifier("⌘ cmd", "Right Command"), makeModifier("⌥ option", "Right Option"),
-        makeKey({ label: "←", classes: "arrow-side", title: "Left Arrow" }), arrowStack,
-        makeKey({ label: "→", classes: "arrow-side", title: "Right Arrow" })
+      makeRow([
+        makeModifier("fn", "Fn / Globe", "globe"),
+        makeModifier("control", "Control", "⌃"),
+        makeModifier("option", "Left Option", "⌥"),
+        makeModifier("command", "Left Command", "⌘", 5),
+        makeKey({ label: "", character: " ", finger: "T", span: 20, classes: "space-key", title: "Space" }),
+        makeModifier("command", "Right Command", "⌘", 5),
+        makeModifier("option", "Right Option", "⌥"),
+        makeKey({ label: "◀", classes: "arrow arrow-side", title: "Left Arrow" }),
+        arrowStack,
+        makeKey({ label: "▶", classes: "arrow arrow-side", title: "Right Arrow" })
       ]);
       return { leftShift, rightShift };
     }
@@ -946,7 +1458,36 @@
     const { leftShift, rightShift } = drawKeyboard();
     let highlighted = [];
     let round;
-    let timer;
+    let timer = null;
+    // The clock only counts time spent typing: a gap between keystrokes counts for at most this long.
+    const idleLimit = 5000;
+
+    function activeTime(now = performance.now()) {
+      if (round.lastKeyAt === null) return round.activeMs;
+      return round.activeMs + Math.min(now - round.lastKeyAt, idleLimit);
+    }
+
+    function stopClock() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    function pauseClock() {
+      round.activeMs = activeTime();
+      round.lastKeyAt = null;
+      stopClock();
+    }
+
+    function pauseRound() {
+      pauseClock();
+      setStatus("Paused · type to continue.");
+      renderStats();
+    }
+
+    function tick() {
+      if (performance.now() - round.lastKeyAt >= idleLimit) pauseRound();
+      else renderStats();
+    }
 
     function shuffledBag(values) {
       let bag = [];
@@ -1000,9 +1541,24 @@
     }
 
     function updateLengthLabel() {
-      const label = `${lessonLengthControl.value} keys`;
-      lessonLengthValue.value = label;
-      lessonLengthControl.setAttribute("aria-valuetext", label);
+      const keys = Number(lessonLengthControl.value);
+      const minutes = keys / 60;
+      const minutesText = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
+      lessonLengthValue.value = `${keys} keys · ~${minutesText} min`;
+      lessonLengthControl.setAttribute("aria-valuetext", `${keys} keys, about ${minutesText} minutes at one key per second`);
+    }
+
+    function updateTypoHelp() {
+      const limit = settings.typoLimit;
+      if (limit === null) {
+        typoLimitHelp.textContent = "Leave blank to keep going after typos.";
+        return;
+      }
+      const attemptName = round.passage ? "passage" : "drill";
+      const left = limit - round.mistakes;
+      typoLimitHelp.textContent = left > 0
+        ? `${left} more ${left === 1 ? "typo" : "typos"} allowed before the ${attemptName} restarts.`
+        : `The next typo restarts the ${attemptName}.`;
     }
 
     function commitTypoLimit() {
@@ -1012,6 +1568,7 @@
         settings.typoLimit = limit;
         saveSettings();
       }
+      updateTypoHelp();
       return true;
     }
 
@@ -1027,29 +1584,35 @@
       typingArea.scrollIntoView({ block: "nearest" });
     }
 
+    function setPressed(buttons, isPressed) {
+      for (const button of buttons) button.setAttribute("aria-pressed", String(isPressed(button)));
+    }
+
     function startRound(focus = true) {
-      clearInterval(timer);
+      stopClock();
+      if (libraryOpen) setLibraryOpen(false);
       const lesson = settings.view === "lessons" ? lessons[settings.lesson - 1] : null;
       const passage = settings.view === "text" ? (currentPassage ??= drawPassage()) : null;
       const groups = lesson
         ? repeatPattern(lesson.prompt, Math.max(settings.lessonLength, lesson.prompt.length))
         : (passage?.text ?? generateGroups(settings.mode, settings.length).join(" ")).match(/\S+ ?/g);
       round = {
-        lesson, passage, characters: groups.join(""), cells: [], position: 0, startedAt: null, endedAt: null,
-        mistakes: 0, misses: new Map(), lastWrong: null
+        lesson, passage, characters: groups.join(""), cells: [], position: 0, activeMs: 0, lastKeyAt: null, endedAt: null,
+        failed: false, mistakes: 0, misses: new Map(), lastWrong: null
       };
+      resultBanner.hidden = true;
+      typingArea.hidden = false;
 
       const prompt = get("prompt");
       prompt.classList.toggle("short", !!lesson && round.characters.length <= 9);
+      prompt.classList.toggle("long", !passage && round.characters.length > 64);
       prompt.classList.toggle("prose", !!passage);
+      prompt.classList.toggle("grouped", !!lesson && !lesson.prompt.includes(" "));
       prompt.replaceChildren();
       for (const group of groups) {
-        const chunk = document.createElement("span");
-        chunk.className = "chunk";
+        const chunk = element("span", "chunk");
         for (const character of group) {
-          const cell = document.createElement("span");
-          cell.className = character === " " ? "character space" : "character";
-          cell.textContent = character;
+          const cell = element("span", character === " " ? "character space" : "character", character);
           round.cells.push(cell);
           chunk.append(cell);
         }
@@ -1057,36 +1620,42 @@
       }
       prompt.scrollTop = 0;
 
-      progress.max = round.characters.length;
-      wpmCounter.hidden = !passage;
-      for (const button of viewButtons) button.setAttribute("aria-pressed", String(button.dataset.view === settings.view));
-      for (const button of modeButtons) button.setAttribute("aria-pressed", String(button.dataset.mode === settings.mode));
-      lengthControl.value = String(settings.length);
-
       const hasPreset = Boolean(lesson || passage);
-      get("free-controls").hidden = hasPreset;
-      get("lesson-heading").hidden = !hasPreset;
+      const attemptName = passage ? "passage" : "drill";
+      setPressed(viewButtons, (button) => button.dataset.view === settings.view);
+      setPressed(modeButtons, (button) => button.dataset.mode === settings.mode);
+      setPressed(lengthButtons, (button) => Number(button.dataset.length) === settings.length);
+      setPressed(passageLengthButtons, (button) => button.dataset.passageLength === settings.passageLength);
+
+      progress.max = round.characters.length;
+      wpmStat.hidden = !passage;
+      get("settings-title").textContent = lesson ? "Drill settings" : passage ? "Passage settings" : "Round settings";
       get("lesson-length-settings").hidden = !lesson;
+      get("free-settings").hidden = hasPreset;
       get("passage-length-settings").hidden = !passage;
+      get("typo-settings").hidden = !hasPreset;
+      get("progress-card").hidden = !lesson;
+      get("misses-scope").textContent = lesson ? "This drill" : passage ? "This passage" : "This round";
       passageSource.hidden = !passage;
-      browseDrills.hidden = !lesson;
-      setCatalogOpen(false);
       typoLimitControl.value = settings.typoLimit ?? "";
+
+      let location;
+      let title;
       if (lesson) {
-        get("lesson-location").textContent = `${lesson.section.name} · Drill ${lesson.id} of ${lessons.length}`;
-        get("lesson-title").textContent = lesson.section.title(lesson.prompt);
-        lessonLengthControl.min = lesson.prompt.length;
-        lessonLengthControl.max = maximumLessonLength;
-        lessonLengthControl.value = round.characters.length;
+        location = `${lesson.section.name} · Drill ${lesson.id} of ${lessons.length}`;
+        title = lesson.section.title(lesson.prompt);
+        lessonLengthControl.value = settings.lessonLength;
         updateLengthLabel();
       } else if (passage) {
-        for (const button of passageLengthButtons) {
-          button.setAttribute("aria-pressed", String(button.dataset.passageLength === settings.passageLength));
-        }
-        get("lesson-location").textContent = `${passage.author} · ${passage.words} words`;
-        get("lesson-title").textContent = passage.title;
+        location = `${passage.author} · ${passage.words} words`;
+        title = passage.title;
         passageSource.href = passage.url;
+      } else {
+        location = `Free practice · ${settings.length} keys`;
+        title = modeNames[settings.mode];
       }
+      get("lesson-location").textContent = location;
+      get("lesson-title").textContent = title;
       get("mode-description").textContent = passage
         ? "Type the passage, including capitalization and punctuation."
         : lesson?.section.instruction ?? modes[settings.mode];
@@ -1096,14 +1665,16 @@
       previousDrill.disabled = lesson?.id === 1;
       nextDrill.disabled = lesson?.id === lessons.length;
       nextDrill.classList.remove("primary");
-      nextDrill.textContent = passage ? "New passage" : "Next drill";
+      nextDrill.classList.toggle("is-passage", !!passage);
+      nextDrillLabel.textContent = passage ? "New passage" : "Next drill";
       newRound.classList.remove("primary");
-      newRound.classList.toggle("text-button", hasPreset);
-      newRound.classList.toggle("reset-button", hasPreset);
-      newRound.classList.toggle("action", !hasPreset);
-      const attemptName = passage ? "passage" : "drill";
-      newRound.textContent = hasPreset ? `Reset ${attemptName}` : "New round";
-      newRound.title = hasPreset ? `Reset this ${attemptName} (Esc)` : "New round (Esc)";
+      newRoundLabel.textContent = hasPreset ? `Reset ${attemptName}` : "New round";
+      newRound.title = hasPreset ? `Reset this ${attemptName} (esc)` : "New round (esc)";
+      get("escape-hint").textContent = hasPreset ? "reset" : "new round";
+      let enterHint = "next round when done";
+      if (passage) enterHint = "new passage when done";
+      else if (lesson) enterHint = lesson.id < lessons.length ? "next drill when done" : "reset when done";
+      get("enter-hint").textContent = enterHint;
 
       let spaceInstruction = "";
       if (!passage && round.characters.includes(" ")) {
@@ -1114,13 +1685,20 @@
       setStatus(`Type to start.${spaceInstruction}`);
       updateProgress();
       renderStats();
+      updateTypoHelp();
       renderMisses();
       renderKeyboard();
+      if (lesson) renderProgressCard();
       if (focus) typingArea.focus({ preventScroll: true });
     }
 
     function describeKey(character) {
       return character === " " ? "Space" : character;
+    }
+
+    function formatTime(milliseconds) {
+      const seconds = Math.floor(milliseconds / 1000);
+      return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
     }
 
     function setStatus(message, state = "") {
@@ -1150,13 +1728,12 @@
     }
 
     function renderStats() {
-      const duration = round.startedAt === null ? 0 : (round.endedAt ?? performance.now()) - round.startedAt;
-      const seconds = Math.floor(duration / 1000);
+      const duration = activeTime();
       const attempts = round.position + round.mistakes;
       const keysPerMinute = duration >= 1000 ? round.position * 60000 / duration : null;
       statFields.accuracy.textContent = attempts ? `${Math.round(round.position / attempts * 100)}%` : "—";
       statFields.mistakes.textContent = round.mistakes;
-      statFields.elapsed.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+      statFields.elapsed.textContent = formatTime(duration);
       statFields.speed.textContent = keysPerMinute === null ? "—" : Math.round(keysPerMinute);
       if (round.passage) wpmValue.textContent = keysPerMinute === null ? "—" : Math.round(keysPerMinute / 5);
     }
@@ -1168,22 +1745,31 @@
         ? "Missed keys will show up here during the round."
         : "No keys missed this round.";
       missList.hidden = entries.length === 0;
-      missList.replaceChildren();
-      for (const [key, count] of entries) {
-        const item = document.createElement("li");
-        const cap = document.createElement("kbd");
-        cap.textContent = describeKey(key);
-        const label = document.createElement("span");
-        label.textContent = `${count} ${count === 1 ? "miss" : "misses"}`;
-        item.append(cap, label);
-        missList.append(item);
-      }
+      const most = entries[0]?.[1] ?? 1;
+      missList.replaceChildren(...entries.map(([key, count]) => {
+        const bar = element("span", "miss-bar");
+        bar.setAttribute("aria-hidden", "true");
+        const fill = element("span", "miss-bar-fill");
+        fill.style.width = `${count / most * 100}%`;
+        bar.append(fill);
+        const item = element("li");
+        item.append(element("kbd", "", describeKey(key)), bar, element("span", "miss-count", `${count} ${count === 1 ? "miss" : "misses"}`));
+        return item;
+      }));
+      const inlineMisses = get("missed-inline");
+      inlineMisses.hidden = entries.length === 0;
+      inlineMisses.replaceChildren("Most missed", ...entries.slice(0, 3).map(([key, count]) => {
+        const chip = element("kbd", "", describeKey(key));
+        chip.append(element("span", "", `×${count}`));
+        return chip;
+      }));
     }
 
     function renderKeyboard() {
       for (const key of highlighted) key.classList.remove("target", "shift-hint", "use-shift", "missed");
       highlighted = [];
       keyboardFigure.hidden = !settings.keyboard;
+      fingerGuide.hidden = !settings.keyboard;
       keyboardButton.setAttribute("aria-expanded", String(settings.keyboard));
       keyboardButton.textContent = settings.keyboard ? "Hide keyboard" : "Show keyboard";
       hintButton.setAttribute("aria-checked", String(settings.hints));
@@ -1214,14 +1800,18 @@
         highlighted.push(wrongKey);
       }
 
-      const label = document.createElement("strong");
-      label.textContent = describeKey(target);
-      fingerGuide.replaceChildren(label, ` · ${fingers[entry.finger]}${shiftInstruction}`);
+      const parts = ["Next", element("kbd", "guide-key", describeKey(target)), element("strong", "", `${fingers[entry.finger]}${shiftInstruction}`)];
+      if (round.lastWrong !== null) {
+        const chip = element("span", "wrong-chip", "you hit");
+        chip.append(element("kbd", "", describeKey(round.lastWrong)));
+        parts.push(chip);
+      }
+      fingerGuide.replaceChildren(...parts);
     }
 
     function finishRound() {
       round.endedAt = performance.now();
-      clearInterval(timer);
+      pauseClock();
       const accuracy = Math.round(round.position / (round.position + round.mistakes) * 100);
       const lesson = round.lesson;
 
@@ -1229,28 +1819,115 @@
         if (!settings.completed.includes(lesson.id)) {
           settings.completed.push(lesson.id);
           saveSettings();
-          if (!drillCatalog.hidden) renderDrillCatalog();
+          renderProgressCard();
         }
         const hasNext = lesson.id < lessons.length;
-        const instruction = hasNext ? "Press Enter for the next drill." : "Press Enter to reset.";
+        const instruction = hasNext ? "Press return for the next drill." : "Press return to reset.";
         if (hasNext) nextDrill.classList.add("primary");
         setStatus(`Drill complete · ${accuracy}% accuracy. ${instruction}`, "complete");
       } else if (round.passage) {
-        setStatus(`Passage complete · ${accuracy}% accuracy. Press Enter for a new passage.`, "complete");
+        setStatus(`Passage complete · ${accuracy}% accuracy. Press return for a new passage.`, "complete");
         nextDrill.classList.add("primary");
       } else {
-        setStatus(`Round complete · ${accuracy}% accuracy. Press Enter for the next round.`, "complete");
+        setStatus(`Round complete · ${accuracy}% accuracy. Press return for the next round.`, "complete");
         newRound.classList.add("primary");
-        newRound.textContent = "Next round";
+        newRoundLabel.textContent = "Next round";
       }
       renderMisses();
     }
 
-    function handleAttempt(character) {
-      if (round.startedAt === null) {
-        round.startedAt = performance.now();
-        timer = setInterval(renderStats, 250);
+    function fingerText(entry) {
+      if (!entry.shifted) return fingers[entry.finger];
+      return `${fingers[entry.finger]} + ${entry.finger.startsWith("L") ? "right" : "left"} Shift`;
+    }
+
+    function resultAdvice(accuracy) {
+      const advice = [];
+      const share = (matches) => [...round.misses].reduce((sum, [key, count]) => sum + (matches(key) ? count : 0), 0) / round.mistakes;
+      const [topKey, topCount] = [...round.misses].sort((a, b) => b[1] - a[1])[0];
+      const topEntry = keyMap.get(topKey);
+      if (topCount >= 2 && topEntry) {
+        advice.push(`${describeKey(topKey)} tripped you up ${topCount} times. Slow down for it and use your ${fingerText(topEntry).toLowerCase()}.`);
       }
+      if (share((key) => keyMap.get(key)?.shifted) >= 0.5) {
+        advice.push("Most typos were shifted characters. Hold Shift with the opposite hand before you press the key.");
+      }
+      if (share((key) => key === " ") >= 0.5) {
+        advice.push("Several typos were on Space. Tap it with a thumb and keep your fingers on the home row.");
+      }
+      if (round.position < round.characters.length * 0.2) {
+        advice.push("The typos came early. Start slower and build speed once the rhythm feels steady.");
+      }
+      if (accuracy < 90) {
+        advice.push(`Accuracy was ${accuracy}%. Ease off the pace: clean keystrokes build speed faster than fixing typos.`);
+      }
+      if (advice.length === 0) advice.push("Take a breath and try again. Aim for a clean run over a fast one.");
+      return advice.slice(0, 3);
+    }
+
+    function showResults() {
+      const attemptName = round.passage ? "passage" : "drill";
+      const duration = activeTime();
+      const typed = round.position;
+      const total = round.characters.length;
+      const accuracy = Math.round(typed / (typed + round.mistakes) * 100);
+      const keysPerMinute = duration >= 1000 ? typed * 60000 / duration : null;
+      const words = round.passage
+        ? (round.characters.slice(0, typed).match(/\S+(?=\s)/g) ?? []).length
+        : Math.floor(typed / 5);
+
+      get("result-title").textContent = `${attemptName[0].toUpperCase()}${attemptName.slice(1)} stopped after ${round.mistakes} typos`;
+      get("result-subtitle").textContent = `Auto-reset is set past ${settings.typoLimit}. You typed ${typed} of ${total} characters (${Math.round(typed / total * 100)}%).`;
+      const stats = [
+        ["Characters", String(typed), `of ${total}`],
+        [round.passage ? "Words" : "Words (5 keys)", String(words), ""],
+        ["Speed", keysPerMinute === null ? "—" : String(Math.round(keysPerMinute / 5)), keysPerMinute === null ? "" : "wpm"],
+        ["Keys/min", keysPerMinute === null ? "—" : String(Math.round(keysPerMinute)), ""],
+        ["Accuracy", `${accuracy}%`, ""],
+        ["Time", formatTime(duration), ""]
+      ];
+      get("result-stats").replaceChildren(...stats.map(([label, value, detail]) => {
+        const item = element("div");
+        const amount = element("dd", "", value);
+        if (detail) amount.append(element("small", "", detail));
+        item.append(element("dt", "", label), amount);
+        return item;
+      }));
+
+      const missed = [...round.misses.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+      get("result-keys").replaceChildren(...missed.map(([key, count]) => {
+        const entry = keyMap.get(key);
+        const item = element("li");
+        item.append(element("kbd", "", describeKey(key)), element("span", "", entry ? fingerText(entry) : "Off the guide"), element("span", "count", `×${count}`));
+        return item;
+      }));
+      get("result-advice").replaceChildren(...resultAdvice(accuracy).map((tip) => element("li", "", tip)));
+      get("result-alternative").textContent = round.passage ? "New passage" : "Drill library";
+    }
+
+    // Auto-reset stops the attempt and shows a summary; the next attempt starts on return.
+    function failRound() {
+      round.failed = true;
+      round.endedAt = performance.now();
+      pauseClock();
+      typingArea.hidden = true;
+      resultBanner.hidden = false;
+      showResults();
+      const attemptName = round.passage ? "Passage" : "Drill";
+      setStatus(`${attemptName} stopped after ${round.mistakes} typos. Press return to try again.`, "error");
+      get("enter-hint").textContent = "try again";
+      renderStats();
+      updateTypoHelp();
+      renderMisses();
+      renderKeyboard();
+      get("retry-round").focus({ preventScroll: true });
+    }
+
+    function handleAttempt(character) {
+      const now = performance.now();
+      round.activeMs = activeTime(now);
+      round.lastKeyAt = now;
+      timer ??= setInterval(tick, 250);
       const target = round.characters[round.position];
       if (character === target) {
         round.cells[round.position].classList.add("done");
@@ -1259,20 +1936,18 @@
         if (round.position === round.characters.length) {
           finishRound();
         } else if (status.textContent !== "Round in progress") {
-          setStatus("Round in progress");
+          setStatus("Round in progress", "active");
         }
       } else {
         round.mistakes++;
-        if ((round.lesson || round.passage) && settings.typoLimit !== null && round.mistakes > settings.typoLimit) {
-          const typos = round.mistakes;
-          const attemptName = round.passage ? "Passage" : "Drill";
-          startRound();
-          setStatus(`${attemptName} reset after ${typos} ${typos === 1 ? "typo" : "typos"}.`, "error");
-          return;
-        }
         round.lastWrong = character;
         round.misses.set(target, (round.misses.get(target) ?? 0) + 1);
+        if ((round.lesson || round.passage) && settings.typoLimit !== null && round.mistakes > settings.typoLimit) {
+          failRound();
+          return;
+        }
         setStatus(`Expected ${describeKey(target)} · typed ${describeKey(character)}`, "error");
+        updateTypoHelp();
         renderMisses();
       }
       updateProgress();
@@ -1286,6 +1961,8 @@
           settings.view = button.dataset.view;
           saveSettings();
           startRound();
+        } else if (libraryOpen) {
+          closeLibrary();
         } else {
           typingArea.focus({ preventScroll: true });
         }
@@ -1296,6 +1973,19 @@
       button.addEventListener("click", () => {
         if (button.dataset.mode !== settings.mode) {
           settings.mode = button.dataset.mode;
+          saveSettings();
+          startRound();
+        } else {
+          typingArea.focus({ preventScroll: true });
+        }
+      });
+    }
+
+    for (const button of lengthButtons) {
+      button.addEventListener("click", () => {
+        const length = Number(button.dataset.length);
+        if (length !== settings.length) {
+          settings.length = length;
           saveSettings();
           startRound();
         } else {
@@ -1316,11 +2006,6 @@
       });
     }
 
-    lengthControl.addEventListener("change", () => {
-      settings.length = Number(lengthControl.value);
-      saveSettings();
-      startRound();
-    });
     lessonLengthControl.addEventListener("input", updateLengthLabel);
     lessonLengthControl.addEventListener("change", () => {
       settings.lessonLength = Number(lessonLengthControl.value);
@@ -1340,7 +2025,33 @@
       if (round.passage) newPassage();
       else chooseDrill(settings.lesson + 1);
     });
-    browseDrills.addEventListener("click", () => setCatalogOpen(drillCatalog.hidden));
+    libraryButton.addEventListener("click", () => {
+      if (libraryOpen) closeLibrary();
+      else setLibraryOpen(true);
+    });
+    get("open-library-side").addEventListener("click", () => setLibraryOpen(true));
+    get("close-library").addEventListener("click", closeLibrary);
+    get("retry-round").addEventListener("click", () => startRound());
+    for (const button of layoutButtons) {
+      button.addEventListener("click", () => {
+        settings.layout = button.dataset.layoutOption;
+        saveSettings();
+        applyLayout();
+      });
+    }
+    settingsButton.addEventListener("click", () => setSettingsOpen(!settingsOpen));
+    document.addEventListener("click", (event) => {
+      if (settingsOpen && !event.target.closest("#sidebar, #toggle-settings")) setSettingsOpen(false);
+    });
+    // The docked layout sizes the page around the keyboard panel's real height.
+    new ResizeObserver(() => {
+      document.documentElement.style.setProperty("--dock-h", `${keyboardCard.offsetHeight}px`);
+    }).observe(keyboardCard);
+    get("result-alternative").addEventListener("click", () => {
+      if (round.passage) newPassage();
+      else setLibraryOpen(true);
+    });
+    get("continue-drill").addEventListener("click", (event) => chooseDrill(Number(event.currentTarget.dataset.drill)));
     typingArea.addEventListener("click", () => typingArea.focus({ preventScroll: true }));
     hintButton.addEventListener("click", () => {
       settings.hints = !settings.hints;
@@ -1354,17 +2065,40 @@
       renderKeyboard();
       typingArea.focus({ preventScroll: true });
     });
+    themeButton.addEventListener("click", () => {
+      settings.theme = activeTheme() === "dark" ? "light" : "dark";
+      saveSettings();
+      applyTheme();
+    });
+    darkScheme.addEventListener("change", () => {
+      if (settings.theme === null) applyTheme();
+    });
 
     document.addEventListener("keydown", (event) => {
       if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.target.closest("button, input, select, textarea, a, summary, [contenteditable]")) return;
+      if (settingsOpen && event.key === "Escape") {
+        event.preventDefault();
+        setSettingsOpen(false);
+        settingsButton.focus({ preventScroll: true });
+        return;
+      }
+      if (event.target.closest("input, select, textarea, [contenteditable]")) return;
+      if (libraryOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          if (!event.repeat) closeLibrary();
+        }
+        return;
+      }
+      // Space and Enter still activate a focused button, link, or summary; every other key goes to the drill.
+      if (event.target.closest("button, a, summary") && (event.key === " " || event.key === "Enter")) return;
       const advance = round.endedAt !== null && event.key === "Enter";
       if (event.key === "Escape" || advance) {
         event.preventDefault();
         if (event.repeat) return;
-        if (advance && round.passage) {
+        if (advance && !round.failed && round.passage) {
           newPassage();
-        } else if (advance && round.lesson && round.lesson.id < lessons.length) {
+        } else if (advance && !round.failed && round.lesson && round.lesson.id < lessons.length) {
           chooseDrill(round.lesson.id + 1);
         } else {
           startRound();
@@ -1373,9 +2107,17 @@
       }
       if (round.endedAt !== null || event.key.length !== 1) return;
       event.preventDefault();
+      if (settingsOpen) setSettingsOpen(false);
+      if (document.activeElement !== typingArea) typingArea.focus({ preventScroll: true });
       if (!event.repeat) handleAttempt(event.key);
     });
 
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && timer !== null) pauseRound();
+    });
+
+    applyTheme();
+    applyLayout();
     startRound(false);
     showPracticeTip();
     setInterval(() => {
