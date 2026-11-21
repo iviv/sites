@@ -311,26 +311,31 @@
     .shortcut-gap { width: 10px; }
 
     /* Results after auto-reset */
-    .result-banner { padding: clamp(20px, 3vw, 32px) clamp(18px, 3.4vw, 40px); }
-    .result-head { display: flex; align-items: flex-start; gap: 14px; }
-    .result-badge { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); }
-    .result-badge .icon { width: 20px; height: 20px; }
-    .result-title { font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
-    .result-subtitle { margin-top: 2px; font-size: 14px; color: var(--muted); }
-    .result-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 20px 0 0; }
-    .result-stats div { min-width: 0; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
-    .result-stats dt { font-size: 12.5px; color: var(--muted); }
-    .result-stats dd { margin: 2px 0 0; font: 600 20px/1.3 var(--mono); font-variant-numeric: tabular-nums; }
-    .result-stats small { margin-left: 6px; font: 500 12px var(--sans); color: var(--muted); }
-    .result-watch { margin-top: 20px; }
-    .result-label { margin-bottom: 10px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
-    .result-keys { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-    .result-keys li { display: inline-flex; align-items: center; gap: 10px; padding: 5px 12px 5px 5px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
-    .result-keys kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 7px; border: 1px solid var(--danger-line); border-radius: 8px; background: var(--danger-soft); color: var(--danger); font: 600 14px var(--mono); }
-    .result-keys .count { color: var(--muted); font-family: var(--mono); }
-    .result-advice { display: grid; gap: 6px; margin: 12px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); }
-    .result-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .result-banner { display: grid; gap: 14px; padding: 22px 28px; }
+    .result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; }
+    .result-badge { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 11px; background: var(--accent-soft); color: var(--accent-text); }
+    .result-badge .icon { width: 18px; height: 18px; }
+    .result-text { flex: 1 1 260px; min-width: 0; }
+    .result-title { font-size: 18px; font-weight: 700; letter-spacing: -.015em; line-height: 1.3; }
+    .result-summary { margin-top: 2px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .result-summary strong { color: var(--ink); font-weight: 600; }
+    .result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .result-actions kbd { padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, currentColor 18%, transparent); font: 500 11.5px var(--sans); }
+    .result-momentum { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 13.5px; color: var(--muted); }
+    .result-momentum:empty { display: none; }
+    .result-best { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px 3px 8px; border-radius: 20px; background: var(--success-soft); color: var(--success); font-weight: 600; }
+    .result-best .icon { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+    .result-progress { display: inline-flex; align-items: center; gap: 8px; }
+    .result-progress .bar { width: 90px; height: 6px; margin: 0; }
+    .result-next strong { color: var(--ink); font-weight: 600; }
+    .result-coach { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
+    .result-watch, .result-tip-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0; font-size: 13.5px; color: var(--ink-2); }
+    .result-label { min-width: 46px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
+    .result-watch kbd {
+      display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border: 1px solid var(--danger-line);
+      border-radius: 7px; background: var(--danger-soft); color: var(--danger); font: 600 13px var(--mono);
+    }
+    .result-watch kbd span { font-size: 11px; font-weight: 500; opacity: .8; }
 
     /* Keyboard */
     .keyboard-card { padding: 18px 24px 22px; }
@@ -429,9 +434,14 @@
     .side-card input[type="range"] { display: block; width: 100%; margin: 10px 0 2px; accent-color: var(--accent); cursor: pointer; }
     .range-scale { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--muted-2); }
     .divider { height: 1px; margin: 16px 0; background: var(--line-2); }
-    .typo-input { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
-    .typo-input input { width: 64px; min-height: 40px; padding: 0 10px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--input-bg); color: var(--ink); font: 14px var(--mono); }
-    .typo-input input:invalid { border-color: var(--danger); }
+    .stepper { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface-3); }
+    .stepper-button {
+      width: 32px; height: 32px; border: 1px solid transparent; border-radius: 8px; background: transparent;
+      color: var(--ink-2); font-size: 17px; font-weight: 500; line-height: 1;
+    }
+    .stepper-button:hover:not(:disabled) { border-color: var(--segment-active-line); background: var(--segment-active-bg); color: var(--accent-ink); box-shadow: var(--segment-shadow); }
+    .stepper-value { min-width: 34px; text-align: center; font: 600 14px var(--mono); color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+    .custom-limit .field-label { margin: 0; }
     .field-help { margin-top: 8px; font-size: 12.5px; color: var(--muted-2); }
 
     .empty-note { margin-top: 10px; font-size: 14px; color: var(--muted); }
@@ -507,15 +517,7 @@
     .stat-budget { margin-left: auto; padding: 3px 10px; border-radius: 8px; transition: background .15s; }
     .stat-budget.warn { background: var(--danger-soft); }
     .stat-budget.warn :is(dt, dd) { color: var(--danger); }
-    .select-wrap { position: relative; display: inline-flex; }
-    .select-wrap::after {
-      content: ""; position: absolute; top: calc(50% - 5px); right: 12px; width: 6px; height: 6px;
-      border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); pointer-events: none;
-    }
-    .select-wrap select {
-      appearance: none; height: 34px; padding: 0 30px 0 10px; border: 1px solid var(--control-line); border-radius: 9px;
-      background: var(--input-bg); color: var(--ink); font: 600 13.5px var(--sans); cursor: pointer;
-    }
+    .typo-switch .segment { min-height: 48px; }
     .custom-limit { margin-top: 10px; }
     .typing-area { padding: 20px 28px 16px; }
     .prompt { min-height: 110px; margin-bottom: 16px; }
@@ -537,18 +539,33 @@
 
     /* Focus picker, practice types, and the success state of the results banner */
     .topbar-center { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
-    .focus-picker {
-      position: relative; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 30px 0 12px;
-      border: 1px solid var(--control-line); border-radius: 10px; background: var(--control-bg); font-size: 13.5px; cursor: pointer;
+    .focus-menu { position: relative; }
+    .focus-button {
+      display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 12px; white-space: nowrap;
+      border: 1px solid var(--control-line); border-radius: 10px; background: var(--control-bg); font-size: 13.5px;
     }
-    .focus-picker:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .focus-picker::after {
-      content: ""; position: absolute; top: calc(50% - 5px); right: 13px; width: 6px; height: 6px;
-      border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); pointer-events: none;
-    }
+    .focus-button:hover { border-color: var(--control-line-hover); }
+    .focus-button[aria-expanded="true"] { border-color: var(--accent-soft-line); background: var(--accent-soft); }
     .focus-label { color: var(--muted); font-weight: 500; }
-    .focus-picker select { appearance: none; border: 0; padding: 0; background: transparent; color: var(--ink); font: 600 13.5px var(--sans); cursor: pointer; }
-    .focus-picker select:focus-visible { outline: none; }
+    #focus-name { color: var(--ink); font-weight: 600; }
+    .focus-button .icon { width: 14px; height: 14px; color: var(--muted); stroke-width: 2; transition: transform .15s; }
+    .focus-button[aria-expanded="true"] .icon { transform: rotate(180deg); }
+    .focus-list {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: 300px; margin: 0; padding: 6px; list-style: none;
+      border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 18px 50px rgb(0 0 0 / 16%);
+    }
+    .focus-option {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1px 10px;
+      padding: 8px 10px; border-radius: 9px; cursor: pointer;
+    }
+    .focus-option:hover, .focus-option:focus { background: var(--hover); outline: none; }
+    .focus-option:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+    .focus-option[aria-selected="true"] { background: var(--accent-soft); }
+    .focus-option-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+    .focus-option[aria-selected="true"] .focus-option-name { color: var(--accent-ink); }
+    .focus-option-meta { font-size: 12.5px; color: var(--muted); }
+    .focus-option .icon { grid-row: 1 / span 2; grid-column: 2; width: 16px; height: 16px; color: var(--accent-text); stroke-width: 2.2; visibility: hidden; }
+    .focus-option[aria-selected="true"] .icon { visibility: visible; }
     .chip-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
     .chip {
       min-width: 0; min-height: 36px; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -560,7 +577,7 @@
     .source-switch .segment { min-height: 52px; }
     .result-badge .icon-check { display: none; }
     .result-banner.success .result-badge { background: var(--success-soft); color: var(--success); }
-    .result-banner.success .icon-alert { display: none; }
+    .result-banner.success .icon-retry { display: none; }
     .result-banner.success .icon-check { display: block; }
     .now-card .heading-actions { flex-wrap: wrap; }
     .now-card #open-course-map { flex-basis: 100%; }
@@ -638,11 +655,13 @@
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
     <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
     <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4L10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
     <symbol id="i-layout-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
     <symbol id="i-layout-dock" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/></symbol>
     <symbol id="i-layout-focus" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M16 4v16"/></symbol>
@@ -667,10 +686,12 @@
     <div class="shell topbar-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true">fj</span>Touch Typing</div>
       <div class="topbar-center">
-        <label class="focus-picker">
-          <span class="focus-label">Focus</span>
-          <select id="focus-area"></select>
-        </label>
+        <div class="focus-menu">
+          <button class="focus-button" id="focus-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="focus-list">
+            <span class="focus-label">Focus</span><span id="focus-name">Number row</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+          </button>
+          <ul class="focus-list" id="focus-list" role="listbox" aria-label="Focus area" hidden></ul>
+        </div>
         <div class="segmented view-switch" role="group" aria-label="Practice type">
           <button class="segment" type="button" data-view="course" aria-pressed="true">Course</button>
           <button class="segment" type="button" data-view="practice" aria-pressed="false">Practice</button>
@@ -735,21 +756,20 @@
           </div>
           <div class="result-banner" id="result-banner" role="group" aria-labelledby="result-title" hidden>
             <div class="result-head">
-              <span class="result-badge" aria-hidden="true"><svg class="icon icon-alert"><use href="#i-alert"></use></svg><svg class="icon icon-check"><use href="#i-check"></use></svg></span>
-              <div>
+              <span class="result-badge" aria-hidden="true"><svg class="icon icon-retry"><use href="#i-reset"></use></svg><svg class="icon icon-check"><use href="#i-check"></use></svg></span>
+              <div class="result-text">
                 <h2 class="result-title" id="result-title"></h2>
-                <p class="result-subtitle" id="result-subtitle"></p>
+                <p class="result-summary" id="result-summary"></p>
+              </div>
+              <div class="result-actions">
+                <button class="button primary" id="result-primary" type="button"><span id="result-primary-label">Try again</span><kbd>return</kbd></button>
+                <button class="button" id="result-secondary" type="button"></button>
               </div>
             </div>
-            <dl class="result-stats" id="result-stats"></dl>
-            <div class="result-watch">
-              <h3 class="result-label">What to watch</h3>
-              <ul class="result-keys" id="result-keys"></ul>
-              <ul class="result-advice" id="result-advice"></ul>
-            </div>
-            <div class="result-actions">
-              <button class="button primary" id="result-primary" type="button"><span id="result-primary-label">Try again</span><kbd>return</kbd></button>
-              <button class="button" id="result-secondary" type="button"></button>
+            <div class="result-momentum" id="result-momentum"></div>
+            <div class="result-coach">
+              <p class="result-watch" id="result-watch"></p>
+              <p class="result-tip-line"><span class="result-label">Tip</span><span id="result-tip"></span></p>
             </div>
           </div>
           <div class="card-footer">
@@ -823,22 +843,22 @@
           </div>
           <div id="typo-settings">
             <div class="divider"></div>
-            <div class="field-row">
-              <label for="typo-handling">On a typo</label>
-              <span class="select-wrap"><select id="typo-handling" aria-describedby="correction-help">
-                <option value="stop">Stop at the key</option>
-                <option value="delete">Delete to continue</option>
-              </select></span>
+            <p class="field-label" id="typo-handling-label">On a typo</p>
+            <div class="segmented typo-switch" role="group" aria-labelledby="typo-handling-label" aria-describedby="correction-help">
+              <button class="segment" type="button" data-typo-handling="stop" aria-pressed="true">Stop<small>at the key</small></button>
+              <button class="segment" type="button" data-typo-handling="delete" aria-pressed="false">Delete<small>to continue</small></button>
             </div>
             <p class="field-help" id="correction-help"></p>
             <div class="divider"></div>
-            <div class="field-row">
-              <label for="reset-mode">Auto-reset</label>
-              <span class="select-wrap"><select id="reset-mode" aria-describedby="typo-limit-help"></select></span>
-            </div>
+            <p class="field-label" id="reset-mode-label">Auto-reset</p>
+            <div class="chip-grid" id="reset-modes" role="group" aria-labelledby="reset-mode-label" aria-describedby="typo-limit-help"></div>
             <div class="field-row custom-limit" id="custom-limit-row" hidden>
-              <label for="typo-limit">Reset past</label>
-              <span class="typo-input"><input type="number" id="typo-limit" min="0" step="1" inputmode="numeric" placeholder="5" aria-describedby="typo-limit-help">typos</span>
+              <span class="field-label" id="typo-limit-label">Typo limit</span>
+              <div class="stepper" role="group" aria-labelledby="typo-limit-label" aria-describedby="typo-limit-help">
+                <button class="stepper-button" id="typo-limit-down" type="button" aria-label="Allow fewer typos">−</button>
+                <output class="stepper-value" id="typo-limit-value" aria-live="polite">5</output>
+                <button class="stepper-button" id="typo-limit-up" type="button" aria-label="Allow more typos">+</button>
+              </div>
             </div>
             <p class="field-help" id="typo-limit-help"></p>
           </div>
@@ -1019,7 +1039,8 @@
     const typingArea = get("typing-area");
     const workspace = get("workspace");
     const library = get("library");
-    const focusSelect = get("focus-area");
+    const focusButton = get("focus-button");
+    const focusList = get("focus-list");
     const viewButtons = [...document.querySelectorAll("[data-view]")];
     const textSourceButtons = [...document.querySelectorAll("[data-text-source]")];
     const passageLengthButtons = [...document.querySelectorAll("[data-passage-length]")];
@@ -1027,7 +1048,10 @@
     const practiceTypeGrid = get("practice-types");
     const drillLengthControl = get("drill-length");
     const drillLengthValue = get("drill-length-value");
-    const typoLimitControl = get("typo-limit");
+    const typoLimitDown = get("typo-limit-down");
+    const typoLimitUp = get("typo-limit-up");
+    // The Custom auto-reset limit can be set from 0 (the first typo resets) to 20.
+    const typoLimitRange = { min: 0, max: 20 };
     const typoLimitHelp = get("typo-limit-help");
     const progress = get("progress");
     const wpmStat = get("wpm-stat");
@@ -1044,7 +1068,7 @@
     const keyboardFigure = get("keyboard-figure");
     const hintButton = get("toggle-hints");
     const fingerColorButton = get("toggle-finger-colors");
-    const typoHandling = get("typo-handling");
+    const typoHandlingButtons = [...document.querySelectorAll("[data-typo-handling]")];
     const keyboardButton = get("toggle-keyboard");
     const themeButton = get("toggle-theme");
     const themeColor = document.querySelector('meta[name="theme-color"]');
@@ -1711,7 +1735,16 @@
     // Drill lengths run 2–4 minutes at one key per second.
     const lengthRange = { min: 120, max: 240 };
 
-    for (const area of focusAreas) focusSelect.append(new Option(area.name, area.id));
+    for (const area of focusAreas) {
+      const option = element("li", "focus-option");
+      option.id = `focus-option-${area.id}`;
+      option.setAttribute("role", "option");
+      option.tabIndex = -1;
+      option.dataset.focus = area.id;
+      option.append(element("span", "focus-option-name", area.name), icon("check"), element("span", "focus-option-meta"));
+      option.addEventListener("click", () => chooseFocus(area.id));
+      focusList.append(option);
+    }
 
     const books = JSON.parse(get("passage-data").textContent).flatMap(({ paragraphs, ...book }) =>
       paragraphs.map((text) => ({ ...book, text, words: text.split(" ").length })));
@@ -1763,8 +1796,7 @@
     const savedLength = saved?.drillLength ?? saved?.lessonLength;
     if (Number.isInteger(savedLength) && savedLength >= lengthRange.min && savedLength <= lengthRange.max) settings.drillLength = savedLength;
     // A number saved by the old single auto-reset setting becomes the Custom limit; null means the field was left blank.
-    if (Number.isInteger(saved?.typoLimit) && saved.typoLimit >= 0) settings.typoLimit = saved.typoLimit;
-    else if (saved?.typoLimit === null && saved.version >= 4) settings.typoLimit = null;
+    if (Number.isInteger(saved?.typoLimit)) settings.typoLimit = Math.min(typoLimitRange.max, Math.max(typoLimitRange.min, saved.typoLimit));
     if (isPlainObject(saved?.resetModes)) {
       for (const view of views) {
         if (resetModesFor(view).some((mode) => mode.id === saved.resetModes[view])) settings.resetModes[view] = saved.resetModes[view];
@@ -2238,7 +2270,7 @@
       if (mode === "pass") return round.drill && round.mistakes > allowedForPass(round.characters.length) ? "pass" : null;
       if (mode === "streak") return recentTypos() > streakLimit ? "streak" : null;
       if (mode === "perfect") return "perfect";
-      if (mode === "custom") return settings.typoLimit !== null && round.typoPositions.size > settings.typoLimit ? "custom" : null;
+      if (mode === "custom") return round.typoPositions.size > settings.typoLimit ? "custom" : null;
       return null;
     }
 
@@ -2252,10 +2284,11 @@
           ? `When more than ${streakLimit} typos land within ${streakWindow} keys, you go back to the start of the sentence.`
           : `Stops when more than ${streakLimit} typos land within ${streakWindow} keys.`,
         perfect: `Any typo restarts the ${attemptName()}. Use it on patterns you already know.`,
-        custom: limit === null ? "Enter a number to set the limit." : `Stops after more than ${limit} ${limit === 1 ? "typo" : "typos"}.`,
+        custom: limit === 0 ? "The first typo stops it." : `Stops after more than ${limit} ${limit === 1 ? "typo" : "typos"}.`,
         off: "Never resets. Typos still count toward accuracy."
       }[mode];
-      const note = mode === "streak" || mode === "custom" ? " Repeated presses on one character count once." : "";
+      const countsOnce = mode === "streak" || (mode === "custom" && settings.typoLimit > 0);
+      const note = countsOnce ? " Repeated presses on one character count once." : "";
       typoLimitHelp.textContent = help + note;
       renderBudget();
     }
@@ -2269,7 +2302,7 @@
       if (mode === "pass" && round.drill) {
         const left = Math.max(0, allowedForPass(round.characters.length) - round.mistakes);
         [value, label, warn] = [String(left), left === 1 ? "typo left to pass" : "typos left to pass", left <= 1];
-      } else if (mode === "custom" && settings.typoLimit !== null) {
+      } else if (mode === "custom") {
         const left = Math.max(0, settings.typoLimit - round.typoPositions.size);
         [value, label, warn] = [String(left), left === 1 ? "typo left" : "typos left", left <= 1];
       } else if (mode === "streak") {
@@ -2307,15 +2340,19 @@
       renderKeyboard();
     }
 
-    function commitTypoLimit() {
-      if (!typoLimitControl.reportValidity()) return false;
-      const limit = typoLimitControl.value === "" ? null : typoLimitControl.valueAsNumber;
-      if (settings.typoLimit !== limit) {
-        settings.typoLimit = limit;
-        saveSettings();
-      }
+    function renderTypoLimit() {
+      get("typo-limit-value").textContent = settings.typoLimit;
+      typoLimitDown.disabled = settings.typoLimit <= typoLimitRange.min;
+      typoLimitUp.disabled = settings.typoLimit >= typoLimitRange.max;
+    }
+
+    function changeTypoLimit(step) {
+      const limit = Math.min(typoLimitRange.max, Math.max(typoLimitRange.min, settings.typoLimit + step));
+      if (limit === settings.typoLimit) return;
+      settings.typoLimit = limit;
+      saveSettings();
+      renderTypoLimit();
       updateTypoHelp();
-      return true;
     }
 
     function setPressed(buttons, isPressed) {
@@ -2347,7 +2384,7 @@
       stopClock();
       if (libraryOpen) setLibraryOpen(false);
       const area = currentArea();
-      focusSelect.value = area.id;
+      get("focus-name").textContent = area.name;
       const drill = settings.view === "course" ? currentDrill() : null;
       const passage = settings.view === "text" ? (currentPassage ??= drawPassage()) : null;
       const practice = settings.view === "practice"
@@ -2396,10 +2433,8 @@
       get("misses-scope").textContent = `This ${attempt}`;
       passageSource.hidden = !passage?.url;
       if (passage?.url) passageSource.href = passage.url;
-      typoLimitControl.value = settings.typoLimit ?? "";
-      const modeSelect = get("reset-mode");
-      modeSelect.replaceChildren(...resetModesFor(settings.view).map((mode) => new Option(mode.name, mode.id)));
-      modeSelect.value = resetMode();
+      renderTypoLimit();
+      renderResetModes();
       drillLengthControl.value = settings.drillLength;
       updateLengthLabel();
 
@@ -2629,7 +2664,6 @@
       const total = round.characters.length;
       const accuracy = round.correct + round.mistakes ? Math.round(round.correct / (round.correct + round.mistakes) * 100) : 100;
       const keysPerMinute = duration >= 1000 ? round.correct * 60000 / duration : null;
-      const words = round.passage ? (round.characters.slice(0, typed).match(/\S+(?=\s|$)/g) ?? []).length : Math.floor(typed / 5);
       const nextDrillInArea = round.drill ? area.drills[round.drill.number] : null;
 
       const retry = { label: "Try again", verb: "try again", run: () => startRound() };
@@ -2638,73 +2672,75 @@
       const newText = { label: "New passage", verb: "get a new passage", run: newPassage };
       const another = { label: "New round", verb: "start a new round", run: newPractice };
       let title;
-      let subtitle;
+      let note = "";
       let primary;
       let secondary;
       let success;
       if (round.failed) {
         success = false;
         const name = `${attempt[0].toUpperCase()}${attempt.slice(1)}`;
-        const progressText = `You typed ${typed} of ${total} characters (${Math.round(typed / total * 100)}%).`;
-        const reasons = {
-          pass: [`${name} stopped: a pass is out of reach`, `${round.mistakes} typos on ${total} keys. A ${passMark}% pass allows ${allowedForPass(total)}. ${progressText}`],
-          streak: [`${name} stopped: ${streakLimit + 1} typos within ${streakWindow} keys`, `Streak guard stops when typos bunch up. ${progressText}`],
-          perfect: [`${name} stopped at the first typo`, `Perfect run is on. ${progressText}`],
-          custom: [`${name} stopped after ${round.typoPositions.size} typos`, `Auto-reset is set past ${settings.typoLimit}. ${progressText}`],
-          pileup: [`${name} stopped: more than ${maxPending} typos in a row`, `With Delete to continue, typos have to be deleted before you go on. ${progressText}`]
-        };
-        [title, subtitle] = reasons[round.tripReason];
+        title = {
+          pass: `${name} stopped: a pass is out of reach`,
+          streak: `${name} stopped: ${streakLimit + 1} typos within ${streakWindow} keys`,
+          perfect: `${name} stopped at the first typo`,
+          custom: `${name} stopped after ${round.typoPositions.size} typos`,
+          pileup: `${name} stopped: more than ${maxPending} typos in a row`
+        }[round.tripReason];
+        if (round.tripReason === "pass") note = `A ${passMark}% pass allows ${allowedForPass(total)} typos.`;
         primary = retry;
         secondary = round.drill ? map : round.passage ? newText : another;
       } else if (round.drill) {
         success = round.passed;
         if (round.passed) {
           title = "Drill passed";
-          subtitle = `${accuracy}% accuracy. ${round.newlyDone ? "This drill is now marked complete." : "You had already completed this drill."}`;
+          note = round.newlyDone ? "Marked complete." : "Already complete.";
           primary = nextDrillInArea ? next : map;
           secondary = retry;
         } else {
           title = "Below the pass mark";
-          subtitle = `${accuracy}% accuracy. Reach ${passMark}% to complete this drill.`;
+          note = `Reach ${passMark}% to complete it.`;
           primary = retry;
           secondary = nextDrillInArea ? next : map;
         }
       } else {
         success = true;
         title = round.passage ? "Passage complete" : "Round complete";
-        subtitle = `${accuracy}% accuracy over ${total} characters.`;
         primary = round.passage ? newText : another;
         secondary = retry;
       }
 
       resultBanner.classList.toggle("success", success);
       get("result-title").textContent = title;
-      get("result-subtitle").textContent = subtitle;
-      const stats = [
-        ["Characters", String(typed), `of ${total}`],
-        [round.passage ? "Words" : "Words (5 keys)", String(words), ""],
-        ["Speed", keysPerMinute === null ? "—" : String(Math.round(keysPerMinute / 5)), keysPerMinute === null ? "" : "wpm"],
-        ["Keys/min", keysPerMinute === null ? "—" : String(Math.round(keysPerMinute)), ""],
-        ["Accuracy", `${accuracy}%`, ""],
-        ["Time", formatTime(duration), ""]
-      ];
-      if (settings.correction) stats.push(["Deleted", String(round.deleted), round.deleted === 1 ? "character" : "characters"]);
-      get("result-stats").replaceChildren(...stats.map(([label, value, detail]) => {
-        const item = element("div");
-        const amount = element("dd", "", value);
-        if (detail) amount.append(element("small", "", detail));
-        item.append(element("dt", "", label), amount);
-        return item;
-      }));
+
+      // One line of numbers: how far you got (if stopped), accuracy, speed, time, typos.
+      const figures = [];
+      if (round.failed) figures.push([`${Math.round(typed / total * 100)}%`, "done"]);
+      figures.push([`${accuracy}%`, "accuracy"]);
+      if (keysPerMinute !== null) figures.push([String(Math.round(keysPerMinute / 5)), "wpm"]);
+      figures.push([formatTime(duration), ""]);
+      figures.push([String(round.mistakes), round.mistakes === 1 ? "typo" : "typos"]);
+      if (settings.correction) figures.push([String(round.deleted), "deleted"]);
+      const summary = get("result-summary");
+      summary.replaceChildren();
+      figures.forEach(([value, label], index) => {
+        if (index > 0) summary.append(" · ");
+        summary.append(element("strong", "", value));
+        if (label) summary.append(` ${label}`);
+      });
+      if (note) summary.append(` · ${note}`);
+
+      // One line of guidance: the most-missed keys and the single most useful tip.
       const missed = [...round.misses.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
-      get("result-keys").hidden = missed.length === 0;
-      get("result-keys").replaceChildren(...missed.map(([key, count]) => {
+      const watch = get("result-watch");
+      watch.replaceChildren(element("span", "result-label", missed.length ? "Watch" : "Tip"));
+      for (const [key, count] of missed) {
+        const chip = element("kbd", "", describeKey(key));
         const entry = keyMap.get(key);
-        const item = element("li");
-        item.append(element("kbd", "", describeKey(key)), element("span", "", entry ? fingerText(entry) : "Off the guide"), element("span", "count", `×${count}`));
-        return item;
-      }));
-      get("result-advice").replaceChildren(...resultAdvice(accuracy).map((tip) => element("li", "", tip)));
+        if (entry) chip.title = fingerText(entry);
+        chip.append(element("span", "", `×${count}`));
+        watch.append(chip);
+      }
+      watch.append(element("span", "result-tip", resultAdvice(accuracy)[0]));
       get("result-primary-label").textContent = primary.label;
       get("result-secondary").textContent = secondary?.label ?? "";
       get("result-secondary").hidden = !secondary;
@@ -2765,7 +2801,7 @@
     }
 
     function renderTypoHandling() {
-      typoHandling.value = settings.correction ? "delete" : "stop";
+      setPressed(typoHandlingButtons, (button) => (button.dataset.typoHandling === "delete") === settings.correction);
       get("correction-help").textContent = settings.correction
         ? `Typos stay on screen until you press delete; option-delete clears them all. More than ${maxPending} in a row ends the ${attemptName()}.`
         : "The cursor waits on the key until you type it correctly.";
@@ -2869,14 +2905,88 @@
       renderKeyboard();
     }
 
-    // ---- Events ------------------------------------------------------------------
+    // ---- Focus menu and setting chips ---------------------------------------------
 
-    focusSelect.addEventListener("change", () => {
-      settings.focus = focusSelect.value;
+    let focusMenuOpen = false;
+
+    function renderFocusMenu() {
+      for (const option of focusList.children) {
+        const area = areaById.get(option.dataset.focus);
+        const done = area.drills.filter(isDone).length;
+        option.setAttribute("aria-selected", String(area.id === settings.focus));
+        option.querySelector(".focus-option-meta").textContent = `${area.units.length} units · ${done} of ${area.drills.length} done`;
+      }
+    }
+
+    function setFocusMenuOpen(open) {
+      focusMenuOpen = open;
+      focusList.hidden = !open;
+      focusButton.setAttribute("aria-expanded", String(open));
+      if (!open) return;
+      renderFocusMenu();
+      (focusList.querySelector('[aria-selected="true"]') ?? focusList.firstElementChild).focus();
+    }
+
+    function chooseFocus(id) {
+      setFocusMenuOpen(false);
+      if (id === settings.focus) {
+        typingArea.focus({ preventScroll: true });
+        return;
+      }
+      settings.focus = id;
       saveSettings();
       currentPassage = null;
       currentPractice = null;
       startRound();
+    }
+
+    function renderResetModes() {
+      get("reset-modes").replaceChildren(...resetModesFor(settings.view).map((mode) => {
+        const chip = element("button", "chip", mode.name);
+        chip.type = "button";
+        chip.setAttribute("aria-pressed", String(mode.id === resetMode()));
+        chip.addEventListener("click", () => {
+          settings.resetModes[settings.view] = mode.id;
+          saveSettings();
+          renderResetModes();
+          updateTypoHelp();
+          // Custom needs a number next, so its field gets the cursor.
+          if (mode.id === "custom") typoLimitUp.focus({ preventScroll: true });
+          else typingArea.focus({ preventScroll: true });
+        });
+        return chip;
+      }));
+    }
+
+    // ---- Events ------------------------------------------------------------------
+
+    focusButton.addEventListener("click", () => setFocusMenuOpen(!focusMenuOpen));
+    focusButton.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      setFocusMenuOpen(true);
+    });
+    focusList.addEventListener("keydown", (event) => {
+      const options = [...focusList.children];
+      const index = options.indexOf(document.activeElement);
+      const move = (to) => {
+        event.preventDefault();
+        options[(to + options.length) % options.length].focus();
+      };
+      if (event.key === "ArrowDown") move(index + 1);
+      else if (event.key === "ArrowUp") move(index - 1);
+      else if (event.key === "Home") move(0);
+      else if (event.key === "End") move(options.length - 1);
+      else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (index >= 0) chooseFocus(options[index].dataset.focus);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setFocusMenuOpen(false);
+        focusButton.focus({ preventScroll: true });
+      } else if (event.key === "Tab") {
+        setFocusMenuOpen(false);
+      }
     });
 
     for (const button of viewButtons) {
@@ -2926,17 +3036,8 @@
       startRound(false);
     });
     drillLengthControl.addEventListener("click", () => typingArea.focus({ preventScroll: true }));
-    typoLimitControl.addEventListener("change", commitTypoLimit);
-    get("reset-mode").addEventListener("change", (event) => {
-      settings.resetModes[settings.view] = event.target.value;
-      saveSettings();
-      updateTypoHelp();
-    });
-    typoLimitControl.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      if (commitTypoLimit()) typingArea.focus({ preventScroll: true });
-    });
+    typoLimitDown.addEventListener("click", () => changeTypoLimit(-1));
+    typoLimitUp.addEventListener("click", () => changeTypoLimit(1));
     newRound.addEventListener("click", () => startRound());
     previousDrill.addEventListener("click", () => chooseDrill(currentArea().drills[round.drill.number - 2]?.id));
     nextDrill.addEventListener("click", () => {
@@ -2960,24 +3061,28 @@
     settingsButton.addEventListener("click", () => setSettingsOpen(!settingsOpen));
     document.addEventListener("click", (event) => {
       if (settingsOpen && !event.target.closest("#sidebar, #toggle-settings")) setSettingsOpen(false);
+      if (focusMenuOpen && !event.target.closest(".focus-menu")) setFocusMenuOpen(false);
     });
     // The docked layout sizes the page around the keyboard panel's real height.
     new ResizeObserver(() => {
       document.documentElement.style.setProperty("--dock-h", `${keyboardCard.offsetHeight}px`);
     }).observe(keyboardCard);
     typingArea.addEventListener("click", () => typingArea.focus({ preventScroll: true }));
-    typoHandling.addEventListener("change", () => {
-      settings.correction = typoHandling.value === "delete";
-      saveSettings();
-      if (!settings.correction && round.pending.length > 0) {
-        round.pending.length = 0;
-        round.lastWrong = null;
-        renderPending();
-        updateProgress();
-      }
-      renderTypoHandling();
-      renderKeyboard();
-    });
+    for (const button of typoHandlingButtons) {
+      button.addEventListener("click", () => {
+        settings.correction = button.dataset.typoHandling === "delete";
+        saveSettings();
+        if (!settings.correction && round.pending.length > 0) {
+          round.pending.length = 0;
+          round.lastWrong = null;
+          renderPending();
+          updateProgress();
+        }
+        renderTypoHandling();
+        renderKeyboard();
+        typingArea.focus({ preventScroll: true });
+      });
+    }
     fingerColorButton.addEventListener("click", () => {
       settings.fingerColors = !settings.fingerColors;
       saveSettings();
@@ -3014,6 +3119,8 @@
         return;
       }
       if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+      // The focus menu handles its own keys while it is open.
+      if (focusMenuOpen) return;
       if (settingsOpen && event.key === "Escape") {
         event.preventDefault();
         setSettingsOpen(false);
